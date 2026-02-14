@@ -10,7 +10,7 @@
 
 Agent Heaven is a local Electron desktop app that spawns AI coding agents (OpenAI Codex and Anthropic Claude Code) as "cards" on a Kanban board and streams their output in real time.
 
-[Releases](https://github.com/simonschnabl/agent-heaven/releases/latest) · [From Source](#from-source-development) · [License](LICENSE)
+[Releases](https://github.com/grund3g/agent-heaven/releases/latest) · [From Source](#from-source-development) · [License](LICENSE)
 
 ## Highlights
 
