@@ -2,13 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; script-src 'self';" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent Heaven</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div id="app">
+	    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; script-src 'self';" />
+	    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	    <title>Agent Heaven</title>
+	    <link rel="stylesheet" href="./styles.css" />
+	    <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+	  </head>
+	  <body>
+	    <div id="app">
       <aside class="sidebar">
 	        <div class="brand">
 	          <div class="brand__mark" aria-hidden="true">
@@ -199,19 +200,21 @@
 	          </div>
 	        </div>
         <div class="dialog__meta" id="jobDialogMeta"></div>
-        <div class="dialog__body">
-          <div class="tabs">
-            <button class="tab tab--active" data-tab="chat">Chat</button>
-            <button class="tab" data-tab="live">Live</button>
-            <button class="tab" data-tab="logs">Logs</button>
-          </div>
-	          <div id="jobDialogChat" class="panel panel--active"></div>
-	          <div id="jobDialogLive" class="panel panel--terminal"></div>
-	          <div id="jobDialogLogs" class="panel panel--terminal"></div>
+	        <div class="dialog__body">
+	          <div class="tabs">
+	            <button class="tab tab--active" data-tab="chat">Chat</button>
+	            <button class="tab" data-tab="live">Live</button>
+	            <button class="tab" data-tab="logs">Logs</button>
+	            <button class="tab" data-tab="term">Terminal</button>
+	          </div>
+		          <div id="jobDialogChat" class="panel panel--active"></div>
+		          <div id="jobDialogLive" class="panel panel--terminal"></div>
+		          <div id="jobDialogLogs" class="panel panel--terminal"></div>
+		          <div id="jobDialogTerm" class="panel panel--terminal panel--xterm"></div>
 	        </div>
 	        <div class="dialog__footer">
-	          <div class="followup">
-	            <div id="followupDropwrap" class="dropwrap dropwrap--sm">
+		          <div class="followup">
+		            <div id="followupDropwrap" class="dropwrap dropwrap--sm">
 	              <textarea id="followupInput" class="textarea textarea--sm" rows="2" placeholder="Follow-up… (⌘+Enter)"></textarea>
 	              <div id="followupBadge" class="attachbadge" hidden></div>
 	            </div>
@@ -376,35 +379,17 @@
 	              </select>
 	            </label>
 		            <label class="field">
-		              <div class="field__label">Color scheme</div>
-		              <select id="settingsColorScheme" class="select">
-		                <option value="system">System</option>
-		                <option value="dark">Dark</option>
-		                <option value="light">Light</option>
-		              </select>
-		            </label>
-		            <div class="field">
-		              <div class="field__label">Font style</div>
-		              <div class="field__controls">
-		                <select id="settingsLogoVariant" class="select" aria-label="Font style">
-		                  <option value="v1">Round</option>
-		                  <option value="v2">Serif</option>
-		                  <option value="v3">Sans</option>
-		                  <option value="v4">Mono</option>
-		                  <option value="v5">System</option>
-		                </select>
-		                <button id="settingsLogoVariantPrev" class="btn btn--ghost" type="button" aria-label="Previous logo variant" title="Previous logo variant">
-		                  Prev
-		                </button>
-		                <button id="settingsLogoVariantNext" class="btn btn--ghost" type="button" aria-label="Next logo variant" title="Next logo variant">
-		                  Next
-		                </button>
-		              </div>
-		            </div>
-		            <label class="field field--row">
-		              <input id="settingsMenuBarMode" type="checkbox" />
-		              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>
-		            </label>
+			            <div class="field__label">Color scheme</div>
+			              <select id="settingsColorScheme" class="select">
+			                <option value="system">System</option>
+			                <option value="dark">Dark</option>
+			                <option value="light">Light</option>
+			              </select>
+			            </label>
+			            <label class="field field--row">
+			              <input id="settingsMenuBarMode" type="checkbox" />
+			              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>
+			            </label>
 	            <label class="field field--row">
 	              <input id="settingsStartAtLogin" type="checkbox" />
 	              <div class="field__label field__label--inline">macOS: Start at login (best in packaged apps)</div>

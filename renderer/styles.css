@@ -727,8 +727,18 @@ body::before {
   margin-bottom: 10px;
 }
 
-/* Window dragging for popout windows (macOS hiddenInset title bar).
+/* Window dragging for macOS hiddenInset title bars.
    Keep actions clickable via no-drag. */
+:root[data-platform="mac"]:not([data-mode]) .viewbar {
+  -webkit-app-region: drag;
+}
+
+:root[data-platform="mac"]:not([data-mode]) .viewbar button,
+:root[data-platform="mac"]:not([data-mode]) .viewbar input,
+:root[data-platform="mac"]:not([data-mode]) .viewbar select {
+  -webkit-app-region: no-drag;
+}
+
 :root[data-mode="lane"] .lane__title,
 :root[data-mode="job"] .dialog__header {
   -webkit-app-region: drag;
@@ -1826,6 +1836,26 @@ body::before {
 .panel--terminal {
   background: var(--surface5);
   border-color: var(--stroke-strong);
+}
+
+.panel--xterm {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* xterm.js creates its own root element inside the panel. Give it padding and sizing. */
+.panel--xterm .xterm {
+  flex: 1;
+  height: 100%;
+  padding: 10px;
+}
+
+.panel--xterm .xterm-viewport {
+  border-radius: 12px;
+}
+
+.panel--xterm.panel--active {
+  display: flex;
 }
 
 .panel--active {

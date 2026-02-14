@@ -9,14 +9,13 @@ const els = {
   toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
   sortSelect: document.getElementById("sortSelect"),
   searchInput: document.getElementById("searchInput"),
-  searchClearBtn: document.getElementById("searchClearBtn"),
-  searchMeta: document.getElementById("searchMeta"),
-	  brandLogo: document.getElementById("brandLogo"),
-	  brandLogoToggle: document.getElementById("brandLogoToggle"),
+		  searchClearBtn: document.getElementById("searchClearBtn"),
+		  searchMeta: document.getElementById("searchMeta"),
+		  brandLogo: document.getElementById("brandLogo"),
 
-	  projectSelect: document.getElementById("projectSelect"),
-	  agentSelect: document.getElementById("agentSelect"),
-	  modelInput: document.getElementById("modelInput"),
+		  projectSelect: document.getElementById("projectSelect"),
+		  agentSelect: document.getElementById("agentSelect"),
+		  modelInput: document.getElementById("modelInput"),
 	  promptDropwrap: document.getElementById("promptDropwrap"),
 	  promptInput: document.getElementById("promptInput"),
   promptBadge: document.getElementById("promptBadge"),
@@ -37,6 +36,7 @@ const els = {
   jobDialogChat: document.getElementById("jobDialogChat"),
   jobDialogLive: document.getElementById("jobDialogLive"),
   jobDialogLogs: document.getElementById("jobDialogLogs"),
+  jobDialogTerm: document.getElementById("jobDialogTerm"),
   followupDropwrap: document.getElementById("followupDropwrap"),
   followupInput: document.getElementById("followupInput"),
   followupBadge: document.getElementById("followupBadge"),
@@ -64,11 +64,8 @@ const els = {
 		  settingsUiModel: document.getElementById("settingsUiModel"),
 			  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
 			  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-			  settingsTheme: document.getElementById("settingsTheme"),
-			  settingsColorScheme: document.getElementById("settingsColorScheme"),
-		  settingsLogoVariant: document.getElementById("settingsLogoVariant"),
-		  settingsLogoVariantPrev: document.getElementById("settingsLogoVariantPrev"),
-		  settingsLogoVariantNext: document.getElementById("settingsLogoVariantNext"),
+		  settingsTheme: document.getElementById("settingsTheme"),
+		  settingsColorScheme: document.getElementById("settingsColorScheme"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -181,6 +178,19 @@ const DEMO = {
 const TOUR_ROOT_ID = "ahTour";
 const DEFAULT_FOLLOWUP_PLACEHOLDER = "Follow-up… (⌘+Enter)";
 
+const termUi = {
+  jobId: "",
+  term: null,
+  fitAddon: null,
+  dataDispose: null,
+  resizeObserver: null,
+  fitRaf: 0,
+  lastSeq: 0,
+  connectPromise: null,
+  connectJobId: "",
+  xtermModsPromise: null
+};
+
 const tour = {
   active: false,
   step: 0,
@@ -241,7 +251,6 @@ applySidebarCollapsed(getStoredSidebarCollapsed());
 const THEMES = ["heaven", "nord", "gruvbox", "solarized", "dracula", "ocean"];
 const COLOR_SCHEMES = ["system", "dark", "light"];
 const SOUND_PRESETS = ["classic", "chime", "pop", "bell", "arcade", "goat"];
-const LOGO_VARIANT_ORDER = ["v1", "v2", "v3", "v4", "v5"];
 const GRID_SVG = `
   <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="4" width="9" height="9" rx="2" stroke-width="2.0" />
@@ -282,6 +291,8 @@ const LOGO_VARIANTS = {
     weight: 800
   }
 };
+// Branding is fixed; we no longer expose this as a setting.
+const FIXED_LOGO_VARIANT = "v1";
 const UI_MODEL_CUSTOM = "__custom__";
 
 const SORT_MODES = ["lane_newest", "lane_oldest", "duration_longest", "created_newest", "created_oldest"];
@@ -577,42 +588,6 @@ function renderBrandLogo(variant) {
   appliedLogoVariant = v;
 }
 
-function stepLogoVariant(delta) {
-  const sel = els.settingsLogoVariant;
-  if (!sel) return;
-  const ids = Array.isArray(LOGO_VARIANT_ORDER) && LOGO_VARIANT_ORDER.length > 0 ? LOGO_VARIANT_ORDER : ["v1"];
-  const cur = normalizeLogoVariant(sel.value);
-  let idx = ids.indexOf(cur);
-  if (idx < 0) idx = 0;
-  const next = ids[(idx + (delta || 0) + ids.length) % ids.length] || ids[0];
-  sel.value = next;
-  try {
-    sel.dispatchEvent(new Event("change", { bubbles: true }));
-  } catch {
-    // ignore
-  }
-}
-
-async function cycleLogoVariantPersisted(delta) {
-  const ids = Array.isArray(LOGO_VARIANT_ORDER) && LOGO_VARIANT_ORDER.length > 0 ? LOGO_VARIANT_ORDER : ["v1"];
-  const cur = normalizeLogoVariant(state.settings && state.settings.uiLogoVariant);
-  let idx = ids.indexOf(cur);
-  if (idx < 0) idx = 0;
-  const next = ids[(idx + (delta || 0) + ids.length) % ids.length] || ids[0];
-
-  renderBrandLogo(next);
-  const label = (LOGO_VARIANTS[next] && LOGO_VARIANTS[next].label) || next;
-  showToast(`Logo: ${label}`);
-
-  if (!api || typeof api.settingsUpdate !== "function") return;
-  try {
-    state.settings = await api.settingsUpdate({ uiLogoVariant: next });
-    applyThemeFromSettings(state.settings);
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || "Failed to save logo variant.");
-  }
-}
-
 function ensureSelectOption(selectEl, value, label) {
   if (!selectEl || !value) return null;
   const v = String(value);
@@ -690,7 +665,7 @@ function applyThemeFromSettings(settings) {
   const scheme = pref === "system" ? getSystemColorScheme() : pref;
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.scheme = scheme;
-  renderBrandLogo(s.uiLogoVariant);
+  renderBrandLogo(FIXED_LOGO_VARIANT);
 }
 
 function getStoredProjectId() {
@@ -4337,6 +4312,314 @@ function compactJobForList(job) {
   return out;
 }
 
+function setTerminalTabHidden(hidden) {
+  const tab = document.querySelector('.tab[data-tab="term"]');
+  if (!tab) return;
+  tab.hidden = !!hidden;
+}
+
+function cssVar(name, fallback = "") {
+  try {
+    const v = window.getComputedStyle(document.documentElement).getPropertyValue(name);
+    const s = typeof v === "string" ? v.trim() : "";
+    return s || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function applyXtermTheme() {
+  const t = termUi.term;
+  if (!t) return;
+
+  try {
+    const bg = cssVar("--surface5", "#000000");
+    const fg = cssVar("--ink-mono", "rgba(255, 255, 255, 0.8)");
+    const cursor = cssVar("--accent2", "#4bb6ff");
+    const selection = cssVar("--card2", "rgba(255, 255, 255, 0.12)");
+    const mono = cssVar("--mono", "");
+
+    if (mono) t.options.fontFamily = mono;
+    t.options.theme = {
+      background: bg,
+      foreground: fg,
+      cursor,
+      selectionBackground: selection
+    };
+  } catch {
+    // ignore
+  }
+}
+
+async function loadXtermModules() {
+  if (termUi.xtermModsPromise) return termUi.xtermModsPromise;
+  termUi.xtermModsPromise = Promise.all([
+    import("../node_modules/@xterm/xterm/lib/xterm.mjs"),
+    import("../node_modules/@xterm/addon-fit/lib/addon-fit.mjs")
+  ]).then(([xterm, fit]) => ({ Terminal: xterm.Terminal, FitAddon: fit.FitAddon }));
+  return termUi.xtermModsPromise;
+}
+
+function isTermPanelActive() {
+  return !!(els.jobDialog && els.jobDialog.open && state.activeTab === "term" && els.jobDialogTerm);
+}
+
+function scheduleTermFit() {
+  if (!termUi.term || !termUi.fitAddon) return;
+  if (!termUi.jobId) return;
+  if (!isTermPanelActive()) return;
+  if (termUi.fitRaf) return;
+
+  termUi.fitRaf = window.requestAnimationFrame(async () => {
+    termUi.fitRaf = 0;
+    if (!termUi.term || !termUi.fitAddon) return;
+    if (!termUi.jobId) return;
+    if (!isTermPanelActive()) return;
+
+    try {
+      termUi.fitAddon.fit();
+    } catch {
+      // ignore
+    }
+
+    try {
+      if (api && typeof api.termResize === "function") {
+        await api.termResize(termUi.jobId, termUi.term.cols, termUi.term.rows);
+      }
+    } catch {
+      // ignore
+    }
+  });
+}
+
+async function ensureXtermMounted() {
+  if (!els.jobDialogTerm) return false;
+  if (termUi.term) return true;
+
+  let Terminal;
+  let FitAddon;
+  try {
+    const mods = await loadXtermModules();
+    Terminal = mods.Terminal;
+    FitAddon = mods.FitAddon;
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err);
+    els.jobDialogTerm.innerHTML = `<div class="logline">Failed to load terminal UI: ${escapeHtml(msg)}</div>`;
+    return false;
+  }
+
+  try {
+    els.jobDialogTerm.innerHTML = "";
+  } catch {
+    // ignore
+  }
+
+  const mono = cssVar("--mono", "");
+  const term = new Terminal({
+    fontFamily: mono || undefined,
+    fontSize: 12,
+    cursorBlink: true,
+    scrollback: 5000,
+    convertEol: true
+  });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+
+  try {
+    term.open(els.jobDialogTerm);
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err);
+    els.jobDialogTerm.innerHTML = `<div class="logline">Failed to mount terminal UI: ${escapeHtml(msg)}</div>`;
+    return false;
+  }
+
+  termUi.term = term;
+  termUi.fitAddon = fit;
+  applyXtermTheme();
+
+  try {
+    termUi.dataDispose = term.onData((data) => {
+      const id = termUi.jobId;
+      if (!id) return;
+      if (!api || typeof api.termWrite !== "function") return;
+      api.termWrite(id, data).catch(() => {});
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    const ro = new ResizeObserver(() => scheduleTermFit());
+    ro.observe(els.jobDialogTerm);
+    termUi.resizeObserver = ro;
+  } catch {
+    // ignore
+  }
+
+  return true;
+}
+
+function termPrint(text) {
+  const t = termUi.term;
+  if (!t) return;
+  const s = String(text || "").replaceAll("\n", "\r\n");
+  try {
+    t.write(s);
+  } catch {
+    // ignore
+  }
+}
+
+function termPrintLine(text) {
+  termPrint(`${String(text || "").replaceAll("\n", "\r\n")}\r\n`);
+}
+
+async function attachTerminalToJob(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  if (!els.jobDialogTerm) return;
+
+  const job = state.jobs.get(id);
+  if (isDemoJob(job)) {
+    els.jobDialogTerm.innerHTML = `<div class="logline">Terminal is not available for demo cards.</div>`;
+    return;
+  }
+
+  if (!api || typeof api.termEnsure !== "function") {
+    els.jobDialogTerm.innerHTML = `<div class="logline">Terminal is not supported in this build.</div>`;
+    return;
+  }
+
+  if (termUi.jobId === id && termUi.term) {
+    applyXtermTheme();
+    scheduleTermFit();
+    try {
+      termUi.term.focus();
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  if (termUi.connectPromise && termUi.connectJobId === id) {
+    await termUi.connectPromise;
+    return;
+  }
+
+  if (termUi.jobId && termUi.jobId !== id && typeof api.termDetach === "function") {
+    try {
+      await api.termDetach(termUi.jobId);
+    } catch {
+      // ignore
+    }
+  }
+
+  termUi.jobId = id;
+  termUi.lastSeq = 0;
+
+  const connect = (async () => {
+    const ok = await ensureXtermMounted();
+    if (!ok || !termUi.term || !termUi.fitAddon) return;
+
+    applyXtermTheme();
+    try {
+      termUi.term.reset();
+    } catch {
+      // ignore
+    }
+    termPrintLine("Connecting…");
+
+    try {
+      termUi.fitAddon.fit();
+    } catch {
+      // ignore
+    }
+
+    const cols = termUi.term.cols || 110;
+    const rows = termUi.term.rows || 34;
+
+    let ensured;
+    try {
+      ensured = await api.termEnsure(id, cols, rows);
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      try {
+        termUi.term.reset();
+      } catch {
+        // ignore
+      }
+      termPrintLine("Failed to start terminal:");
+      termPrintLine(msg);
+      termUi.lastSeq = 0;
+      return;
+    }
+
+    if (termUi.jobId !== id) return;
+
+    const buf = ensured && typeof ensured.buffer === "string" ? ensured.buffer : "";
+    const seq = ensured && typeof ensured.seq === "number" ? ensured.seq : 0;
+    termUi.lastSeq = seq;
+
+    try {
+      termUi.term.reset();
+    } catch {
+      // ignore
+    }
+    if (buf) termPrint(buf);
+
+    scheduleTermFit();
+    try {
+      termUi.term.focus();
+    } catch {
+      // ignore
+    }
+  })();
+
+  termUi.connectPromise = connect.finally(() => {
+    if (termUi.connectPromise === connect) {
+      termUi.connectPromise = null;
+      termUi.connectJobId = "";
+    }
+  });
+  termUi.connectJobId = id;
+
+  await termUi.connectPromise;
+}
+
+function maybeEnsureTerminalForSelectedJob() {
+  if (!isTermPanelActive()) return;
+  const id = state.selectedJobId;
+  if (!id) return;
+  attachTerminalToJob(id).catch(() => {});
+}
+
+function onTermEvent(payload) {
+  const p = payload && typeof payload === "object" ? payload : null;
+  if (!p) return;
+  if (!termUi.term) return;
+
+  const jobId = typeof p.jobId === "string" ? p.jobId : "";
+  if (!jobId || jobId !== termUi.jobId) return;
+
+  if (p.kind === "data") {
+    const data = typeof p.data === "string" ? p.data : "";
+    if (!data) return;
+    termPrint(data);
+    if (typeof p.seq === "number") termUi.lastSeq = p.seq;
+    return;
+  }
+
+  if (p.kind === "exit") {
+    const code = typeof p.exitCode === "number" ? p.exitCode : NaN;
+    const sig = typeof p.signal === "number" ? p.signal : NaN;
+    const bits = [];
+    if (Number.isFinite(code)) bits.push(`code=${code}`);
+    if (Number.isFinite(sig) && sig !== 0) bits.push(`signal=${sig}`);
+    termPrintLine("");
+    termPrintLine(`[terminal exited${bits.length ? `: ${bits.join(" ")}` : ""}]`);
+  }
+}
+
 async function openJobDialog(jobId) {
   state.selectedJobId = jobId;
   let job = state.jobs.get(jobId);
@@ -4344,6 +4627,7 @@ async function openJobDialog(jobId) {
 
   // While a job is running, the most useful default view is the live feed.
   state.activeTab = job.status === "running" ? "live" : "chat";
+  setTerminalTabHidden(isDemoJob(job));
 
   {
     const title = jobDisplayTitle(job);
@@ -4357,6 +4641,9 @@ async function openJobDialog(jobId) {
     els.jobDialogChat.innerHTML = `<div class="logline">Loading…</div>`;
     els.jobDialogLive.innerHTML = `<div class="logline">Loading…</div>`;
     els.jobDialogLogs.innerHTML = `<div class="logline">Loading…</div>`;
+    if (els.jobDialogTerm && !termUi.term) {
+      els.jobDialogTerm.innerHTML = `<div class="logline">Open this tab to start a shell in the project folder.</div>`;
+    }
     setActiveTab(state.activeTab);
   }
   updateJobDialogActions(job);
@@ -4429,6 +4716,8 @@ function setActiveTab(tab) {
   els.jobDialogChat.classList.toggle("panel--active", tab === "chat");
   els.jobDialogLive.classList.toggle("panel--active", tab === "live");
   els.jobDialogLogs.classList.toggle("panel--active", tab === "logs");
+  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", tab === "term");
+  if (tab === "term") maybeEnsureTerminalForSelectedJob();
 }
 
 function isNearBottom(el) {
@@ -5185,14 +5474,6 @@ function wireUi() {
     els.toggleSidebarBtn.addEventListener("click", () => toggleSidebarCollapsed());
   }
 
-  // Quick logo variant cycling for visual testing (Shift = previous).
-  if (els.brandLogoToggle) {
-    els.brandLogoToggle.addEventListener("click", (e) => {
-      e.preventDefault();
-      cycleLogoVariantPersisted(e.shiftKey ? -1 : 1);
-    });
-  }
-
 		  // Lane popouts (Running / Needs Attention / Done) into separate windows (useful for multi-monitor setups).
 		  document.addEventListener("click", async (e) => {
 		    const btn = e.target && e.target.closest ? e.target.closest("[data-popout-lane]") : null;
@@ -5734,6 +6015,16 @@ function wireUi() {
     if (!jobId) return;
     const job = state.jobs.get(jobId);
     if (!job) return;
+
+    // Best-effort detach terminal subscription for this window.
+    try {
+      if (termUi.jobId && api && typeof api.termDetach === "function") api.termDetach(termUi.jobId).catch(() => {});
+    } catch {
+      // ignore
+    }
+    termUi.jobId = "";
+    termUi.lastSeq = 0;
+
     if (job.status === "running") return;
     upsertJob(compactJobForList(job));
   });
@@ -5749,8 +6040,7 @@ function wireUi() {
   // Settings live previews should not persist unless saved.
   if (els.settingsDialog) {
     els.settingsDialog.addEventListener("close", () => {
-      const v = normalizeLogoVariant(state.settings && state.settings.uiLogoVariant);
-      renderBrandLogo(v);
+      renderBrandLogo(FIXED_LOGO_VARIANT);
     });
   }
 
@@ -5760,18 +6050,6 @@ function wireUi() {
     els.settingsUiModel.addEventListener("change", () => {
       syncUiModelCustomVisibility();
     });
-  }
-
-  if (els.settingsLogoVariant) {
-    els.settingsLogoVariant.addEventListener("change", () => {
-      renderBrandLogo(els.settingsLogoVariant.value);
-    });
-  }
-  if (els.settingsLogoVariantPrev) {
-    els.settingsLogoVariantPrev.addEventListener("click", () => stepLogoVariant(-1));
-  }
-  if (els.settingsLogoVariantNext) {
-    els.settingsLogoVariantNext.addEventListener("click", () => stepLogoVariant(1));
   }
 
   if (els.imageDialogClose) {
@@ -5952,14 +6230,13 @@ function wireUi() {
   }
 
 				  els.saveSettingsBtn.addEventListener("click", async () => {
-					    const patch = {
-				      uiModel: getUiModelFromControls(),
-				      uiTheme: els.settingsTheme.value,
-				      uiColorScheme: els.settingsColorScheme.value,
-				      uiLogoVariant: normalizeLogoVariant(els.settingsLogoVariant ? els.settingsLogoVariant.value : ""),
-				      menuBarMode: !!els.settingsMenuBarMode.checked,
-				      startAtLogin: !!els.settingsStartAtLogin.checked,
-				      openOnAllDisplays: !!els.settingsOpenOnAllDisplays.checked,
+						    const patch = {
+					      uiModel: getUiModelFromControls(),
+					      uiTheme: els.settingsTheme.value,
+					      uiColorScheme: els.settingsColorScheme.value,
+					      menuBarMode: !!els.settingsMenuBarMode.checked,
+					      startAtLogin: !!els.settingsStartAtLogin.checked,
+					      openOnAllDisplays: !!els.settingsOpenOnAllDisplays.checked,
 		      globalHotkeyEnabled: !!els.settingsGlobalHotkeyEnabled.checked,
 			      globalHotkeyAccelerator: els.settingsGlobalHotkeyAccelerator.value.trim(),
 			      globalHotkeyUseClipboard: !!els.settingsGlobalHotkeyUseClipboard.checked,
@@ -6691,12 +6968,11 @@ function maybeShowMissingAgentBinariesToast(res) {
 
 		  els.settingsCodexPath.value = codex.path || "";
 		  els.settingsCodexModel.value = codex.model || "";
-			  setUiModelControls(s.uiModel || "");
-			  els.settingsTheme.value = normalizeTheme(s.uiTheme);
-			  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
-			  if (els.settingsLogoVariant) els.settingsLogoVariant.value = normalizeLogoVariant(s.uiLogoVariant);
-			  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
-			  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
+				  setUiModelControls(s.uiModel || "");
+				  els.settingsTheme.value = normalizeTheme(s.uiTheme);
+				  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+				  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
+				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
 	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
 	  els.settingsCodexColor.value = codex.color || "auto";
 	  els.settingsClaudePath.value = claude.path || "";
@@ -7363,10 +7639,12 @@ async function init() {
 
   state.settings = await api.settingsGet();
   applyThemeFromSettings(state.settings);
+  applyXtermTheme();
   if (typeof api.onSettingsChanged === "function") {
     api.onSettingsChanged((next) => {
       state.settings = next;
       applyThemeFromSettings(next);
+      applyXtermTheme();
       renderBoard();
       refreshAgentBinaries({ showToastOnMissing: false });
     });
@@ -7397,9 +7675,9 @@ async function init() {
     }
   }
 
-  api.onJobEvent((payload) => {
-    const { jobId, kind } = payload;
-    if (!jobId) return;
+	  api.onJobEvent((payload) => {
+	    const { jobId, kind } = payload;
+	    if (!jobId) return;
 
     if (kind === "created") {
       if (payload && payload.job && !isDemoJob(payload.job)) {
@@ -7457,11 +7735,15 @@ async function init() {
       }
       return;
     }
-  });
+	  });
 
-  if (api.onDevNotice) {
-    api.onDevNotice((payload) => {
-      if (!payload || typeof payload !== "object") return;
+	  if (typeof api.onTermEvent === "function") {
+	    api.onTermEvent((payload) => onTermEvent(payload));
+	  }
+
+	  if (api.onDevNotice) {
+	    api.onDevNotice((payload) => {
+	      if (!payload || typeof payload !== "object") return;
 
       if (payload.kind === "live-reload-enabled") {
         // Keep this subtle; it's mostly to confirm you're actually in dev mode.

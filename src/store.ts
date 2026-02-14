@@ -19,7 +19,6 @@ export const DEFAULT_STATE = {
     uiModel: "",
     uiTheme: "heaven", // heaven | nord | gruvbox | solarized | dracula | ocean
     uiColorScheme: "dark", // system | dark | light
-    uiLogoVariant: "v1", // v1..v10
 
     // Global shortcuts
     globalHotkeyEnabled: false,
@@ -361,6 +360,11 @@ function ensureSettings(settings) {
   // renderer-v2 was an experiment; drop the selector to keep settings stable.
   if (Object.prototype.hasOwnProperty.call(next, "uiRenderer")) {
     delete next.uiRenderer;
+    changed = true;
+  }
+  // Branding is fixed; drop the old selector if it exists.
+  if (Object.prototype.hasOwnProperty.call(next, "uiLogoVariant")) {
+    delete next.uiLogoVariant;
     changed = true;
   }
 

@@ -17,6 +17,7 @@ import { JobsManager } from "./jobs-manager";
 import { TerminalManager } from "./terminal-manager";
 import { TrayManager } from "./tray-manager";
 import { WindowManager } from "./window-manager";
+import { ensureMacAppMenu } from "./mac-app-menu";
 import { listCodexModels } from "./codex-models";
 import { checkAgentBinaries, resolveCodexCliPathFromSettings } from "../agent-binaries";
 import { installAgentCli } from "../agent-install";
@@ -218,6 +219,8 @@ function applyNativeThemeFromSettings(settings: any) {
 
 export async function startApp(): Promise<void> {
   await app.whenReady();
+
+  ensureMacAppMenu();
 
   app.on("web-contents-created", (_evt, contents) => {
     try {
