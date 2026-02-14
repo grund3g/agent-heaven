@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.3.0...agent-heaven-v0.3.1) (2026-02-14)
+
+
+### Bug Fixes
+
+* restore grid logo on landing page ([4ed859d](https://github.com/grund3g/agent-heaven/commit/4ed859d07ddf7a1444c36350e0bc544e1e7ad9a0))
+
 ## [0.3.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.2.0...agent-heaven-v0.3.0) (2026-02-14)
 
 
