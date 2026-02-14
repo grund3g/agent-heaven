@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.2.0...agent-heaven-v0.3.0) (2026-02-14)
+
+
+### Features
+
+* update landing page with new logo, download link, and footer ([ebd0217](https://github.com/grund3g/agent-heaven/commit/ebd02178ee7ce6ca2f134ef3597e894253660321))
+
 ## [0.2.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.1.0...agent-heaven-v0.2.0) (2026-02-14)
 
 
