@@ -116,6 +116,7 @@ const els = {
 
 const state = {
   settings: null,
+  agentBinaries: null,
   projects: [],
   jobs: new Map(),
   selectedJobId: null,
@@ -155,7 +156,8 @@ const STORAGE = {
   lastAgent: "agentHeaven.lastAgent",
   sortMode: "agentHeaven.sortMode",
   sidebarCollapsed: "agentHeaven.sidebarCollapsed",
-  composerDraft: "agentHeaven.draft.composer"
+  composerDraft: "agentHeaven.draft.composer",
+  agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1"
 };
 
 applySidebarCollapsed(getStoredSidebarCollapsed());
@@ -174,28 +176,28 @@ const GRID_SVG = `
 `.trim();
 const LOGO_VARIANTS = {
   v1: {
+    label: "Round",
+    svg: GRID_SVG,
+    font: '"Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif',
+    weight: 700
+  },
+  v2: {
     label: "Serif",
     svg: GRID_SVG,
     font: '"New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
     weight: 800
   },
-  v2: {
+  v3: {
     label: "Sans",
     svg: GRID_SVG,
     font: '"SF Pro Display", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif',
     weight: 700
   },
-  v3: {
+  v4: {
     label: "Mono",
     svg: GRID_SVG,
     font: 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     weight: 600
-  },
-  v4: {
-    label: "Round",
-    svg: GRID_SVG,
-    font: '"Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif',
-    weight: 700
   },
   v5: {
     label: "System",
@@ -652,6 +654,22 @@ function storeAgent(agent) {
   try {
     if (!agent) return;
     window.localStorage.setItem(STORAGE.lastAgent, agent);
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredAgentBinariesToastAtMs() {
+  try {
+    return Number(window.localStorage.getItem(STORAGE.agentBinariesToastAt) || "0") || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function storeAgentBinariesToastAtMs(ms) {
+  try {
+    window.localStorage.setItem(STORAGE.agentBinariesToastAt, String(Number(ms) || 0));
   } catch {
     // ignore
   }
@@ -4806,6 +4824,25 @@ function wireUi() {
   }
   if (els.statusDialogBody) {
     els.statusDialogBody.addEventListener("click", (e) => {
+      const openSettingsBtn = e.target && e.target.closest ? e.target.closest("[data-status-open-settings]") : null;
+      if (openSettingsBtn) {
+        e.preventDefault();
+        try {
+          if (els.statusDialog && els.statusDialog.open) els.statusDialog.close();
+        } catch {
+          // ignore
+        }
+        openSettingsDialog();
+        return;
+      }
+
+      const refreshBtn = e.target && e.target.closest ? e.target.closest("[data-status-refresh-agents]") : null;
+      if (refreshBtn) {
+        e.preventDefault();
+        refreshAgentBinaries({ showToastOnMissing: false });
+        return;
+      }
+
       const row = e.target && e.target.closest ? e.target.closest("[data-status-job-id]") : null;
       if (!row) return;
       const id = row.getAttribute("data-status-job-id") || "";
@@ -5886,6 +5923,69 @@ async function refreshCodexModelsDatalist({ showErrors = false } = {}) {
   }
 }
 
+let agentBinariesFetchInFlight = false;
+async function refreshAgentBinaries({ showToastOnMissing = false } = {}) {
+  if (!api || typeof api.agentsCheckBinaries !== "function") return;
+  if (agentBinariesFetchInFlight) return;
+  agentBinariesFetchInFlight = true;
+  try {
+    const res = await api.agentsCheckBinaries();
+    state.agentBinaries = res && typeof res === "object" ? res : null;
+
+    // Keep the status overlay fresh if it's open.
+    if (els.statusDialog && els.statusDialog.open) renderStatusDialog();
+
+    if (showToastOnMissing) maybeShowMissingAgentBinariesToast(state.agentBinaries);
+  } catch (err) {
+    state.agentBinaries = { checkedAt: new Date().toISOString(), error: String(err && err.message ? err.message : err) };
+    if (els.statusDialog && els.statusDialog.open) renderStatusDialog();
+  } finally {
+    agentBinariesFetchInFlight = false;
+  }
+}
+
+function agentBinaryMissingAgents(res) {
+  const out = [];
+  const codex = res && typeof res === "object" ? res.codex : null;
+  const claude = res && typeof res === "object" ? res.claude : null;
+  if (codex && codex.found === false) out.push("Codex");
+  if (claude && claude.found === false) out.push("Claude");
+  return out;
+}
+
+function maybeShowMissingAgentBinariesToast(res) {
+  // Avoid noise for popout windows; keep warnings in the main board window.
+  if (state.focusLane || state.focusJobId) return;
+
+  const missing = agentBinaryMissingAgents(res);
+  if (missing.length === 0) return;
+
+  // De-dupe across multiple windows starting at the same time (open-on-all-displays).
+  const now = Date.now();
+  const lastAt = getStoredAgentBinariesToastAtMs();
+  if (lastAt && now - lastAt < 30_000) return;
+  storeAgentBinariesToastAtMs(now);
+
+  let msg = `Missing agent CLI${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Open Settings to set the binary path${missing.length > 1 ? "s" : ""}.`;
+
+  try {
+    const codex = res && typeof res === "object" ? res.codex : null;
+    const claude = res && typeof res === "object" ? res.claude : null;
+    const hints = [];
+    if (codex && codex.found === false && Array.isArray(codex.candidates) && codex.candidates[0]) {
+      hints.push(`Codex candidate: ${String(codex.candidates[0])}`);
+    }
+    if (claude && claude.found === false && Array.isArray(claude.candidates) && claude.candidates[0]) {
+      hints.push(`Claude candidate: ${String(claude.candidates[0])}`);
+    }
+    if (hints.length > 0) msg += ` (${hints.join(" · ")})`;
+  } catch {
+    // ignore
+  }
+
+  showToast(msg, null, 12_000);
+}
+
 		function openSettingsDialog() {
 		  const s = state.settings || {};
 		  const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
@@ -5956,6 +6056,58 @@ function renderStatusDialog() {
     bits.push(`tokens(all) in=${usageAll.input_tokens} out=${usageAll.output_tokens} turns=${usageAll.turns}`);
   }
   els.statusDialogMeta.textContent = bits.join("  ");
+
+  function fmtFoundPill(found) {
+    const cls = found ? "pill pill--done" : "pill pill--attn";
+    const label = found ? "found" : "missing";
+    return `<span class="${cls}">${escapeHtml(label)}</span>`;
+  }
+
+  function renderAgentBinariesSection() {
+    const res = state.agentBinaries && typeof state.agentBinaries === "object" ? state.agentBinaries : null;
+    const checkedAt = res && res.checkedAt ? String(res.checkedAt) : "";
+    const codex = res && res.codex && typeof res.codex === "object" ? res.codex : null;
+    const claude = res && res.claude && typeof res.claude === "object" ? res.claude : null;
+    const err = res && res.error ? String(res.error) : "";
+
+    const hintBits = [];
+    hintBits.push("Checks whether Agent Heaven can spawn the CLI binaries (PATH matters for packaged apps).");
+    if (checkedAt) hintBits.push(`checkedAt=${checkedAt}`);
+
+    function renderRow(label, r) {
+      const found = !!(r && r.found === true);
+      const p = r && typeof r.path === "string" ? r.path : "";
+      const extra = [];
+      const spawnErr = r && r.error ? String(r.error) : "";
+      if (!found && spawnErr) extra.push(`<div class="logline logline--stderr">${escapeHtml(`${label} error: ${spawnErr}`)}</div>`);
+      const candidates = r && Array.isArray(r.candidates) ? r.candidates.filter(Boolean) : [];
+      if (!found && candidates.length > 0) extra.push(`<div class="logline">${escapeHtml(`${label} candidates: ${candidates.join(", ")}`)}</div>`);
+      return `<div class="logline">${escapeHtml(label)}: ${fmtFoundPill(found)}  ${escapeHtml(`path=${p || "—"}`)}</div>${extra.join("")}`;
+    }
+
+    const lines = [];
+    if (!res) {
+      lines.push(`<div class="logline">Not checked yet.</div>`);
+    } else if (err && !codex && !claude) {
+      lines.push(`<div class="logline logline--stderr">${escapeHtml(err)}</div>`);
+    } else {
+      lines.push(renderRow("Codex", codex));
+      lines.push(renderRow("Claude", claude));
+      if (err) lines.push(`<div class="logline logline--stderr">${escapeHtml(err)}</div>`);
+    }
+
+    return `
+      <div class="statussection">
+        <div class="statussection__title">Agent CLIs</div>
+        <div class="statussection__hint">${escapeHtml(hintBits.join("  "))}</div>
+        ${lines.join("")}
+        <div class="settings__actions statussection__actions">
+          <button type="button" class="btn btn--ghost" data-status-open-settings>Open Settings</button>
+          <button type="button" class="btn btn--ghost" data-status-refresh-agents>Recheck</button>
+        </div>
+      </div>
+    `;
+  }
 
   function sortUsageEntries(map) {
     const entries = Array.from(map.entries());
@@ -6065,9 +6217,11 @@ function renderStatusDialog() {
 
   const body = [];
 
+  body.push(renderAgentBinariesSection());
+
   if (jobsAll.length === 0) {
     body.push(`<div class="logline">No jobs yet.</div>`);
-    els.statusDialogBody.innerHTML = body.join("");
+    els.statusDialogBody.innerHTML = `<div class="status">${body.join("")}</div>`;
     return;
   }
 
@@ -6286,6 +6440,7 @@ async function init() {
       state.settings = next;
       applyThemeFromSettings(next);
       renderBoard();
+      refreshAgentBinaries({ showToastOnMissing: false });
     });
   }
   state.projects = await api.projectsList();
@@ -6296,6 +6451,7 @@ async function init() {
   renderBoard();
   ensureDurationTicker();
   refreshCodexModelsDatalist({ showErrors: false });
+  refreshAgentBinaries({ showToastOnMissing: true });
 
   // Job popout windows open directly into the selected job.
   if (state.focusJobId) {

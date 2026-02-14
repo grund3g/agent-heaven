@@ -17,6 +17,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     return true;
   },
 
+  agentsCheckBinaries: async () => {
+    const res = await invokeOk("agents:checkBinaries");
+    return res;
+  },
+
   codexListModels: async () => {
     const res = await invokeOk("codex:listModels");
     return Array.isArray(res.models) ? res.models : [];

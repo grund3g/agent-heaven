@@ -347,97 +347,30 @@ body::before {
 }
 
 .brand {
-  position: relative;
   display: grid;
   grid-template-columns: 46px 1fr;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
   padding: 12px 12px;
-  border-radius: calc(var(--radius) + 2px);
-  border: 1px solid transparent;
-  background:
-    var(--card-bg) padding-box,
-    linear-gradient(
-      135deg,
-      rgba(var(--accent2-rgb), 0.30),
-      rgba(var(--accent-rgb), 0.22),
-      rgba(255, 255, 255, 0.06)
-    )
-    border-box;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.26);
   animation: brandIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.brand::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: radial-gradient(90% 70% at 18% 12%, rgba(255, 255, 255, 0.10), transparent 60%);
-  opacity: 0.9;
 }
 
 .brand__mark {
   width: 46px;
   height: 46px;
-  border-radius: 14px;
   display: grid;
   place-items: center;
   position: relative;
-  overflow: hidden;
   color: var(--ink);
-  border: 1px solid transparent;
-  background:
-    radial-gradient(140% 120% at 18% 20%, rgba(255, 255, 255, 0.24), transparent 58%) padding-box,
-    linear-gradient(135deg, rgba(var(--accent-rgb), 0.26), rgba(var(--accent2-rgb), 0.22)) padding-box,
-    linear-gradient(140deg, rgba(var(--accent2-rgb), 0.58), rgba(var(--accent-rgb), 0.30), rgba(255, 255, 255, 0.12)) border-box;
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.34),
-    0 1px 0 rgba(255, 255, 255, 0.14) inset;
 }
 
 .brand__logo {
   width: 28px;
   height: 28px;
   display: block;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35));
-  opacity: 0.96;
+  opacity: 0.85;
 }
 
-.brand__mark::after {
-  content: "";
-  position: absolute;
-  inset: -60% -40%;
-  pointer-events: none;
-  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.22) 50%, transparent 62%);
-  transform: translateX(-55%) rotate(12deg);
-  opacity: 0.0;
-  transition:
-    opacity 220ms ease,
-    transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.brand:hover .brand__mark::after {
-  opacity: 0.9;
-  transform: translateX(35%) rotate(12deg);
-}
-
-.brand__cycle {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  opacity: 0.45;
-  pointer-events: auto;
-  transform: translateY(0);
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease;
-}
-
-.brand:hover .brand__cycle {
-  opacity: 1;
-}
 
 .brand__name {
   font-family: var(--serif);
@@ -1652,6 +1585,10 @@ body::before {
   color: var(--muted);
   margin-bottom: 10px;
   white-space: pre-wrap;
+}
+
+.statussection__actions {
+  margin-top: 10px;
 }
 
 .statussplit {

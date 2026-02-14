@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { app, BrowserWindow, ipcMain, dialog, globalShortcut, nativeTheme, screen, shell } from "electron";
 import type { OpenDialogOptions } from "electron";
@@ -15,6 +16,7 @@ import { JobsManager } from "./jobs-manager";
 import { TrayManager } from "./tray-manager";
 import { WindowManager } from "./window-manager";
 import { listCodexModels } from "./codex-models";
+import { checkAgentBinaries, resolveCodexCliPathFromSettings } from "../agent-binaries";
 
 function isMenuBarMode(settings: any) {
   return process.platform === "darwin" && !!(settings && settings.menuBarMode);
@@ -36,6 +38,22 @@ function setDockVisibility(settings: any) {
   try {
     // show() returns a Promise on macOS.
     app.dock.show().catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
+function setDevDockIcon() {
+  if (process.platform !== "darwin") return;
+  if (!app.dock) return;
+  if (app.isPackaged) return;
+
+  // In dev, Electron shows its default icon in the Dock unless we set one explicitly.
+  // For packaged builds, the `.icns` is baked into the `.app` bundle by electron-builder.
+  const iconPath = path.join(app.getAppPath(), "build-res", "icon.png");
+  try {
+    if (!fs.existsSync(iconPath)) return;
+    app.dock.setIcon(iconPath);
   } catch {
     // ignore
   }
@@ -66,6 +84,8 @@ function applyNativeThemeFromSettings(settings: any) {
 
 export async function startApp(): Promise<void> {
   await app.whenReady();
+
+  setDevDockIcon();
 
   const storePath = path.join(app.getPath("userData"), "agent-heaven.store.json");
   const store = new Store(storePath);
@@ -137,11 +157,7 @@ export async function startApp(): Promise<void> {
 
   let codexModelsCache: { ts: number; codexPath: string; models: any[] } | null = null;
   function getCodexPathForTools() {
-    const s = store.getSettings();
-    const agents = s && typeof s === "object" && (s as any).agents && typeof (s as any).agents === "object" ? (s as any).agents : {};
-    const codex = agents && (agents as any).codex && typeof (agents as any).codex === "object" ? (agents as any).codex : {};
-    const p = String((codex as any).path || (s as any).codexPath || "").trim();
-    return p.length > 0 ? p : "codex";
+    return resolveCodexCliPathFromSettings(store.getSettings());
   }
 
   ipcMain.handle("settings:get", async () => store.getSettings());
@@ -170,6 +186,15 @@ export async function startApp(): Promise<void> {
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  });
+
+  ipcMain.handle("agents:checkBinaries", async () => {
+    try {
+      const res = await checkAgentBinaries(store.getSettings(), { timeoutMs: 2500 });
+      return { ok: true, ...res };
+    } catch (err: any) {
+      return { ok: true, checkedAt: new Date().toISOString(), error: String(err && err.message ? err.message : err) };
     }
   });
 

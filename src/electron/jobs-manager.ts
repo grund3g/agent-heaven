@@ -1,8 +1,5 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
 import { guessTitleFromPrompt, promptSummary } from "../core/prompt";
 import { addUsageTotals } from "../core/usage";
@@ -11,6 +8,7 @@ import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job } from "../c
 import { searchJobs, type JobSearchOpts } from "../core/job-search";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
+import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
 
 type SendJobEvent = (payload: any) => void;
 
@@ -157,10 +155,7 @@ export class JobsManager {
   }
 
   private getCodexPath() {
-    const settings = this.store.getSettings();
-    const codex = this.getCodexSettingsFrom(settings);
-    const p = (codex.path || settings.codexPath || "").trim();
-    return p.length > 0 ? p : "codex";
+    return resolveCodexCliPathFromSettings(this.store.getSettings());
   }
 
   private getClaudeSettingsFrom(settings: any) {
@@ -171,31 +166,7 @@ export class JobsManager {
   }
 
   private getClaudePath() {
-    const settings = this.store.getSettings();
-    const claude = this.getClaudeSettingsFrom(settings);
-    const p = String((claude as any).path || "").trim();
-    if (p.length > 0) return p;
-
-    // Prefer the Claude Code local installer path if present.
-    // This avoids PATH issues on macOS (Finder-launched apps) and dodges stale global npm installs.
-    const local = this.getDefaultClaudeLocalInstallerPath();
-    if (local) return local;
-
-    return "claude";
-  }
-
-  private getDefaultClaudeLocalInstallerPath(): string {
-    try {
-      const home = os.homedir();
-      if (!home) return "";
-      const p =
-        process.platform === "win32"
-          ? path.join(home, ".claude", "local", "claude.exe")
-          : path.join(home, ".claude", "local", "claude");
-      return fs.existsSync(p) ? p : "";
-    } catch {
-      return "";
-    }
+    return resolveClaudeCliPathFromSettings(this.store.getSettings());
   }
 
   private normalizeAgentKey(value: unknown): "codex" | "claude" {
