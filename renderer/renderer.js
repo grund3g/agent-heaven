@@ -158,125 +158,157 @@ const LOGO_VARIANTS = {
   v1: {
     label: "Halo",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.8" rx="8.2" ry="3.4" stroke-width="1.6" opacity="0.40" />
+        <ellipse cx="16" cy="7.8" rx="6.0" ry="2.2" stroke-width="1.0" opacity="0.22" />
+        <path d="M16 4.4v-1" stroke-width="1.4" opacity="0.30" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.80" />
+      <circle cx="16" cy="9.4" r="2.6" fill="currentColor" opacity="0.10" />
     `.trim()
   },
   v2: {
     label: "Tilted halo",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.6" ry="3.0" opacity="0.55" transform="rotate(-14 16 8.2)" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.6" rx="8.6" ry="3.2" stroke-width="1.6" opacity="0.38" transform="rotate(-18 16 7.6)" />
+        <ellipse cx="16" cy="7.6" rx="6.2" ry="2.0" stroke-width="0.9" opacity="0.18" transform="rotate(-18 16 7.6)" />
+        <circle cx="23.8" cy="6.2" r="0.7" fill="currentColor" opacity="0.40" />
+        <circle cx="8.4" cy="9.8" r="0.5" fill="currentColor" opacity="0.28" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
     `.trim()
   },
   v3: {
     label: "Spark",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
-        <path d="M25 6.5v5" opacity="0.55" />
-        <path d="M22.5 9h5" opacity="0.55" />
-        <path d="M23.4 7.4l3.2 3.2" opacity="0.55" />
-        <path d="M26.6 7.4l-3.2 3.2" opacity="0.55" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.8" rx="7.6" ry="3.1" stroke-width="1.5" opacity="0.40" />
+        <path d="M25.5 4.5l-1.2 2.8" stroke-width="1.6" opacity="0.55" />
+        <path d="M27.2 6.4l-2.8 1.0" stroke-width="1.6" opacity="0.55" />
+        <path d="M28.0 3.2l-0.6 1.6" stroke-width="1.2" opacity="0.30" />
+        <path d="M29 4.4l-1.6 0.4" stroke-width="1.2" opacity="0.30" />
+        <path d="M5.8 5.8l1.0 1.4" stroke-width="1.0" opacity="0.25" />
+        <path d="M5.0 7.0l1.6 0.2" stroke-width="1.0" opacity="0.25" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
+      <circle cx="25.0" cy="5.2" r="1.0" fill="currentColor" opacity="0.50" />
     `.trim()
   },
   v4: {
     label: "Wings",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
-        <path d="M9.2 18.2l-4.9-2.4" opacity="0.55" />
-        <path d="M9.8 20.4l-5.2-1.0" opacity="0.55" />
-        <path d="M22.8 18.2l4.9-2.4" opacity="0.55" />
-        <path d="M22.2 20.4l5.2-1.0" opacity="0.55" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.8" rx="7.4" ry="3.0" stroke-width="1.4" opacity="0.38" />
+        <path d="M9.5 17.5C7.5 15.8 4.8 15 2.5 15.4" stroke-width="1.6" opacity="0.45" />
+        <path d="M9.8 19.8C7.2 19.0 4.5 19.2 2.8 20.2" stroke-width="1.4" opacity="0.32" />
+        <path d="M10.2 16.0C8.8 13.6 6.0 12.2 3.5 12.8" stroke-width="1.2" opacity="0.22" />
+        <path d="M22.5 17.5C24.5 15.8 27.2 15 29.5 15.4" stroke-width="1.6" opacity="0.45" />
+        <path d="M22.2 19.8C24.8 19.0 27.5 19.2 29.2 20.2" stroke-width="1.4" opacity="0.32" />
+        <path d="M21.8 16.0C23.2 13.6 26.0 12.2 28.5 12.8" stroke-width="1.2" opacity="0.22" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
     `.trim()
   },
   v5: {
     label: "Orbit",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <ellipse cx="16" cy="16" rx="12.5" ry="5.2" opacity="0.45" transform="rotate(-25 16 16)" />
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="16" cy="15" rx="13.5" ry="5.0" stroke-width="1.2" opacity="0.28" transform="rotate(-28 16 15)" />
+        <ellipse cx="16" cy="15" rx="13.5" ry="5.0" stroke-width="0.7" opacity="0.14" transform="rotate(35 16 15)" />
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
       </g>
-      <circle cx="26.3" cy="14.1" r="1" fill="currentColor" opacity="0.70" />
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.55" />
+      <circle cx="27.2" cy="12.0" r="1.4" fill="currentColor" opacity="0.65" />
+      <circle cx="5.8" cy="19.0" r="0.9" fill="currentColor" opacity="0.35" />
+      <circle cx="22.0" cy="22.5" r="0.6" fill="currentColor" opacity="0.25" />
+      <circle cx="16" cy="9.4" r="1.2" fill="currentColor" opacity="0.60" />
     `.trim()
   },
   v6: {
     label: "Cloud base",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.2" ry="3.0" opacity="0.50" />
-        <path d="M10.2 25.2c1.2-1.7 3.2-2.7 5.8-2.7s4.6 1.0 5.8 2.7" opacity="0.55" />
-        <path d="M9.1 25.2c0 2.2 1.8 4 4 4h5.8c2.2 0 4-1.8 4-4" opacity="0.55" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 23L16 9l6 14" stroke-width="2.3" />
+        <path d="M12.4 18.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.6" rx="7.6" ry="3.0" stroke-width="1.4" opacity="0.38" />
+        <path d="M7.5 25.5Q7.5 22.5 10 22Q10 19.5 13 19.5Q14.5 17.5 16 17.5Q17.5 17.5 19 19.5Q22 19.5 22 22Q24.5 22.5 24.5 25.5" stroke-width="1.4" opacity="0.35" />
+        <path d="M7.5 25.5Q7.5 28 10 28.5h12Q24.5 28 24.5 25.5" stroke-width="1.2" opacity="0.25" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
     `.trim()
   },
   v7: {
     label: "Circle badge",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="16" cy="16" r="13" opacity="0.35" />
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="16" cy="16" r="14" stroke-width="1.6" opacity="0.25" />
+        <circle cx="16" cy="16" r="12" stroke-width="0.6" opacity="0.12" stroke-dasharray="2.5 3.5" />
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.8" rx="7.4" ry="3.0" stroke-width="1.4" opacity="0.40" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="2" r="0.8" fill="currentColor" opacity="0.35" />
+      <circle cx="16" cy="30" r="0.8" fill="currentColor" opacity="0.35" />
+      <circle cx="2" cy="16" r="0.8" fill="currentColor" opacity="0.35" />
+      <circle cx="30" cy="16" r="0.8" fill="currentColor" opacity="0.35" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
     `.trim()
   },
   v8: {
     label: "Diamond badge",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 3L29 16L16 29L3 16z" opacity="0.35" />
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 2L30 16L16 30L2 16z" stroke-width="1.4" opacity="0.22" />
+        <path d="M16 5L27 16L16 27L5 16z" stroke-width="0.7" opacity="0.12" />
+        <path d="M2 16h5M25 16h5" stroke-width="0.8" opacity="0.18" />
+        <path d="M16 2v4M16 26v4" stroke-width="0.8" opacity="0.18" />
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <ellipse cx="16" cy="7.8" rx="7.0" ry="2.8" stroke-width="1.3" opacity="0.38" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="2" r="0.9" fill="currentColor" opacity="0.30" />
+      <circle cx="30" cy="16" r="0.9" fill="currentColor" opacity="0.30" />
+      <circle cx="16" cy="30" r="0.9" fill="currentColor" opacity="0.30" />
+      <circle cx="2" cy="16" r="0.9" fill="currentColor" opacity="0.30" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
     `.trim()
   },
   v9: {
     label: "Organizer",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <path d="M9 26h14" opacity="0.45" />
-        <path d="M11 28h10" opacity="0.35" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 22L16 9l6 13" stroke-width="2.3" />
+        <path d="M12.4 17.5h7.2" stroke-width="2.0" />
+        <path d="M8 24h16" stroke-width="1.6" opacity="0.45" />
+        <path d="M9.5 26.2h13" stroke-width="1.3" opacity="0.35" />
+        <path d="M11 28.4h10" stroke-width="1.0" opacity="0.25" />
+        <path d="M6 24v5.5" stroke-width="0.8" opacity="0.18" />
+        <path d="M26 24v5.5" stroke-width="0.8" opacity="0.18" />
+        <path d="M6 29.5h20" stroke-width="0.8" opacity="0.18" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.60" />
+      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.65" />
     `.trim()
   },
   v10: {
     label: "Minimal ring",
     svg: `
-      <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 10l6 14" />
-        <path d="M12.8 19h6.4" />
-        <circle cx="16" cy="8.6" r="5.8" opacity="0.45" />
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
+        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
+        <circle cx="16" cy="8.2" r="6.4" stroke-width="1.4" opacity="0.35" />
+        <circle cx="16" cy="8.2" r="4.2" stroke-width="0.6" opacity="0.15" />
       </g>
-      <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+      <circle cx="16" cy="8.2" r="1.2" fill="currentColor" opacity="0.75" />
+      <circle cx="16" cy="8.2" r="2.4" fill="currentColor" opacity="0.08" />
     `.trim()
   }
 };
@@ -1522,10 +1554,10 @@ function jobTokensCardText(job) {
 	  return false;
 	}
 
-	function topicTitleFromPromptSummary(summary) {
-	  const s = oneLine(summary);
-	  const low = s.toLowerCase();
-	  if (!low) return "";
+		function topicTitleFromPromptSummary(summary) {
+		  const s = oneLine(summary);
+		  const low = s.toLowerCase();
+		  if (!low) return "";
 
 	  if (/\btitle(s)?\b/.test(low) && /\b(summary|summaries|summarize|zusammenfassung)\b/.test(low))
 	    return "Card title summaries";
@@ -1558,37 +1590,62 @@ function jobTokensCardText(job) {
 
 	  if (/\byour\s+codex\b/.test(low) || /\byour\s+agents\b/.test(low)) return "Branding copy";
 
-	  return "";
-	}
+		  return "";
+		}
 
-	function compactTitleFromPromptSummary(summary) {
-	  const s = oneLine(summary);
-	  if (!s) return "";
+		function looksLikeLowSignalIntro(s) {
+		  const t = oneLine(s).toLowerCase();
+		  if (!t) return false;
+		  if (/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b/.test(t)) return true;
+		  if (/^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b/.test(t))
+		    return true;
+		  return false;
+		}
+
+		function stripLowSignalLeadIn(s) {
+		  let t = String(s || "");
+		  t = t.replace(/^(title|titel|summary|zusammenfassung)\\s*[:\\-]\\s*/i, "");
+
+		  t = t.replace(/^(please|pls|plz|bitte)\\b[\\s,:-]*/i, "");
+		  t = t.replace(/^(can|could|would|will|may)\\s+you\\b[\\s,:-]*/i, "");
+		  t = t.replace(/^(can|could)\\s+we\\b[\\s,:-]*/i, "");
+		  t = t.replace(/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b[\\s,:-]*/i, "");
+		  t = t.replace(/^(kann\\s+man)\\b[\\s,:-]*/i, "");
+		  t = t.replace(/^(das\\s+bitte)\\b[\\s,:-]*/i, "");
+
+		  t = t.replace(/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b[\\s,:-]*/i, "");
+		  t = t.replace(
+		    /^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b[\\s,:-]*/i,
+		    ""
+		  );
+
+		  t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\\b[\\s,:-]*/i, "");
+		  return t;
+		}
+
+		function compactTitleFromPromptSummary(summary) {
+		  const s = oneLine(summary);
+		  if (!s) return "";
 
 	  const topic = topicTitleFromPromptSummary(s);
 	  if (topic) {
 	    if (isFixLikePrompt(s)) return `Fix: ${topic}`;
 	    return topic;
-	  }
+		  }
 
-	  let t = s;
-	  const commaIdx = t.indexOf(",");
-	  if (commaIdx > 12) {
-	    const head = t.slice(0, commaIdx).trim();
-	    if (head.length >= 8) t = head;
-	  }
+		  let t = stripLowSignalLeadIn(s);
+		  const commaIdx = t.indexOf(",");
+		  if (commaIdx > 12) {
+		    const head = t.slice(0, commaIdx).trim();
+		    const tail = t.slice(commaIdx + 1).trim();
+		    if (tail && looksLikeLowSignalIntro(head)) t = tail;
+		    else if (head.length >= 8) t = head;
+		  }
 
-	  t = t.replace(/^(please|pls|plz|bitte)\b[\s,:-]*/i, "");
-	  t = t.replace(/^(can|could|would|will|may)\s+you\b[\s,:-]*/i, "");
-	  t = t.replace(/^(can|could)\s+we\b[\s,:-]*/i, "");
-	  t = t.replace(/^(kannst|k\u00f6nntest|k\u00f6nnen)\s+(du|ihr|wir)\b[\s,:-]*/i, "");
-	  t = t.replace(/^(kann\s+man)\b[\s,:-]*/i, "");
-	  t = t.replace(/^(das\s+bitte)\b[\s,:-]*/i, "");
-
-	  t = t.replace(/[!?]+$/, "");
-	  t = oneLine(t);
-	  return t || s;
-	}
+		  t = t.replace(/[!?]+$/, "");
+		  t = oneLine(t);
+		  return t || s;
+		}
 
 	function isBoilerplatePromptLine(s) {
 	  const t = String(s || "").trim();
@@ -4559,15 +4616,24 @@ function wireUi() {
     if (v && v !== "auto") storeProjectId(v);
   });
 
+  // Custom model dropdowns (replaces the native <datalist> chrome).
+  if (els.modelInput) codexModelComboboxComposer = attachCodexModelCombobox(els.modelInput, { ariaLabel: "Show models" });
+  if (els.settingsCodexModel)
+    codexModelComboboxSettings = attachCodexModelCombobox(els.settingsCodexModel, { ariaLabel: "Show models" });
+
   function syncComposerAgentUi() {
     const agent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
     if (!els.modelInput) return;
+    const cmb = codexModelComboboxComposer;
+    const hasCombobox = !!(cmb && typeof cmb.setEnabled === "function");
 
     if (agent === "claude") {
-      els.modelInput.removeAttribute("list");
+      if (hasCombobox) cmb.setEnabled(false);
+      else els.modelInput.removeAttribute("list");
       els.modelInput.placeholder = "Model override (optional, e.g. sonnet)";
     } else {
-      els.modelInput.setAttribute("list", "codexModelsList");
+      if (hasCombobox) cmb.setEnabled(true);
+      else els.modelInput.setAttribute("list", "codexModelsList");
       els.modelInput.placeholder = "Model override (optional)";
     }
   }
@@ -5032,13 +5098,387 @@ function wireUi() {
 let codexModelsFetchInFlight = false;
 let codexModelsCache = null; // array of objects from `codex app-server model/list`
 
-function historyModelStrings() {
+let codexModelComboboxComposer = null;
+let codexModelComboboxSettings = null;
+
+function historyModelStrings(agentKey) {
   const out = new Set();
+  const wantAgent = agentKey ? normalizeAgentKey(agentKey) : "";
   for (const j of state.jobs.values()) {
+    const agent = normalizeAgentKey(j && j.agent);
+    if (wantAgent && agent !== wantAgent) continue;
     const v = String(j && j.model ? j.model : "").trim();
     if (v) out.add(v);
   }
   return Array.from(out);
+}
+
+function computeCodexModelSuggestionGroups() {
+  const codexArr = Array.isArray(codexModelsCache) ? codexModelsCache : [];
+  const detectedRaw = codexArr
+    .filter((m) => m && typeof m === "object" && typeof m.model === "string")
+    .map((m) => ({
+      value: String(m.model || "").trim(),
+      label: String(m.displayName || m.id || m.model || "").trim(),
+      isDefault: !!m.isDefault,
+      kind: "detected"
+    }))
+    .filter((m) => m.value);
+
+  detectedRaw.sort((a, b) => {
+    if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
+
+  const detected = [];
+  const seen = new Set();
+  for (const m of detectedRaw) {
+    if (!m || !m.value || seen.has(m.value)) continue;
+    seen.add(m.value);
+    detected.push(m);
+  }
+
+  const recent = historyModelStrings("codex")
+    .map((v) => String(v || "").trim())
+    .filter((v) => v && !seen.has(v))
+    .sort((a, b) => a.localeCompare(b))
+    .map((v) => ({ value: v, label: v, isDefault: false, kind: "recent" }));
+
+  const out = [];
+  if (detected.length > 0) out.push({ title: "Detected", items: detected });
+  if (recent.length > 0) out.push({ title: "Recent", items: recent });
+  return out;
+}
+
+function attachCodexModelCombobox(inputEl, { ariaLabel = "Show models" } = {}) {
+  if (!inputEl) return null;
+  if (inputEl.__agentHeavenComboAttached) return inputEl.__agentHeavenComboAttached;
+
+  const wrap = document.createElement("div");
+  wrap.className = "combo";
+
+  // Wrap the existing input in a combo container so we can overlay a button + popover menu.
+  const parent = inputEl.parentNode;
+  if (!parent) return null;
+  parent.insertBefore(wrap, inputEl);
+  wrap.appendChild(inputEl);
+
+  inputEl.classList.add("combo__input");
+  inputEl.setAttribute("autocomplete", "off");
+  inputEl.setAttribute("spellcheck", "false");
+  inputEl.setAttribute("aria-expanded", "false");
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "combo__btn";
+  btn.setAttribute("aria-label", ariaLabel);
+  btn.innerHTML = `<span class="combo__chev" aria-hidden="true"></span>`;
+  wrap.appendChild(btn);
+
+  const menu = document.createElement("div");
+  menu.className = "combo__menu";
+  menu.hidden = true;
+  menu.setAttribute("role", "listbox");
+  wrap.appendChild(menu);
+
+  let enabled = true;
+  let open = false;
+  let activeValue = "";
+  let visibleValues = [];
+  let docWired = false;
+  let suppressFocusOpen = false;
+
+  function matchesQuery(item, q) {
+    if (!q) return true;
+    const v = String(item && item.value ? item.value : "").toLowerCase();
+    const l = String(item && item.label ? item.label : "").toLowerCase();
+    return v.includes(q) || l.includes(q);
+  }
+
+  function ensureMenuPosition() {
+    // Flip upwards if we're near the bottom edge (common in the Settings dialog).
+    menu.style.top = "";
+    menu.style.bottom = "";
+    const r = wrap.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const spaceAbove = r.top;
+    if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+      menu.style.top = "auto";
+      menu.style.bottom = "calc(100% + 6px)";
+    } else {
+      menu.style.top = "calc(100% + 6px)";
+      menu.style.bottom = "auto";
+    }
+  }
+
+  function applyActive() {
+    let activeEl = null;
+    menu.querySelectorAll(".combo__item").forEach((el) => {
+      const isActive = el.getAttribute("data-value") === activeValue;
+      el.classList.toggle("combo__item--active", isActive);
+      if (isActive) activeEl = el;
+    });
+    if (activeEl && typeof activeEl.scrollIntoView === "function") {
+      try {
+        activeEl.scrollIntoView({ block: "nearest" });
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  function renderMenu() {
+    const q = String(inputEl.value || "").trim().toLowerCase();
+    const groups = computeCodexModelSuggestionGroups();
+    const frag = document.createDocumentFragment();
+    visibleValues = [];
+
+    for (const g of groups) {
+      const items = Array.isArray(g.items) ? g.items.filter((it) => matchesQuery(it, q)) : [];
+      if (items.length === 0) continue;
+
+      const title = String(g.title || "").trim();
+      if (title) {
+        const h = document.createElement("div");
+        h.className = "combo__group";
+        h.textContent = title;
+        frag.appendChild(h);
+      }
+
+      for (const it of items) {
+        if (!it || !it.value) continue;
+        visibleValues.push(it.value);
+
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "combo__item";
+        row.setAttribute("data-value", it.value);
+
+        const main = document.createElement("span");
+        main.className = "combo__itemMain";
+
+        const v = document.createElement("span");
+        v.className = "combo__itemValue";
+        v.textContent = it.value;
+        main.appendChild(v);
+
+        const lbl = String(it.label || "").trim();
+        const lblText =
+          lbl && lbl !== it.value ? lbl : it.kind === "recent" ? "Recently used" : it.isDefault ? "Default model" : "";
+        if (lblText) {
+          const l = document.createElement("span");
+          l.className = "combo__itemLabel";
+          l.textContent = lblText;
+          main.appendChild(l);
+        }
+
+        row.appendChild(main);
+
+        if (it.isDefault) {
+          const b = document.createElement("span");
+          b.className = "combo__badge combo__badge--default";
+          b.textContent = "default";
+          row.appendChild(b);
+        } else if (it.kind === "recent") {
+          const b = document.createElement("span");
+          b.className = "combo__badge combo__badge--recent";
+          b.textContent = "recent";
+          row.appendChild(b);
+        }
+
+        frag.appendChild(row);
+      }
+    }
+
+    if (visibleValues.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "combo__empty";
+      empty.textContent = q ? "No matches." : "No models detected.";
+      frag.appendChild(empty);
+      activeValue = "";
+    } else {
+      const current = String(inputEl.value || "").trim();
+      if (current && visibleValues.includes(current)) {
+        activeValue = current;
+      } else if (!activeValue || !visibleValues.includes(activeValue)) {
+        activeValue = visibleValues[0];
+      }
+    }
+
+    menu.textContent = "";
+    menu.appendChild(frag);
+    applyActive();
+    ensureMenuPosition();
+  }
+
+  function openMenu() {
+    if (!enabled || open) return;
+    open = true;
+    wrap.classList.add("combo--open");
+    menu.hidden = false;
+    inputEl.setAttribute("aria-expanded", "true");
+    renderMenu();
+    wireDocListeners();
+  }
+
+  function closeMenu() {
+    if (!open) return;
+    open = false;
+    wrap.classList.remove("combo--open");
+    menu.hidden = true;
+    inputEl.setAttribute("aria-expanded", "false");
+    unwireDocListeners();
+  }
+
+  function toggleMenu() {
+    if (open) closeMenu();
+    else openMenu();
+  }
+
+  function selectValue(value) {
+    const v = String(value || "").trim();
+    if (!v) return;
+    inputEl.value = v;
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+    inputEl.dispatchEvent(new Event("change", { bubbles: true }));
+    closeMenu();
+    try {
+      const alreadyFocused = document.activeElement === inputEl;
+      if (!alreadyFocused) suppressFocusOpen = true;
+      inputEl.focus();
+      inputEl.setSelectionRange(v.length, v.length);
+    } catch {
+      // ignore
+    }
+  }
+
+  const onDocPointerDown = (e) => {
+    if (!open) return;
+    const t = e && e.target ? e.target : null;
+    if (t && (t === wrap || wrap.contains(t))) return;
+    closeMenu();
+  };
+
+  const onDocKeyDown = (e) => {
+    if (!open) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeMenu();
+    }
+  };
+
+  function wireDocListeners() {
+    if (docWired) return;
+    docWired = true;
+    document.addEventListener("pointerdown", onDocPointerDown, true);
+    document.addEventListener("keydown", onDocKeyDown, true);
+  }
+
+  function unwireDocListeners() {
+    if (!docWired) return;
+    docWired = false;
+    document.removeEventListener("pointerdown", onDocPointerDown, true);
+    document.removeEventListener("keydown", onDocKeyDown, true);
+  }
+
+  inputEl.addEventListener("focus", () => {
+    if (!enabled) return;
+    if (suppressFocusOpen) {
+      suppressFocusOpen = false;
+      return;
+    }
+    openMenu();
+  });
+  inputEl.addEventListener("input", () => {
+    if (!enabled) return;
+    openMenu();
+    renderMenu();
+  });
+  inputEl.addEventListener("keydown", (e) => {
+    if (!enabled) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      openMenu();
+      if (visibleValues.length === 0) return;
+      const idx = Math.max(0, visibleValues.indexOf(activeValue));
+      activeValue = visibleValues[Math.min(visibleValues.length - 1, idx + 1)];
+      applyActive();
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      openMenu();
+      if (visibleValues.length === 0) return;
+      const idx = Math.max(0, visibleValues.indexOf(activeValue));
+      activeValue = visibleValues[Math.max(0, idx - 1)];
+      applyActive();
+      return;
+    }
+
+    if (e.key === "Enter" && open && activeValue) {
+      e.preventDefault();
+      selectValue(activeValue);
+      return;
+    }
+
+    if (e.key === "Escape" && open) {
+      e.preventDefault();
+      closeMenu();
+    }
+  });
+
+  btn.addEventListener("pointerdown", (e) => {
+    // Keep focus in the input so the menu doesn't immediately re-open on focus changes.
+    e.preventDefault();
+  });
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!enabled) return;
+    toggleMenu();
+    try {
+      inputEl.focus();
+    } catch {
+      // ignore
+    }
+  });
+
+  menu.addEventListener("click", (e) => {
+    const row = e.target && e.target.closest ? e.target.closest(".combo__item[data-value]") : null;
+    if (!row) return;
+    const v = row.getAttribute("data-value") || "";
+    selectValue(v);
+  });
+
+  wrap.addEventListener("focusout", (e) => {
+    if (!open) return;
+    const next = e && "relatedTarget" in e ? e.relatedTarget : null;
+    if (next && wrap.contains(next)) return;
+    // Delay slightly so a click on a menu item (inside the wrap) can win.
+    window.setTimeout(() => {
+      if (open) closeMenu();
+    }, 0);
+  });
+
+  function setEnabled(v) {
+    enabled = !!v;
+    wrap.classList.toggle("combo--disabled", !enabled);
+    btn.hidden = !enabled;
+    btn.disabled = !enabled;
+    if (!enabled) closeMenu();
+  }
+
+  function refresh() {
+    if (!open) return;
+    renderMenu();
+  }
+
+  const apiObj = { setEnabled, refresh };
+  inputEl.__agentHeavenComboAttached = apiObj;
+  setEnabled(true);
+  return apiObj;
 }
 
 function renderSettingsUiModelCodexGroup() {
@@ -5097,10 +5537,9 @@ function renderSettingsUiModelCodexGroup() {
 
 function renderCodexModelsDatalist() {
   const dl = els.codexModelsList;
-  if (!dl) return;
 
   const seen = new Set();
-  dl.textContent = "";
+  if (dl) dl.textContent = "";
 
   const codexArr = Array.isArray(codexModelsCache) ? codexModelsCache : [];
   const models = codexArr
@@ -5120,25 +5559,33 @@ function renderCodexModelsDatalist() {
   for (const m of models) {
     if (!m.model || seen.has(m.model)) continue;
     seen.add(m.model);
-    const opt = document.createElement("option");
-    opt.value = m.model;
-    opt.label = m.isDefault ? `${m.displayName || m.model} (default)` : m.displayName || m.model;
-    dl.appendChild(opt);
+    if (dl) {
+      const opt = document.createElement("option");
+      opt.value = m.model;
+      opt.label = m.isDefault ? `${m.displayName || m.model} (default)` : m.displayName || m.model;
+      dl.appendChild(opt);
+    }
   }
 
-  const hist = historyModelStrings()
+  const hist = historyModelStrings("codex")
     .filter((v) => !seen.has(v))
     .sort((a, b) => a.localeCompare(b));
   for (const v of hist) {
     if (!v || seen.has(v)) continue;
     seen.add(v);
-    const opt = document.createElement("option");
-    opt.value = v;
-    opt.label = `${v} (recent)`;
-    dl.appendChild(opt);
+    if (dl) {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.label = `${v} (recent)`;
+      dl.appendChild(opt);
+    }
   }
 
   renderSettingsUiModelCodexGroup();
+
+  // Keep custom combobox menus in sync (if open).
+  if (codexModelComboboxComposer) codexModelComboboxComposer.refresh();
+  if (codexModelComboboxSettings) codexModelComboboxSettings.refresh();
 }
 
 async function refreshCodexModelsDatalist({ showErrors = false } = {}) {

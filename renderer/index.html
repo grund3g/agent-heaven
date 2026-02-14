@@ -54,7 +54,7 @@
 		              <option value="codex">Codex</option>
 		              <option value="claude">Claude</option>
 		            </select>
-		            <input id="modelInput" class="input" placeholder="Model override (optional)" list="codexModelsList" />
+			            <input id="modelInput" class="input" placeholder="Model override (optional)" />
 		            <button id="runBtn" class="btn btn--primary">Run</button>
 		          </div>
           <div id="promptDropwrap" class="dropwrap">
@@ -250,12 +250,11 @@
 	            </label>
 		            <label class="field">
 		              <div class="field__label">Default model</div>
-		              <input
-		                id="settingsCodexModel"
-		                class="input"
-		                placeholder="e.g. gpt-5.3-codex, ..."
-		                list="codexModelsList"
-		              />
+			              <input
+			                id="settingsCodexModel"
+			                class="input"
+			                placeholder="e.g. gpt-5.3-codex, ..."
+			              />
 		            </label>
 	            <label class="field">
 	              <div class="field__label">Sandbox mode</div>

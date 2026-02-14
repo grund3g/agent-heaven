@@ -427,9 +427,9 @@ body::before {
   position: absolute;
   top: 10px;
   right: 10px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-2px);
+  opacity: 0.45;
+  pointer-events: auto;
+  transform: translateY(0);
   transition:
     opacity 180ms ease,
     transform 180ms ease;
@@ -437,8 +437,6 @@ body::before {
 
 .brand:hover .brand__cycle {
   opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
 }
 
 .brand__name {
@@ -935,7 +933,10 @@ body::before {
 
 .card__subtext {
   min-width: 0;
-  overflow-wrap: anywhere;
+  /* Keep project + model on one line; truncate with ellipsis instead of wrapping mid-token (e.g. gpt-5.3-codex). */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projdot {
@@ -1147,6 +1148,171 @@ body::before {
   background-repeat: no-repeat;
   background-position: right 16px center;
   background-size: 14px 14px;
+}
+
+.combo {
+  position: relative;
+  width: 100%;
+}
+
+.combo__input {
+  padding-right: 42px; /* room for the dropdown button */
+}
+
+.combo--disabled .combo__input {
+  padding-right: 12px;
+}
+
+.combo__btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 40px;
+  border: 1px solid transparent;
+  border-left-color: var(--stroke-faint);
+  background: transparent;
+  border-radius: 0 12px 12px 0;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: var(--muted2);
+}
+
+.combo__btn:hover {
+  background: var(--hover-bg);
+  color: var(--ink);
+}
+
+.combo__btn:focus-visible {
+  outline: 2px solid rgba(var(--accent2-rgb), 0.35);
+  outline-offset: 2px;
+}
+
+.combo__chev {
+  width: 14px;
+  height: 14px;
+  display: block;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px 14px;
+  transition: transform 120ms ease;
+}
+
+.combo--open .combo__chev {
+  transform: rotate(180deg);
+}
+
+.combo--open .combo__input {
+  border-color: rgba(var(--accent2-rgb), 0.45);
+  box-shadow: 0 0 0 2px rgba(var(--accent2-rgb), 0.16);
+}
+
+.combo__menu {
+  position: absolute;
+  z-index: 10001;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--dialog-border);
+  background: var(--dialog-bg);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.combo__group {
+  padding: 6px 10px 4px 10px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  user-select: none;
+}
+
+.combo__item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.combo__item:hover {
+  background: var(--hover-bg);
+  border-color: var(--stroke-faint);
+}
+
+.combo__item--active {
+  background: rgba(var(--accent2-rgb), 0.14);
+  border-color: rgba(var(--accent2-rgb), 0.35);
+}
+
+.combo__itemMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.combo__itemValue {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-code);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo__itemLabel {
+  font-size: 12px;
+  color: var(--muted2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo__badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke2);
+  background: var(--surface5);
+  color: var(--ink-mono);
+  font-family: var(--mono);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.combo__badge--default {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: rgba(var(--accent-rgb), 0.95);
+}
+
+.combo__badge--recent {
+  border-color: rgba(var(--accent2-rgb), 0.45);
+  background: rgba(var(--accent2-rgb), 0.12);
+  color: rgba(var(--accent2-rgb), 0.95);
+}
+
+.combo__empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--muted2);
 }
 
 .textarea {
