@@ -68,14 +68,10 @@
     }
     .nav-mark {
       width: 38px; height: 38px;
-      border-radius: 12px;
       display: grid; place-items: center;
-      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.22), rgba(var(--accent2-rgb),0.18));
-      border: 1px solid rgba(var(--accent2-rgb),0.28);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     }
-    .nav-mark svg { width: 22px; height: 22px; }
-    .nav-name { font-family: var(--serif); font-weight: 800; font-size: 18px; }
+    .nav-mark svg { width: 24px; height: 24px; opacity: 0.85; }
+    .nav-name { font-family: "Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif; font-weight: 700; font-size: 18px; }
     .nav-links { display: flex; gap: 8px; }
     .nav-links a {
       padding: 8px 14px;
@@ -97,7 +93,7 @@
     /* Hero */
     .hero { padding: 80px 0 40px; text-align: center; }
     .hero h1 {
-      font-family: var(--serif);
+      font-family: "Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif;
       font-weight: 800;
       font-size: clamp(36px, 6vw, 64px);
       line-height: 1.08;
@@ -178,23 +174,16 @@
     .mockup-brand {
       display: grid;
       grid-template-columns: 36px 1fr;
-      gap: 10px;
+      gap: 6px;
       align-items: center;
       padding: 10px;
-      border-radius: 12px;
-      border: 1px solid rgba(var(--accent2-rgb),0.18);
-      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(var(--accent2-rgb),0.06));
     }
     .mockup-brand-icon {
       width: 36px; height: 36px;
-      border-radius: 10px;
       display: grid; place-items: center;
-      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(var(--accent2-rgb),0.16));
-      border: 1px solid rgba(var(--accent2-rgb),0.22);
     }
-    .mockup-brand-icon svg { width: 20px; height: 20px; }
-    .mockup-brand-name { font-family: var(--serif); font-weight: 800; font-size: 14px; }
-    .mockup-brand-tag { font-size: 10px; color: var(--muted2); margin-top: 1px; }
+    .mockup-brand-icon svg { width: 22px; height: 22px; opacity: 0.85; }
+    .mockup-brand-name { font-family: "Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif; font-weight: 700; font-size: 14px; }
     .mockup-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -362,7 +351,7 @@
     /* Features */
     .features { padding: 100px 0 80px; }
     .features h2 {
-      font-family: var(--serif);
+      font-family: "Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif;
       font-weight: 800;
       font-size: 32px;
       text-align: center;
@@ -405,7 +394,7 @@
     /* Download */
     .download { padding: 80px 0; text-align: center; }
     .download h2 {
-      font-family: var(--serif);
+      font-family: "Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif;
       font-weight: 800;
       font-size: 32px;
       margin: 0 0 12px;
@@ -475,11 +464,13 @@
   <nav>
     <a href="#" class="nav-brand">
       <div class="nav-mark">
-        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10 24L16 10l6 14" />
-          <path d="M12.8 19h6.4" />
-          <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
-          <circle cx="16" cy="10.2" r="1" fill="currentColor" stroke="none" opacity="0.72" />
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <g stroke-width="2.2">
+            <path d="M10 24L16 10l6 14" />
+            <path d="M12.8 19h6.4" />
+            <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+          </g>
+          <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
         </svg>
       </div>
       <span class="nav-name">Agent Heaven</span>
@@ -497,9 +488,9 @@
     <h1>Run, monitor, and control<br/><span class="gr">parallel agent jobs</span></h1>
 	    <p>Agent Heaven is a local desktop app that spawns AI coding agents as cards on a Kanban board and streams their output in real-time.</p>
     <div class="hero-actions">
-      <a href="#download" class="btn btn--primary">
+      <a href="https://github.com/grund3g/agent-heaven/releases/latest" class="btn btn--primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download
+        Download for macOS
       </a>
       <a href="https://github.com/grund3g/agent-heaven" class="btn">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -518,15 +509,17 @@
         <div class="mockup-sidebar">
           <div class="mockup-brand">
             <div class="mockup-brand-icon">
-              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10 24L16 10l6 14" /><path d="M12.8 19h6.4" />
-                <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
-                <circle cx="16" cy="10.2" r="1" fill="currentColor" stroke="none" opacity="0.72" />
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <g stroke-width="2.2">
+                  <path d="M10 24L16 10l6 14" />
+                  <path d="M12.8 19h6.4" />
+                  <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+                </g>
+                <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
               </svg>
             </div>
             <div>
               <div class="mockup-brand-name">Agent Heaven</div>
-              <div class="mockup-brand-tag">Run, monitor, and control parallel agent jobs</div>
             </div>
           </div>
           <div class="mockup-label">Projects</div>
@@ -688,7 +681,7 @@
 
 <footer>
   <div class="wrap">
-    <p>Agent Heaven &middot; Built by <a href="https://github.com/simonschnabl">Simon Schnabl</a> &middot; <a href="https://github.com/grund3g/agent-heaven">Source on GitHub</a></p>
+    <p>Agent Heaven &middot; Built by <a href="https://simonschnabl.com">Simon Schnabl</a> &middot; <a href="https://github.com/grund3g/agent-heaven">Source on GitHub</a></p>
   </div>
 </footer>
 
