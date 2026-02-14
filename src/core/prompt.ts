@@ -83,25 +83,57 @@ function looksLikeLowSignalIntro(s: string): boolean {
   return false;
 }
 
+function looksLikeLowSignalOutro(s: string): boolean {
+  const t = oneLine(s).toLowerCase();
+  if (!t) return false;
+
+  // Generic questions / sign-offs that add little to a title.
+  if (/^(any(\s+(other|more))?\s+ideas|any\s+ideas|any\s+thoughts|anything\s+else|what\s+else|what\s+can\s+we\s+do)\b/.test(t))
+    return true;
+  if (/^(was\s+kann\s+man|was\s+k\u00f6nnte\s+man|was\s+meinst\s+du|irgendwelche\s+ideen)\b/.test(t)) return true;
+  if (/^(danke|thanks|thx)\b/.test(t)) return true;
+  return false;
+}
+
 function stripLowSignalLeadIn(s: string): string {
   let t = String(s || "");
-  t = t.replace(/^(title|titel|summary|zusammenfassung)\s*[:\-]\s*/i, "");
 
-  // Drop common "polite" / "question" prefixes in EN/DE.
-  t = t.replace(/^(please|pls|plz|bitte)\b[\s,:-]*/i, "");
-  t = t.replace(/^(can|could|would|will|may)\s+you\b[\s,:-]*/i, "");
-  t = t.replace(/^(can|could)\s+we\b[\s,:-]*/i, "");
-  t = t.replace(/^(kannst|k\u00f6nntest|k\u00f6nnen)\s+(du|ihr|wir)\b[\s,:-]*/i, "");
-  t = t.replace(/^(kann\s+man)\b[\s,:-]*/i, "");
-  t = t.replace(/^(das\s+bitte)\b[\s,:-]*/i, "");
+  // Strip multiple stacked prefixes (e.g. "Kannst du bitte …").
+  for (let i = 0; i < 4; i += 1) {
+    const prev = t;
 
-  // Drop low-signal intros that frequently precede the actual problem statement.
-  t = t.replace(/^(i\s+)?(have\s+)?(now\s+|just\s+)?(tried|attempted|tested)\b[\s,:-]*/i, "");
-  t = t.replace(/^(ich\s+)?hab(e)?\s+(jetzt\s+)?(mal\s+)?(versucht|probiert|getestet|gecheckt|gepr\u00fcft)\b[\s,:-]*/i, "");
+    t = t.replace(/^(title|titel|summary|zusammenfassung)\s*[:\-]\s*/i, "");
 
-  // Drop hedge words that rarely help as a title.
-  t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\b[\s,:-]*/i, "");
+    // Drop common "polite" / "question" prefixes in EN/DE.
+    t = t.replace(/^(and|und|also|so|ok|okay)\b[\s,:-]*/i, "");
+    t = t.replace(/^(hi|hey|hello|hallo)\b[\s,:-]*/i, "");
+    t = t.replace(/^(please|pls|plz|bitte)\b[\s,:-]*/i, "");
+    t = t.replace(/^(can|could|would|will|may)\s+you\b[\s,:-]*/i, "");
+    t = t.replace(/^(can|could)\s+we\b[\s,:-]*/i, "");
+    t = t.replace(/^(kannst|k\u00f6nntest|k\u00f6nnen)\s+(du|ihr|wir)\b[\s,:-]*/i, "");
+    t = t.replace(/^(kann\s+man)\b[\s,:-]*/i, "");
+    t = t.replace(/^(das\s+bitte)\b[\s,:-]*/i, "");
+
+    // Drop low-signal intros that frequently precede the actual problem statement.
+    t = t.replace(/^(i\s+)?(have\s+)?(now\s+|just\s+)?(tried|attempted|tested)\b[\s,:-]*/i, "");
+    t = t.replace(/^(ich\s+)?hab(e)?\s+(jetzt\s+)?(mal\s+)?(versucht|probiert|getestet|gecheckt|gepr\u00fcft)\b[\s,:-]*/i, "");
+
+    // Drop hedge words that rarely help as a title.
+    t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\b[\s,:-]*/i, "");
+
+    if (t === prev) break;
+  }
+
   return t;
+}
+
+function stripLowSignalFillerWords(s: string): string {
+  let t = String(s || "");
+  // Conversational filler that rarely belongs in a short title.
+  t = t.replace(/\b(pls|plz|please|bitte)\b/gi, "");
+  t = t.replace(/\b(nochmal|noch\s+einmal|again)\b/gi, "");
+  t = t.replace(/\b(find(e)?\s+ich|glaub(e)?\s+ich|i\s+think|i\s+feel)\b/gi, "");
+  return oneLine(t);
 }
 
 function compactTitleFromPromptSummary(summary: string): string {
@@ -116,6 +148,18 @@ function compactTitleFromPromptSummary(summary: string): string {
 
   // Fallback: keep it readable, but drop obvious filler.
   let t = stripLowSignalLeadIn(s);
+  t = stripLowSignalFillerWords(t);
+
+  // If we ended up with multiple sentences, drop generic outro questions/sign-offs.
+  const sentences = t
+    .split(/[.!?]\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (sentences.length > 1) {
+    const kept = sentences.filter((x) => x.length >= 8 && !looksLikeLowSignalOutro(x));
+    if (kept.length > 0) t = kept[0];
+    else if (sentences[0]) t = sentences[0];
+  }
 
   // Common complaints often add a second clause after a comma.
   const commaIdx = t.indexOf(",");
@@ -236,9 +280,12 @@ export function guessTitleFromPrompt(prompt: unknown): string {
 }
 
 export function jobDisplayTitle(job: unknown): string {
-  const JOB_TITLE_MAX_LEN = 80;
+  const JOB_TITLE_MAX_LEN = 120;
 
   const j = job && typeof job === "object" ? (job as any) : {};
+  const llmTitle = typeof j.titleLlm === "string" ? oneLine(j.titleLlm) : "";
+  if (llmTitle && !isBoilerplatePromptLine(llmTitle)) return truncateText(llmTitle, JOB_TITLE_MAX_LEN);
+
   const prompts = Array.isArray(j.prompts) ? j.prompts : [];
 
   // Prefer a stable "job identity" based on the earliest meaningful user prompt.

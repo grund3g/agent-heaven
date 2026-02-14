@@ -76,7 +76,11 @@ function deepMerge(a, b) {
   const right = isPlainObject(b) ? b : {};
   const out = { ...left };
   for (const [k, v] of Object.entries(right)) {
-    if (isPlainObject(v) && isPlainObject(out[k])) out[k] = deepMerge(out[k], v);
+    // Prevent prototype pollution via __proto__/constructor/prototype.
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+
+    const existing = Object.prototype.hasOwnProperty.call(out, k) ? out[k] : undefined;
+    if (isPlainObject(v) && isPlainObject(existing)) out[k] = deepMerge(existing, v);
     else out[k] = v;
   }
   return out;
@@ -351,8 +355,14 @@ function ensureGlobalHotkeySettings(settings) {
 }
 
 function ensureSettings(settings) {
-  let next = settings;
-  let changed = false;
+  let next = isPlainObject(settings) ? { ...settings } : {};
+  let changed = !isPlainObject(settings);
+
+  // renderer-v2 was an experiment; drop the selector to keep settings stable.
+  if (Object.prototype.hasOwnProperty.call(next, "uiRenderer")) {
+    delete next.uiRenderer;
+    changed = true;
+  }
 
   const agentRes = ensureAgentSettings(next);
   next = agentRes.settings;
@@ -419,7 +429,7 @@ export class Store {
   }
 
   updateSettings(patch) {
-    const p = patch && typeof patch === "object" ? patch : {};
+    const p = isPlainObject(patch) ? patch : {};
     const merged = deepMerge(this.state.settings, p);
     this.state.settings = ensureSettings(merged).settings;
     this.save();

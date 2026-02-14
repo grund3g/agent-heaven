@@ -1,7 +1,8 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
-import { guessTitleFromPrompt, promptSummary } from "../core/prompt";
+import { guessTitleFromPrompt, isBoilerplatePromptLine, promptSummary } from "../core/prompt";
+import { oneLine, truncateText } from "../core/text";
 import { addUsageTotals } from "../core/usage";
 import { newId } from "../core/id";
 import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job } from "../core/jobs";
@@ -31,6 +32,7 @@ export class JobsManager {
 
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
+  private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -84,6 +86,15 @@ export class JobsManager {
 
   shutdown() {
     this.flushPersist();
+    // Best-effort cleanup; title summaries are non-critical.
+    for (const child of this.titleLlmProcs.values()) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+    this.titleLlmProcs.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -175,6 +186,252 @@ export class JobsManager {
       .toLowerCase();
     if (s === "claude" || s === "anthropic") return "claude";
     return "codex";
+  }
+
+  private pickTitleSummarizer(settings: any, fallback: { agent: "codex" | "claude"; model: string }) {
+    const s = settings && typeof settings === "object" ? settings : {};
+    const uiModel = typeof (s as any).uiModel === "string" ? String((s as any).uiModel).trim() : "";
+    if (uiModel) {
+      const low = uiModel.toLowerCase();
+      const isClaude = low === "opus" || low === "sonnet" || low === "haiku";
+      return { agent: isClaude ? ("claude" as const) : ("codex" as const), model: uiModel };
+    }
+    return { agent: fallback.agent, model: fallback.model };
+  }
+
+  private buildTitleSummarizerPrompt(userPrompt: string): string {
+    const summary = promptSummary(userPrompt) || String(userPrompt || "").trim();
+    const clipped = summary.length > 1200 ? summary.slice(0, 1200).trimEnd() : summary;
+
+    return [
+      "Create a concise job card title summarizing the user's request.",
+      "",
+      "Rules:",
+      "- Output ONLY the title text (no quotes, no markdown, no extra lines).",
+      "- Max 120 characters.",
+      "- Keep the same language as the user's request.",
+      "- Prefer 'Verb + object' phrasing (e.g., 'Fix X', 'Add Y', 'Investigate Z').",
+      "",
+      "User request:",
+      clipped
+    ].join("\n");
+  }
+
+  private cleanTitleFromLlm(raw: string): string {
+    let t = String(raw || "").trim();
+    if (!t) return "";
+
+    // Keep the first non-empty line (models sometimes add a second line).
+    const firstLine = t
+      .split("\n")
+      .map((x) => x.trim())
+      .find((x) => x);
+    t = firstLine ? firstLine : t;
+
+    t = t.replace(/^```[a-zA-Z0-9_-]*\s*/i, "").replace(/```$/i, "").trim();
+    t = t.replace(/^(title|titel)\s*[:\\-]\s*/i, "");
+    t = t.replace(/^["'`]+/, "").replace(/["'`]+$/, "");
+    t = oneLine(t);
+    t = t.replace(/[.!?]+$/, "");
+    t = t.trim();
+
+    if (!t) return "";
+    if (isBoilerplatePromptLine(t)) return "";
+
+    // Hard cap (display uses a 3-line clamp; keep tooltip/search reasonable).
+    return truncateText(t, 120);
+  }
+
+  private runCodexTitleSummary(opts: {
+    jobId: string;
+    codexPath: string;
+    settings: any;
+    projectPath: string;
+    model: string;
+    prompt: string;
+  }): Promise<string> {
+    const { jobId, codexPath, settings, projectPath, model, prompt } = opts;
+    return new Promise((resolve) => {
+      let out = "";
+      let resolved = false;
+
+      const child = this.runCodexExec({
+        codexPath,
+        settings,
+        projectPath,
+        model,
+        prompt,
+        images: [],
+        onEvent: (ev: any) => {
+          if (!ev || ev.kind !== "codex") return;
+          const data = ev.data || {};
+          if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+            const text = typeof data.item.text === "string" ? data.item.text : "";
+            if (text) out += (out ? "\n" : "") + text;
+          }
+        }
+      });
+
+      this.titleLlmProcs.set(jobId, child);
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.titleLlmProcs.delete(jobId);
+        resolve(out);
+      }, 20_000);
+
+      child.once("error", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.titleLlmProcs.delete(jobId);
+        resolve(out);
+      });
+      child.once("close", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.titleLlmProcs.delete(jobId);
+        resolve(out);
+      });
+    });
+  }
+
+  private runClaudeTitleSummary(opts: {
+    jobId: string;
+    claudePath: string;
+    settings: any;
+    projectPath: string;
+    model: string;
+    prompt: string;
+  }): Promise<string> {
+    const { jobId, claudePath, settings, projectPath, model, prompt } = opts;
+    return new Promise((resolve) => {
+      if (!this.runClaudeExec) return resolve("");
+
+      let out = "";
+      let resolved = false;
+
+      const child = this.runClaudeExec({
+        claudePath,
+        settings,
+        projectPath,
+        model,
+        sessionId: randomUUID(),
+        prompt,
+        onEvent: (ev: any) => {
+          if (!ev || ev.kind !== "claude") return;
+          const data = ev.data || {};
+          if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+            const text = this.claudeMessageToText(data.message);
+            if (text) out += (out ? "\n" : "") + text;
+          }
+        }
+      });
+
+      this.titleLlmProcs.set(jobId, child);
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.titleLlmProcs.delete(jobId);
+        resolve(out);
+      }, 20_000);
+
+      child.once("error", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.titleLlmProcs.delete(jobId);
+        resolve(out);
+      });
+      child.once("close", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.titleLlmProcs.delete(jobId);
+        resolve(out);
+      });
+    });
+  }
+
+  private kickoffTitleSummary(jobId: string, userPrompt: string, opts: any) {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+    if (job.titleLlm && String(job.titleLlm).trim()) return;
+    if (this.titleLlmProcs.has(jobId)) return;
+
+    const settings = opts && typeof opts === "object" ? opts.settings : this.store.getSettings();
+    const codexSettings = opts && typeof opts === "object" ? opts.codexSettings : this.getCodexSettingsFrom(settings);
+    const claudeSettings = opts && typeof opts === "object" ? opts.claudeSettings : this.getClaudeSettingsFrom(settings);
+
+    const fallbackAgent = this.normalizeAgentKey(job.agent);
+    const fallbackModel = String(job.model || "").trim();
+    const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
+
+    const prompt = this.buildTitleSummarizerPrompt(userPrompt);
+
+    void (async () => {
+      try {
+        let raw = "";
+        if (picked.agent === "claude") {
+          if (!this.runClaudeExec) return;
+          const claudePath = this.getClaudePath();
+          // Safer for summaries: don't allow edits/tools.
+          const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
+          raw = await this.runClaudeTitleSummary({
+            jobId,
+            claudePath,
+            settings: safeClaudeSettings,
+            projectPath: job.projectPath || process.cwd(),
+            model: picked.model,
+            prompt
+          });
+        } else {
+          const codexPath = this.getCodexPath();
+          const safeCodexSettings = {
+            ...(codexSettings || {}),
+            sandboxMode: "read-only",
+            bypassApprovalsAndSandbox: false,
+            skipGitRepoCheck: true
+          };
+          raw = await this.runCodexTitleSummary({
+            jobId,
+            codexPath,
+            settings: safeCodexSettings,
+            projectPath: job.projectPath || process.cwd(),
+            model: picked.model,
+            prompt
+          });
+        }
+
+        const title = this.cleanTitleFromLlm(raw);
+        if (!title) return;
+
+        const live = this.jobs.get(jobId);
+        if (!live) return;
+        if (live.titleLlm && String(live.titleLlm).trim()) return;
+
+        live.titleLlm = title;
+        // Also patch `title` for list views; renderer can prefer titleLlm when present.
+        this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title, title } });
+        this.markJobDirty(jobId);
+        this.tryPersistJobNow(live);
+      } catch {
+        // ignore
+      }
+    })();
   }
 
   private appendLog(job: Job, entry: any) {
@@ -505,6 +762,7 @@ export class JobsManager {
 
     const prompt = (params && params.prompt ? String(params.prompt) : "").trim();
     if (!prompt) return { ok: false, error: "Prompt is empty" };
+    if (prompt.length > 200_000) return { ok: false, error: "Prompt is too large" };
 
     const projectId = params && params.projectId ? String(params.projectId) : "";
     if (projects.length === 0) return { ok: false, error: "No projects configured. Add one in sidebar." };
@@ -522,7 +780,8 @@ export class JobsManager {
       if (!project) return { ok: false, error: "Selected project not found. Refresh projects list." };
     }
 
-    const images = normalizeImagePaths(params && params.images ? params.images : [], project.path);
+    let images = normalizeImagePaths(params && params.images ? params.images : [], project.path);
+    if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
 
@@ -542,6 +801,7 @@ export class JobsManager {
     const job: Job = {
       id: jobId,
       title: guessTitleFromPrompt(prompt),
+      titleLlm: "",
       status: "running",
       box: "board",
       archivedAt: "",
@@ -573,6 +833,9 @@ export class JobsManager {
     } catch {
       // ignore
     }
+
+    // Title summaries are best-effort and should not block job start.
+    this.kickoffTitleSummary(jobId, prompt, { settings, codexSettings, claudeSettings });
 
     let child: ChildProcess;
     try {
@@ -642,8 +905,10 @@ export class JobsManager {
 
     const text = String(params && params.prompt ? params.prompt : "").trim();
     if (!text) return { ok: false, error: "Prompt is empty" };
+    if (text.length > 200_000) return { ok: false, error: "Prompt is too large" };
 
-    const images = normalizeImagePaths((params && (params as any).images) || [], job.projectPath);
+    let images = normalizeImagePaths((params && (params as any).images) || [], job.projectPath);
+    if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
 
@@ -654,6 +919,10 @@ export class JobsManager {
     const queuedAt = new Date().toISOString();
     job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
     job.queuedPrompts.push({ ts: queuedAt, text, images });
+    const MAX_QUEUED = 50;
+    if (job.queuedPrompts.length > MAX_QUEUED) {
+      job.queuedPrompts.splice(0, job.queuedPrompts.length - MAX_QUEUED);
+    }
     this.updateQueuedMeta(job);
     this.tryPersistJobNow(job);
 

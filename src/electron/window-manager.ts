@@ -34,6 +34,11 @@ export class WindowManager {
     return process.platform === "darwin" && !!(settings && settings.menuBarMode);
   }
 
+  private rendererDir(): string {
+    // renderer-v2 was an experimental UI. Keep the app stable by always loading v1.
+    return path.join(__dirname, "..", "..", "renderer");
+  }
+
   liveWindows(): BrowserWindow[] {
     return BrowserWindow.getAllWindows().filter((w) => w && !w.isDestroyed());
   }
@@ -145,7 +150,10 @@ export class WindowManager {
         preload: path.join(__dirname, "..", "preload.js"),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false,
+        sandbox: true,
+        webSecurity: true,
+        webviewTag: false,
+        allowRunningInsecureContent: false,
         autoplayPolicy: "no-user-gesture-required"
       }
     };
@@ -160,7 +168,7 @@ export class WindowManager {
 
     const win = new BrowserWindow(opts);
     win.__agentHeavenRole = "board";
-    win.loadFile(path.join(__dirname, "..", "..", "renderer", "index.html"));
+    win.loadFile(path.join(this.rendererDir(), "index.html"));
 
     // Keep a reasonable default parent window for dialogs, etc.
     win.on("focus", () => {
@@ -185,7 +193,10 @@ export class WindowManager {
         preload: path.join(__dirname, "..", "preload.js"),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false,
+        sandbox: true,
+        webSecurity: true,
+        webviewTag: false,
+        allowRunningInsecureContent: false,
         autoplayPolicy: "no-user-gesture-required"
       }
     };
@@ -201,7 +212,7 @@ export class WindowManager {
     const win = new BrowserWindow(opts);
     win.__agentHeavenRole = "lane";
     win.__agentHeavenLane = lane;
-    win.loadFile(path.join(__dirname, "..", "..", "renderer", "index.html"), { query: { mode: "lane", lane } });
+    win.loadFile(path.join(this.rendererDir(), "index.html"), { query: { mode: "lane", lane } });
 
     return win;
   }
@@ -221,7 +232,10 @@ export class WindowManager {
         preload: path.join(__dirname, "..", "preload.js"),
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false,
+        sandbox: true,
+        webSecurity: true,
+        webviewTag: false,
+        allowRunningInsecureContent: false,
         autoplayPolicy: "no-user-gesture-required"
       }
     };
@@ -237,7 +251,7 @@ export class WindowManager {
     const win = new BrowserWindow(opts);
     win.__agentHeavenRole = "job";
     win.__agentHeavenJobId = id;
-    win.loadFile(path.join(__dirname, "..", "..", "renderer", "index.html"), { query: { mode: "job", jobId: id } });
+    win.loadFile(path.join(this.rendererDir(), "index.html"), { query: { mode: "job", jobId: id } });
 
     return win;
   }
@@ -485,4 +499,3 @@ export class WindowManager {
     return { ok: true };
   }
 }
-

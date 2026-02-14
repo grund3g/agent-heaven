@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     const res = await invokeOk("agents:checkBinaries");
     return res;
   },
+  agentsInstall: async (payload) => {
+    const res = await invokeOk("agents:install", payload);
+    return res;
+  },
 
   codexListModels: async () => {
     const res = await invokeOk("codex:listModels");
@@ -91,6 +95,23 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     return true;
   },
 
+  termEnsure: async (jobId, cols, rows) => {
+    const res = await invokeOk("term:ensure", { jobId, cols, rows });
+    return { buffer: typeof res.buffer === "string" ? res.buffer : "", seq: typeof res.seq === "number" ? res.seq : 0 };
+  },
+  termWrite: async (jobId, data) => {
+    await invokeOk("term:write", { jobId, data });
+    return true;
+  },
+  termResize: async (jobId, cols, rows) => {
+    await invokeOk("term:resize", { jobId, cols, rows });
+    return true;
+  },
+  termDetach: async (jobId) => {
+    await invokeOk("term:detach", { jobId });
+    return true;
+  },
+
   onJobEvent: (handler) => {
     const listener = (_evt, payload) => handler(payload);
     ipcRenderer.on("job:event", listener);
@@ -113,5 +134,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     const listener = (_evt, payload) => handler(payload);
     ipcRenderer.on("ui:quickPrompt", listener);
     return () => ipcRenderer.removeListener("ui:quickPrompt", listener);
+  },
+
+  onTermEvent: (handler) => {
+    const listener = (_evt, payload) => handler(payload);
+    ipcRenderer.on("term:event", listener);
+    return () => ipcRenderer.removeListener("term:event", listener);
   }
 });

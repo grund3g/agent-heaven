@@ -47,10 +47,29 @@ describe("core/prompt", () => {
     expect(guessTitleFromPrompt("I just tried, the card title is useless")).toBe("the card title is useless");
   });
 
+  it("strips stacked prefixes (e.g. 'Kannst du bitte …')", () => {
+    expect(guessTitleFromPrompt("Kannst du bitte Fix store migration bug")).toBe("Fix store migration bug");
+  });
+
+  it("drops generic outro questions/sign-offs", () => {
+    expect(guessTitleFromPrompt("Fix store migration bug. Any ideas?")).toBe("Fix store migration bug");
+    expect(guessTitleFromPrompt("Fix store migration bug. Thanks!")).toBe("Fix store migration bug");
+    expect(guessTitleFromPrompt("Fix store migration bug. Was könnte man da noch machen?")).toBe("Fix store migration bug");
+  });
+
   it("derives display titles from earliest meaningful prompt", () => {
     const job = {
       title: "Fallback title",
       prompts: [{ ts: "t1", text: "AGENTS.md instructions" }, { ts: "t2", text: "Fix store migration bug" }]
+    };
+    expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
+  });
+
+  it("prefers LLM titles when available", () => {
+    const job = {
+      title: "Fallback title",
+      titleLlm: "Fix store migration bug",
+      prompts: [{ ts: "t1", text: "AGENTS.md instructions" }, { ts: "t2", text: "Something else" }]
     };
     expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
   });

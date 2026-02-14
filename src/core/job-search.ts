@@ -29,6 +29,7 @@ function jobHasToken(job: Job, tokenLower: string, includeLogs: boolean): boolea
   if (
     includesToken(job.id, tokenLower) ||
     includesToken(job.title, tokenLower) ||
+    includesToken((job as any).titleLlm, tokenLower) ||
     includesToken(job.status, tokenLower) ||
     includesToken(job.box, tokenLower) ||
     includesToken(job.archiveReason, tokenLower) ||

@@ -14,6 +14,8 @@ export type JobLogEntry =
 export type Job = {
   id: string;
   title: string;
+  // Optional LLM-generated title (preferred for display if present).
+  titleLlm?: string;
   status: JobStatus;
   box: JobBox;
   archivedAt: string;
@@ -49,6 +51,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   const out: any = { ...(job as any), id };
 
   out.title = typeof out.title === "string" ? out.title : "";
+  out.titleLlm = typeof out.titleLlm === "string" ? out.titleLlm : "";
   out.status = typeof out.status === "string" ? out.status : "unknown";
 
   out.box = typeof out.box === "string" ? out.box : "board";
@@ -111,6 +114,7 @@ export function snapshotJob(job: Job): Job {
   const {
     id,
     title,
+    titleLlm,
     status,
     box,
     archivedAt,
@@ -135,6 +139,7 @@ export function snapshotJob(job: Job): Job {
   return {
     id,
     title,
+    titleLlm,
     status,
     box,
     archivedAt,

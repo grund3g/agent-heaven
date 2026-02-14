@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { app, BrowserWindow, ipcMain, dialog, globalShortcut, nativeTheme, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, globalShortcut, nativeTheme, screen, shell, session } from "electron";
 import type { OpenDialogOptions } from "electron";
+import type { WebContents } from "electron";
 import { Store } from "../store";
 import { JobHistory } from "../job-history";
 import { runCodexExec, runCodexResume } from "../codex-runner";
@@ -13,13 +14,146 @@ import { sendDevNotice, sendJobEvent, sendSettingsChanged } from "./broadcast";
 import { startDevLiveReload } from "./dev-live-reload";
 import { HotkeyManager } from "./hotkey-manager";
 import { JobsManager } from "./jobs-manager";
+import { TerminalManager } from "./terminal-manager";
 import { TrayManager } from "./tray-manager";
 import { WindowManager } from "./window-manager";
 import { listCodexModels } from "./codex-models";
 import { checkAgentBinaries, resolveCodexCliPathFromSettings } from "../agent-binaries";
+import { installAgentCli } from "../agent-install";
 
 function isMenuBarMode(settings: any) {
   return process.platform === "darwin" && !!(settings && settings.menuBarMode);
+}
+
+function safeParseUrl(rawUrl: unknown): URL | null {
+  const s = typeof rawUrl === "string" ? rawUrl.trim() : "";
+  if (!s) return null;
+  try {
+    return new URL(s);
+  } catch {
+    return null;
+  }
+}
+
+function isTrustedRendererUrl(rawUrl: unknown): boolean {
+  const u = safeParseUrl(rawUrl);
+  if (!u) return false;
+  if (u.protocol !== "file:") return false;
+  // All app windows load the same renderer entrypoint (with optional query params).
+  return u.pathname.endsWith("/renderer/index.html");
+}
+
+function senderUrlFromIpcEvent(evt: any): string {
+  if (!evt || typeof evt !== "object") return "";
+  try {
+    const sf = (evt as any).senderFrame;
+    if (sf && typeof sf.url === "string") return sf.url;
+  } catch {
+    // ignore
+  }
+  try {
+    const sender = (evt as any).sender;
+    if (sender && typeof sender.getURL === "function") return sender.getURL() || "";
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
+function assertTrustedIpcSender(evt: any) {
+  const url = senderUrlFromIpcEvent(evt);
+  if (isTrustedRendererUrl(url)) return;
+  throw new Error(`Untrusted IPC sender (${url || "unknown"})`);
+}
+
+function maybeOpenExternal(rawUrl: unknown) {
+  const u = safeParseUrl(rawUrl);
+  if (!u) return;
+  if (u.protocol !== "https:" && u.protocol !== "http:") return;
+  try {
+    void shell.openExternal(u.toString()).catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
+function hardenWebContents(contents: WebContents) {
+  if (!contents || contents.isDestroyed()) return;
+  const isTrusted = () => {
+    try {
+      return isTrustedRendererUrl(contents.getURL());
+    } catch {
+      return false;
+    }
+  };
+
+  // Block navigations away from the app UI (defense in depth; renderer also prevents link navigation).
+  try {
+    contents.on("will-navigate", (e: any, url: string) => {
+      if (isTrustedRendererUrl(url)) return;
+      if (!isTrusted()) return; // don't interfere with devtools / other non-app contents
+      try {
+        e.preventDefault();
+      } catch {
+        // ignore
+      }
+      maybeOpenExternal(url);
+    });
+  } catch {
+    // ignore
+  }
+
+  // Also block frame navigations (e.g. if a future UI change introduces iframes).
+  try {
+    // Not all Electron typings include this event across versions; keep runtime behavior.
+    (contents as any).on("will-frame-navigate", (e: any, url: string) => {
+      if (isTrustedRendererUrl(url)) return;
+      if (!isTrusted()) return;
+      try {
+        e.preventDefault();
+      } catch {
+        // ignore
+      }
+      maybeOpenExternal(url);
+    });
+  } catch {
+    // ignore
+  }
+
+  // Block popups / window.open from the app UI.
+  try {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (!isTrusted()) return { action: "allow" as const };
+      maybeOpenExternal(url);
+      return { action: "deny" as const };
+    });
+  } catch {
+    // ignore
+  }
+
+  // Explicitly deny <webview> usage even if a future change enables webviewTag.
+  try {
+    contents.on("will-attach-webview", (e: any) => {
+      if (!isTrusted()) return;
+      try {
+        e.preventDefault();
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function hardenSessionPermissions() {
+  try {
+    // Default-deny permissions. The app doesn't rely on camera/mic/geolocation/notifications/etc.
+    session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
+    session.defaultSession.setPermissionCheckHandler((_wc, _permission) => false);
+  } catch {
+    // ignore
+  }
 }
 
 function setDockVisibility(settings: any) {
@@ -85,6 +219,15 @@ function applyNativeThemeFromSettings(settings: any) {
 export async function startApp(): Promise<void> {
   await app.whenReady();
 
+  app.on("web-contents-created", (_evt, contents) => {
+    try {
+      hardenWebContents(contents);
+    } catch {
+      // ignore
+    }
+  });
+  hardenSessionPermissions();
+
   setDevDockIcon();
 
   const storePath = path.join(app.getPath("userData"), "agent-heaven.store.json");
@@ -116,10 +259,12 @@ export async function startApp(): Promise<void> {
     runClaudeResume,
     needsAttentionHeuristic
   });
+  const terminalManager = new TerminalManager();
 
   app.on("before-quit", () => {
     windowManager.setWillQuit(true);
     jobsManager.shutdown();
+    terminalManager.shutdown();
   });
   app.on("will-quit", () => {
     try {
@@ -160,15 +305,20 @@ export async function startApp(): Promise<void> {
     return resolveCodexCliPathFromSettings(store.getSettings());
   }
 
-  ipcMain.handle("settings:get", async () => store.getSettings());
-  ipcMain.handle("settings:update", async (_evt, patch) => {
+  ipcMain.handle("settings:get", async (evt) => {
+    assertTrustedIpcSender(evt);
+    return store.getSettings();
+  });
+  ipcMain.handle("settings:update", async (evt, patch) => {
+    assertTrustedIpcSender(evt);
     const next = store.updateSettings(patch || {});
     applyRuntimeSettings(next);
     sendSettingsChanged(next);
     return next;
   });
 
-  ipcMain.handle("shell:openExternal", async (_evt, rawUrl) => {
+  ipcMain.handle("shell:openExternal", async (evt, rawUrl) => {
+    assertTrustedIpcSender(evt);
     const s = String(rawUrl || "").trim();
     if (!s) return { ok: false, error: "Missing url" };
 
@@ -189,7 +339,8 @@ export async function startApp(): Promise<void> {
     }
   });
 
-  ipcMain.handle("agents:checkBinaries", async () => {
+  ipcMain.handle("agents:checkBinaries", async (evt) => {
+    assertTrustedIpcSender(evt);
     try {
       const res = await checkAgentBinaries(store.getSettings(), { timeoutMs: 2500 });
       return { ok: true, ...res };
@@ -198,7 +349,19 @@ export async function startApp(): Promise<void> {
     }
   });
 
-  ipcMain.handle("codex:listModels", async () => {
+  ipcMain.handle("agents:install", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    try {
+      const p = payload && typeof payload === "object" ? (payload as any) : {};
+      const res = await installAgentCli(p.agent, { method: p.method, timeoutMs: p.timeoutMs });
+      return { ok: true, ...res };
+    } catch (err: any) {
+      return { ok: true, finishedAt: new Date().toISOString(), error: String(err && err.message ? err.message : err) };
+    }
+  });
+
+  ipcMain.handle("codex:listModels", async (evt) => {
+    assertTrustedIpcSender(evt);
     const codexPath = getCodexPathForTools();
     const now = Date.now();
     if (codexModelsCache && codexModelsCache.codexPath === codexPath && now - codexModelsCache.ts < 5 * 60 * 1000) {
@@ -214,11 +377,13 @@ export async function startApp(): Promise<void> {
     }
   });
 
-  ipcMain.handle("window:listDisplays", async () => {
+  ipcMain.handle("window:listDisplays", async (evt) => {
+    assertTrustedIpcSender(evt);
     return { ok: true, displays: windowManager.listDisplays() };
   });
 
   ipcMain.handle("window:moveToDisplay", async (evt, displayId) => {
+    assertTrustedIpcSender(evt);
     const win = BrowserWindow.fromWebContents(evt.sender);
     if (!win) return { ok: false, error: "Unknown window" };
     const ok = windowManager.moveWindowToDisplay(win, displayId);
@@ -226,19 +391,25 @@ export async function startApp(): Promise<void> {
     return { ok: true };
   });
 
-  ipcMain.handle("window:openLane", async (_evt, lane, displayId) => {
+  ipcMain.handle("window:openLane", async (evt, lane, displayId) => {
+    assertTrustedIpcSender(evt);
     return windowManager.openLane(lane, displayId);
   });
 
-  ipcMain.handle("window:openJob", async (_evt, jobId, displayId) => {
+  ipcMain.handle("window:openJob", async (evt, jobId, displayId) => {
+    assertTrustedIpcSender(evt);
     const id = String(jobId || "").trim();
     if (!id) return { ok: false, error: "Missing jobId" };
     if (!jobsManager.hasJob(id)) return { ok: false, error: "Unknown job" };
     return windowManager.openJob(id, displayId);
   });
 
-  ipcMain.handle("projects:list", async () => store.listProjects());
-  ipcMain.handle("projects:addDialog", async () => {
+  ipcMain.handle("projects:list", async (evt) => {
+    assertTrustedIpcSender(evt);
+    return store.listProjects();
+  });
+  ipcMain.handle("projects:addDialog", async (evt) => {
+    assertTrustedIpcSender(evt);
     const parent = BrowserWindow.getFocusedWindow() || windowManager.getMainWindow();
     const options: OpenDialogOptions = { properties: ["openDirectory", "createDirectory"] };
     const res = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
@@ -248,30 +419,94 @@ export async function startApp(): Promise<void> {
     const project = store.addProject({ id: newId(), name, path: dirPath });
     return project;
   });
-  ipcMain.handle("projects:remove", async (_evt, id) => store.removeProject(id));
-  ipcMain.handle("projects:update", async (_evt, { id, patch }) => store.updateProject(id, patch || {}));
+  ipcMain.handle("projects:remove", async (evt, id) => {
+    assertTrustedIpcSender(evt);
+    return store.removeProject(id);
+  });
+  ipcMain.handle("projects:update", async (evt, { id, patch }) => {
+    assertTrustedIpcSender(evt);
+    return store.updateProject(id, patch || {});
+  });
 
-  ipcMain.handle("jobs:list", async () => jobsManager.listJobMetas());
+  ipcMain.handle("jobs:list", async (evt) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.listJobMetas();
+  });
 
-  ipcMain.handle("jobs:search", async (_evt, payload) => {
+  ipcMain.handle("jobs:search", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     const query = p.query;
     const opts = p.opts && typeof p.opts === "object" ? p.opts : {};
-    const res = jobsManager.search(query, { includeLogs: opts.includeLogs, limit: opts.limit });
+    const rawLimit = typeof opts.limit === "number" ? opts.limit : Number(opts.limit);
+    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(800, Math.trunc(rawLimit))) : undefined;
+    const res = jobsManager.search(query, { includeLogs: opts.includeLogs, limit });
     return { ok: true, ...res };
   });
 
-  ipcMain.handle("jobs:get", async (_evt, jobId) => jobsManager.getJob(jobId));
-  ipcMain.handle("jobs:start", async (_evt, params) => jobsManager.start(params));
-  ipcMain.handle("jobs:send", async (_evt, { jobId, prompt, images }) => jobsManager.send({ jobId, prompt, images }));
-  ipcMain.handle("jobs:archive", async (_evt, payload) => {
+  ipcMain.handle("jobs:get", async (evt, jobId) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.getJob(jobId);
+  });
+  ipcMain.handle("jobs:start", async (evt, params) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.start(params);
+  });
+  ipcMain.handle("jobs:send", async (evt, { jobId, prompt, images }) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.send({ jobId, prompt, images });
+  });
+  ipcMain.handle("jobs:archive", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     return jobsManager.archive({ jobId: p.jobId, reason: p.reason });
   });
-  ipcMain.handle("jobs:trash", async (_evt, jobId) => jobsManager.trash(jobId));
-  ipcMain.handle("jobs:restore", async (_evt, jobId) => jobsManager.restore(jobId));
-  ipcMain.handle("jobs:delete", async (_evt, jobId) => jobsManager.delete(jobId));
-  ipcMain.handle("jobs:cancel", async (_evt, jobId) => jobsManager.cancel(jobId));
+  ipcMain.handle("jobs:trash", async (evt, jobId) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.trash(jobId);
+  });
+  ipcMain.handle("jobs:restore", async (evt, jobId) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.restore(jobId);
+  });
+  ipcMain.handle("jobs:delete", async (evt, jobId) => {
+    assertTrustedIpcSender(evt);
+    const res = jobsManager.delete(jobId);
+    if (res && typeof res === "object" && (res as any).ok) terminalManager.destroy(jobId);
+    return res;
+  });
+  ipcMain.handle("jobs:cancel", async (evt, jobId) => {
+    assertTrustedIpcSender(evt);
+    return jobsManager.cancel(jobId);
+  });
+
+  ipcMain.handle("term:ensure", async (evt, payload) => {
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const id = String(p.jobId || "").trim();
+    if (!id) return { ok: false, error: "Missing jobId" };
+
+    const got = jobsManager.getJob(id);
+    if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
+
+    const job = (got as any).job || {};
+    const cwd = typeof job.projectPath === "string" && job.projectPath.trim() ? job.projectPath.trim() : process.cwd();
+    return terminalManager.ensure(id, { cwd, cols: p.cols, rows: p.rows, webContentsId: evt.sender.id });
+  });
+
+  ipcMain.handle("term:write", async (_evt, payload) => {
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    return terminalManager.write(p.jobId, p.data);
+  });
+
+  ipcMain.handle("term:resize", async (_evt, payload) => {
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    return terminalManager.resize(p.jobId, p.cols, p.rows);
+  });
+
+  ipcMain.handle("term:detach", async (evt, payload) => {
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    return terminalManager.detach(p.jobId, evt.sender.id);
+  });
 
   applyRuntimeSettings(store.getSettings());
 
