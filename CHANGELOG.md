@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.3.2...agent-heaven-v0.4.0) (2026-02-14)
+
+
+### Features
+
+* harden Electron, add terminal + agent install ([387e8b9](https://github.com/grund3g/agent-heaven/commit/387e8b9fd7b44e412548ee0c2f31112369098748))
+* **ui:** onboarding + agent installer dialog ([26aeacc](https://github.com/grund3g/agent-heaven/commit/26aeaccf2cacd166bf114c7a8da546a220a3e190))
+
+
+### Bug Fixes
+
+* **ui:** update missing CLI toast ([02fb1b4](https://github.com/grund3g/agent-heaven/commit/02fb1b4f85c6588f993dc1e4a2c8a3839f3e5932))
+
 ## [0.3.2](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.3.1...agent-heaven-v0.3.2) (2026-02-14)
 
 
