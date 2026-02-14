@@ -28,8 +28,12 @@
   },
   "build": {
     "appId": "com.simonschnabl.agentheaven",
+    "directories": {
+      "buildResources": "build-res"
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "build-res/icon.icns",
       "target": [
         "dmg",
         "zip"
