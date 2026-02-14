@@ -1,0 +1,64 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { Store } from "../src/store";
+
+describe("store", () => {
+  let tmpDir = "";
+
+  afterEach(() => {
+    if (tmpDir) {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+      tmpDir = "";
+    }
+  });
+
+  it("migrates legacy codex settings into settings.agents.codex", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    const raw = {
+      settings: {
+        codexPath: "/bin/codex",
+        agentModel: "gpt-4.1",
+        sandboxMode: "read-only",
+        bypassApprovalsAndSandbox: true,
+        skipGitRepoCheck: true,
+        color: "always",
+        globalHotkeyAccelerator: "  CommandOrControl+Shift+P  "
+      },
+      projects: [{ id: "p1", name: "Proj", path: "/tmp", color: "ABC", shortName: "  " }]
+    };
+    fs.writeFileSync(storePath, JSON.stringify(raw, null, 2), "utf8");
+
+    const s = new Store(storePath);
+    s.load();
+
+    const settings: any = s.getSettings();
+    expect(settings.agents.codex.path).toBe("/bin/codex");
+    expect(settings.agents.codex.model).toBe("gpt-4.1");
+    expect(settings.agents.codex.sandboxMode).toBe("read-only");
+    expect(settings.agents.codex.bypassApprovalsAndSandbox).toBe(true);
+    expect(settings.agents.codex.skipGitRepoCheck).toBe(true);
+    expect(settings.agents.codex.color).toBe("always");
+
+    // Deprecated keys should be removed.
+    expect(settings.codexPath).toBeUndefined();
+    expect(settings.agentModel).toBeUndefined();
+    expect(settings.sandboxMode).toBeUndefined();
+
+    // Trimmed
+    expect(settings.globalHotkeyAccelerator).toBe("CommandOrControl+Shift+P");
+
+    const projects: any[] = s.listProjects();
+    expect(projects).toHaveLength(1);
+    expect(projects[0].color).toBe("#aabbcc");
+    expect(Object.prototype.hasOwnProperty.call(projects[0], "shortName")).toBe(false);
+  });
+});
+
