@@ -7634,6 +7634,10 @@ async function init() {
     });
   }
 
+  if (typeof api.onTermEvent === "function") {
+    api.onTermEvent((payload) => onTermEvent(payload));
+  }
+
   state.sortMode = normalizeSortMode(getStoredSortMode());
   if (els.sortSelect) els.sortSelect.value = state.sortMode;
 
@@ -7736,10 +7740,6 @@ async function init() {
       return;
     }
 	  });
-
-	  if (typeof api.onTermEvent === "function") {
-	    api.onTermEvent((payload) => onTermEvent(payload));
-	  }
 
 	  if (api.onDevNotice) {
 	    api.onDevNotice((payload) => {
