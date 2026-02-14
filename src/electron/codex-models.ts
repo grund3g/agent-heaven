@@ -1,5 +1,21 @@
 import { spawn } from "node:child_process";
 
+function getAgentHeavenVersion(): string {
+  // Prefer Electron's app version when available (packaged app),
+  // but keep this module usable in plain Node contexts (tests/tooling).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const electron = require("electron") as typeof import("electron");
+    const v = electron && electron.app && typeof electron.app.getVersion === "function" ? electron.app.getVersion() : "";
+    if (typeof v === "string" && v.trim()) return v.trim();
+  } catch {
+    // ignore
+  }
+
+  const v = process.env.npm_package_version;
+  return typeof v === "string" && v.trim() ? v.trim() : "0.0.0";
+}
+
 function attachLineStream(stream: NodeJS.ReadableStream, onLine: (line: string) => void) {
   let buf = "";
   stream.setEncoding("utf8");
@@ -114,7 +130,7 @@ export async function listCodexModels(opts: { codexPath: string; timeoutMs?: num
 
   try {
     await request("1", "initialize", {
-      clientInfo: { name: "agent-heaven", version: "0.0.0" },
+      clientInfo: { name: "agent-heaven", version: getAgentHeavenVersion() },
       capabilities: { experimentalApi: true }
     });
 
