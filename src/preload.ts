@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 async function invokeOk(channel, ...args) {
   const res = await ipcRenderer.invoke(channel, ...args);
@@ -9,6 +9,15 @@ async function invokeOk(channel, ...args) {
 }
 
 contextBridge.exposeInMainWorld("agentHeaven", {
+  // In sandboxed renderers, File.path is empty; use Electron's safe helper.
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file as any);
+    } catch {
+      return "";
+    }
+  },
+
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsUpdate: (patch) => ipcRenderer.invoke("settings:update", patch),
 

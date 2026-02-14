@@ -801,7 +801,7 @@ body::before {
   border: 1px solid var(--stroke);
   background: var(--card-bg);
   padding: 12px;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   cursor: pointer;
   transform: translateZ(0);
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
@@ -822,7 +822,7 @@ body::before {
 
 .card--running {
   border-color: rgba(var(--accent-rgb), 0.22);
-  box-shadow: var(--shadow-card), 0 0 0 1px rgba(var(--accent-rgb), 0.08) inset;
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.08) inset;
 }
 
 .card:hover {
@@ -2243,4 +2243,82 @@ body::before {
 .toast .btn {
   padding: 8px 10px;
   font-size: 12px;
+}
+
+/* ---------------------------
+   First-run guided tour
+   --------------------------- */
+
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  pointer-events: none; /* only the tour card is interactive */
+}
+
+.tour__spotlight {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  border-radius: 18px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+  pointer-events: none;
+  transition: left 180ms ease, top 180ms ease, width 180ms ease, height 180ms ease, border-radius 180ms ease;
+}
+
+.tour__card {
+  position: fixed;
+  width: 360px;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 14px 14px 12px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--dialog-border);
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.tour__kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted2);
+  letter-spacing: 0.2px;
+}
+
+.tour__title {
+  margin-top: 6px;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.tour__body {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.tour__actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour__spacer {
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour__spotlight {
+    transition: none;
+  }
 }

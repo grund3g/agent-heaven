@@ -101,6 +101,11 @@ const els = {
   statusDialogMeta: document.getElementById("statusDialogMeta"),
   statusDialogBody: document.getElementById("statusDialogBody"),
 
+  agentsInstallDialog: document.getElementById("agentsInstallDialog"),
+  agentsInstallDialogClose: document.getElementById("agentsInstallDialogClose"),
+  agentsInstallDialogMeta: document.getElementById("agentsInstallDialogMeta"),
+  agentsInstallDialogBody: document.getElementById("agentsInstallDialogBody"),
+
   shortcutsDialog: document.getElementById("shortcutsDialog"),
   shortcutsDialogClose: document.getElementById("shortcutsDialogClose"),
   shortcutsDialogBody: document.getElementById("shortcutsDialogBody"),
@@ -130,6 +135,9 @@ const state = {
   sortMode: "lane_newest", // lane_newest | lane_oldest | duration_longest | created_newest | created_oldest
   toastTimer: null,
   toastUndo: null,
+  toastActions: [],
+  agentInstallInFlight: "", // codex | claude
+  agentInstallResults: { codex: null, claude: null },
   cardCtxJobId: "",
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
@@ -157,8 +165,76 @@ const STORAGE = {
   sortMode: "agentHeaven.sortMode",
   sidebarCollapsed: "agentHeaven.sidebarCollapsed",
   composerDraft: "agentHeaven.draft.composer",
-  agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1"
+  agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
+  onboardingSeen: "agentHeaven.onboarding.seen.v1"
 };
+
+const DEMO = {
+  projectId: "__agentHeavenDemoProject__",
+  jobs: {
+    running: "__ah_demo_running__",
+    attention: "__ah_demo_attention__",
+    done: "__ah_demo_done__"
+  }
+};
+
+const TOUR_ROOT_ID = "ahTour";
+const DEFAULT_FOLLOWUP_PLACEHOLDER = "Follow-up… (⌘+Enter)";
+
+const tour = {
+  active: false,
+  step: 0,
+  root: null,
+  spotlightEl: null,
+  cardEl: null,
+  kickerEl: null,
+  titleEl: null,
+  bodyEl: null,
+  backBtn: null,
+  nextBtn: null,
+  skipBtn: null,
+  updateRaf: 0,
+  dispose: []
+};
+
+const TOUR_STEPS = [
+  {
+    title: "Welcome",
+    body: "This is Agent Heaven.\n\nThese cards are examples (demo) and will disappear when you finish the tour.",
+    prefer: "right",
+    getTarget: () => document.querySelector(".brand")
+  },
+  {
+    title: "Add a project folder",
+    body: "Add a project so the agent has a working directory.\n(You can add multiple projects.)",
+    prefer: "right",
+    getTarget: () => els.addProjectBtn
+  },
+  {
+    title: "Write a prompt",
+    body: "Pick a project + agent, then describe what you want.\nTip: ⌘+P focuses the prompt.",
+    prefer: "bottom",
+    getTarget: () => els.promptInput
+  },
+  {
+    title: "Run",
+    body: "Run starts a new job card.\nTip: ⌘+Enter runs from the prompt.",
+    prefer: "bottom",
+    getTarget: () => els.runBtn
+  },
+  {
+    title: "Cards",
+    body: "Cards move across lanes based on status.\nClick a card to open chat + logs.\nRight click a card for actions.",
+    prefer: "left",
+    getTarget: () => document.querySelector(`[data-job-id="${DEMO.jobs.done}"]`) || document.querySelector(".card[data-job-id]")
+  },
+  {
+    title: "Shortcuts + Settings",
+    body: "Open shortcuts (⌘+/) and tweak defaults in Settings.",
+    prefer: "top",
+    getTarget: () => els.openShortcutsBtn || els.openSettingsBtn
+  }
+];
 
 applySidebarCollapsed(getStoredSidebarCollapsed());
 
@@ -675,6 +751,22 @@ function storeAgentBinariesToastAtMs(ms) {
   }
 }
 
+function getStoredOnboardingSeen() {
+  try {
+    return window.localStorage.getItem(STORAGE.onboardingSeen) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function storeOnboardingSeen() {
+  try {
+    window.localStorage.setItem(STORAGE.onboardingSeen, "1");
+  } catch {
+    // ignore
+  }
+}
+
 function normalizeSortMode(value) {
   const v = String(value || "")
     .trim()
@@ -1077,13 +1169,36 @@ function mergeImages(existing, added, maxCount = 8) {
   return out.slice(0, Math.max(0, maxCount));
 }
 
+function dataTransferHasFiles(dt) {
+  if (!dt) return false;
+  try {
+    const types = dt.types ? Array.from(dt.types) : [];
+    if (types.includes("Files")) return true;
+    const items = dt.items ? Array.from(dt.items) : [];
+    for (const it of items) {
+      if (it && it.kind === "file") return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function droppedImagePaths(e) {
   const dt = e && e.dataTransfer ? e.dataTransfer : null;
   const files = dt && dt.files ? Array.from(dt.files) : [];
   const out = [];
 
   for (const f of files) {
-    const p = typeof f.path === "string" ? f.path : "";
+    // Electron 35 + sandboxed renderers: File.path may be empty; ask preload via webUtils.
+    let p = typeof f.path === "string" ? f.path : "";
+    if (!p && api && typeof api.getPathForFile === "function") {
+      try {
+        p = String(api.getPathForFile(f) || "");
+      } catch {
+        p = "";
+      }
+    }
     const name = typeof f.name === "string" ? f.name : p;
     const type = typeof f.type === "string" ? f.type : "";
     if (!p) continue;
@@ -2414,6 +2529,448 @@ function laneElForJob(job) {
   return laneElForStatus(job.status);
 }
 
+function isDemoJob(job) {
+  return !!(job && typeof job === "object" && job.demo === true);
+}
+
+function hasRealJobs() {
+  for (const j of state.jobs.values()) {
+    if (!isDemoJob(j)) return true;
+  }
+  return false;
+}
+
+function ensureDemoJobs() {
+  // Never show demo cards if the user already has real jobs.
+  if (hasRealJobs()) return false;
+
+  const now = Date.now();
+  const iso = (ms) => new Date(ms).toISOString();
+  const prompt = (ms, text) => ({ ts: iso(ms), text: String(text || ""), images: [] });
+  const msg = (ms, role, text) => ({ ts: iso(ms), role: String(role || ""), text: String(text || ""), images: [] });
+  const log = (ms, stream, text) => ({ ts: iso(ms), kind: "log", stream: String(stream || "stdout"), text: String(text || "") });
+
+  const jobs = [
+    {
+      id: DEMO.jobs.running,
+      demo: true,
+      title: "",
+      status: "running",
+      box: "board",
+      createdAt: iso(now - 4 * 60 * 1000),
+      startedAt: iso(now - 3 * 60 * 1000),
+      finishedAt: "",
+      projectId: DEMO.projectId,
+      agent: "codex",
+      model: "",
+      threadId: "",
+      prompts: [prompt(now - 3 * 60 * 1000, "Add a first-run guided tour (with an example card).")],
+      messages: [],
+      logs: [
+        log(now - 2.6 * 60 * 1000, "stdout", "Scanning UI…"),
+        log(now - 2.1 * 60 * 1000, "stdout", "Preparing onboarding overlay…"),
+        log(now - 1.2 * 60 * 1000, "stdout", "Rendering demo cards…")
+      ]
+    },
+    {
+      id: DEMO.jobs.attention,
+      demo: true,
+      title: "",
+      status: "needs_attention",
+      box: "board",
+      createdAt: iso(now - 32 * 60 * 1000),
+      startedAt: iso(now - 31 * 60 * 1000),
+      finishedAt: iso(now - 28 * 60 * 1000),
+      projectId: DEMO.projectId,
+      agent: "claude",
+      model: "",
+      threadId: "",
+      prompts: [prompt(now - 31 * 60 * 1000, "Wire up the tour to the first app start.")],
+      messages: [
+        msg(
+          now - 28 * 60 * 1000,
+          "assistant",
+          "Quick question before I proceed: should the tour show only when there are zero jobs, or always on first launch even if jobs already exist?"
+        )
+      ],
+      logs: [log(now - 30.5 * 60 * 1000, "stdout", "Reviewing existing UI and flows…")]
+    },
+    {
+      id: DEMO.jobs.done,
+      demo: true,
+      title: "",
+      status: "done",
+      box: "board",
+      createdAt: iso(now - 95 * 60 * 1000),
+      startedAt: iso(now - 94 * 60 * 1000),
+      finishedAt: iso(now - 92 * 60 * 1000),
+      projectId: DEMO.projectId,
+      agent: "codex",
+      model: "",
+      threadId: "",
+      prompts: [prompt(now - 94 * 60 * 1000, "Explain how job cards work (Running → Needs Attention → Done).")],
+      messages: [
+        msg(
+          now - 92 * 60 * 1000,
+          "assistant",
+          "Done. Cards represent runs. Click a card to open the full chat + logs.\n\nTip: right click a card to archive/trash it (when not running)."
+        )
+      ],
+      logs: [log(now - 93.5 * 60 * 1000, "stdout", "Summarizing UI behavior…")],
+      usageTotal: { input_tokens: 842, output_tokens: 391, turns: 2 }
+    }
+  ];
+
+  let changed = false;
+  for (const j of jobs) {
+    if (state.jobs.has(j.id)) continue;
+    state.jobs.set(j.id, j);
+    changed = true;
+  }
+
+  if (changed) {
+    renderBoard();
+    ensureDurationTicker();
+    scheduleStatusDialogRender();
+  }
+
+  return changed;
+}
+
+function clearDemoJobs() {
+  let removed = false;
+  const selectedId = state.selectedJobId;
+  const selected = selectedId ? state.jobs.get(selectedId) : null;
+  const selectedWasDemo = !!selected && isDemoJob(selected);
+
+  for (const [id, job] of state.jobs.entries()) {
+    if (!isDemoJob(job)) continue;
+    state.jobs.delete(id);
+    removed = true;
+  }
+
+  if (removed) {
+    if (selectedWasDemo) {
+      try {
+        if (els.jobDialog && els.jobDialog.open) els.jobDialog.close();
+      } catch {
+        // ignore
+      }
+      state.selectedJobId = null;
+    }
+    renderBoard();
+    scheduleStatusDialogRender();
+  }
+
+  return removed;
+}
+
+function ensureTourDom() {
+  if (tour.root && !tour.root.isConnected) {
+    tour.root = null;
+  }
+
+  const existing = document.getElementById(TOUR_ROOT_ID);
+  if (existing) {
+    tour.root = existing;
+    tour.spotlightEl = existing.querySelector("[data-tour-spotlight]");
+    tour.cardEl = existing.querySelector("[data-tour-card]");
+    tour.kickerEl = existing.querySelector("[data-tour-kicker]");
+    tour.titleEl = existing.querySelector("[data-tour-title]");
+    tour.bodyEl = existing.querySelector("[data-tour-body]");
+    tour.backBtn = existing.querySelector('[data-tour-action="back"]');
+    tour.nextBtn = existing.querySelector('[data-tour-action="next"]');
+    tour.skipBtn = existing.querySelector('[data-tour-action="skip"]');
+    return existing;
+  }
+
+  const root = document.createElement("div");
+  root.id = TOUR_ROOT_ID;
+  root.className = "tour";
+  root.hidden = true;
+  root.innerHTML = `
+    <div class="tour__spotlight" data-tour-spotlight></div>
+    <div class="tour__card" data-tour-card role="dialog" aria-modal="true" aria-label="Guided tour">
+      <div class="tour__kicker" data-tour-kicker></div>
+      <div class="tour__title" data-tour-title></div>
+      <div class="tour__body" data-tour-body></div>
+      <div class="tour__actions">
+        <button type="button" class="btn btn--ghost" data-tour-action="skip">Skip</button>
+        <div class="tour__spacer"></div>
+        <button type="button" class="btn btn--ghost" data-tour-action="back">Back</button>
+        <button type="button" class="btn btn--primary" data-tour-action="next">Next</button>
+      </div>
+    </div>
+  `.trim();
+
+  document.body.appendChild(root);
+
+  tour.root = root;
+  tour.spotlightEl = root.querySelector("[data-tour-spotlight]");
+  tour.cardEl = root.querySelector("[data-tour-card]");
+  tour.kickerEl = root.querySelector("[data-tour-kicker]");
+  tour.titleEl = root.querySelector("[data-tour-title]");
+  tour.bodyEl = root.querySelector("[data-tour-body]");
+  tour.backBtn = root.querySelector('[data-tour-action="back"]');
+  tour.nextBtn = root.querySelector('[data-tour-action="next"]');
+  tour.skipBtn = root.querySelector('[data-tour-action="skip"]');
+
+  const onClick = (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-tour-action]") : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const action = btn.getAttribute("data-tour-action") || "";
+    if (action === "skip") stopFirstRunTour();
+    else if (action === "back") setTourStep(tour.step - 1);
+    else if (action === "next") {
+      if (tour.step >= TOUR_STEPS.length - 1) stopFirstRunTour();
+      else setTourStep(tour.step + 1);
+    }
+  };
+  root.addEventListener("click", onClick);
+  tour.dispose.push(() => root.removeEventListener("click", onClick));
+
+  return root;
+}
+
+function scheduleTourUpdate() {
+  if (!tour.active) return;
+  if (tour.updateRaf) return;
+  tour.updateRaf = window.requestAnimationFrame(() => {
+    tour.updateRaf = 0;
+    updateTourLayout();
+  });
+}
+
+function tourTargetElForStep(step) {
+  const s = step && typeof step === "object" ? step : null;
+  const getTarget = s && typeof s.getTarget === "function" ? s.getTarget : null;
+  if (!getTarget) return null;
+  try {
+    return getTarget();
+  } catch {
+    return null;
+  }
+}
+
+function updateTourLayout() {
+  if (!tour.active) return;
+  if (!tour.root || !tour.cardEl || !tour.spotlightEl) return;
+
+  const step = TOUR_STEPS[tour.step] || null;
+  const targetEl = tourTargetElForStep(step);
+  const targetRect = targetEl && targetEl.getBoundingClientRect ? targetEl.getBoundingClientRect() : null;
+  const hasTarget =
+    !!targetRect &&
+    Number.isFinite(targetRect.left) &&
+    Number.isFinite(targetRect.top) &&
+    targetRect.width > 2 &&
+    targetRect.height > 2;
+
+  // Spotlight
+  if (!hasTarget) {
+    tour.spotlightEl.style.opacity = "0";
+    tour.spotlightEl.style.left = "50%";
+    tour.spotlightEl.style.top = "50%";
+    tour.spotlightEl.style.width = "10px";
+    tour.spotlightEl.style.height = "10px";
+    tour.spotlightEl.style.transform = "translate(-50%, -50%)";
+  } else {
+    const pad = 10;
+    const x0 = Math.max(6, targetRect.left - pad);
+    const y0 = Math.max(6, targetRect.top - pad);
+    const x1 = Math.min(window.innerWidth - 6, targetRect.right + pad);
+    const y1 = Math.min(window.innerHeight - 6, targetRect.bottom + pad);
+
+    tour.spotlightEl.style.opacity = "1";
+    tour.spotlightEl.style.left = `${Math.round(x0)}px`;
+    tour.spotlightEl.style.top = `${Math.round(y0)}px`;
+    tour.spotlightEl.style.width = `${Math.round(Math.max(10, x1 - x0))}px`;
+    tour.spotlightEl.style.height = `${Math.round(Math.max(10, y1 - y0))}px`;
+    tour.spotlightEl.style.transform = "none";
+  }
+
+  // Card positioning
+  tour.cardEl.style.left = "0px";
+  tour.cardEl.style.top = "0px";
+  const cardRect = tour.cardEl.getBoundingClientRect();
+  const cw = cardRect.width || 360;
+  const ch = cardRect.height || 200;
+  const vw = window.innerWidth || 1200;
+  const vh = window.innerHeight || 800;
+  const margin = 12;
+
+  const fits = (x, y) => x >= margin && y >= margin && x + cw <= vw - margin && y + ch <= vh - margin;
+  const clampPos = (x, y) => ({
+    x: clampNumber(x, margin, Math.max(margin, vw - cw - margin), margin),
+    y: clampNumber(y, margin, Math.max(margin, vh - ch - margin), margin)
+  });
+
+  if (!hasTarget) {
+    const centered = clampPos((vw - cw) / 2, 24);
+    tour.cardEl.style.left = `${Math.round(centered.x)}px`;
+    tour.cardEl.style.top = `${Math.round(centered.y)}px`;
+    return;
+  }
+
+  const prefer = step && typeof step.prefer === "string" ? step.prefer : "";
+  const rect = targetRect;
+  const candidates = [];
+  const addRight = () => candidates.push({ x: rect.right + margin, y: rect.top });
+  const addLeft = () => candidates.push({ x: rect.left - cw - margin, y: rect.top });
+  const addBottom = () => candidates.push({ x: rect.left, y: rect.bottom + margin });
+  const addTop = () => candidates.push({ x: rect.left, y: rect.top - ch - margin });
+
+  if (prefer === "right") {
+    addRight(); addLeft(); addBottom(); addTop();
+  } else if (prefer === "left") {
+    addLeft(); addRight(); addBottom(); addTop();
+  } else if (prefer === "top") {
+    addTop(); addBottom(); addRight(); addLeft();
+  } else {
+    // default: bottom
+    addBottom(); addTop(); addRight(); addLeft();
+  }
+
+  let placed = null;
+  for (const c of candidates) {
+    const pos = clampPos(c.x, c.y);
+    if (fits(pos.x, pos.y)) {
+      placed = pos;
+      break;
+    }
+  }
+  if (!placed) placed = clampPos(rect.left, rect.bottom + margin);
+
+  tour.cardEl.style.left = `${Math.round(placed.x)}px`;
+  tour.cardEl.style.top = `${Math.round(placed.y)}px`;
+}
+
+function setTourStep(idx) {
+  const next = clampNumber(idx, 0, TOUR_STEPS.length - 1, 0);
+  tour.step = next;
+  const s = TOUR_STEPS[next] || {};
+
+  if (tour.kickerEl) tour.kickerEl.textContent = `Step ${next + 1} of ${TOUR_STEPS.length}`;
+  if (tour.titleEl) tour.titleEl.textContent = String(s.title || "");
+  if (tour.bodyEl) tour.bodyEl.textContent = String(s.body || "");
+
+  if (tour.backBtn) tour.backBtn.disabled = next <= 0;
+  if (tour.nextBtn) tour.nextBtn.textContent = next >= TOUR_STEPS.length - 1 ? "Finish" : "Next";
+
+  scheduleTourUpdate();
+}
+
+function startFirstRunTour() {
+  if (tour.active) return;
+
+  // Only show once. If the app restarts/crashes during onboarding we still don't want to nag.
+  storeOnboardingSeen();
+
+  // Ensure cards are visible on a fresh start.
+  setView("board");
+  ensureDemoJobs();
+
+  ensureTourDom();
+  if (!tour.root) return;
+
+  tour.active = true;
+  tour.root.hidden = false;
+
+  const onResize = () => scheduleTourUpdate();
+  const onScroll = () => scheduleTourUpdate();
+  const onKeyDown = (e) => {
+    if (!tour.active) return;
+    if (!e) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      stopFirstRunTour();
+      return;
+    }
+    // Don't steal Enter from textareas/inputs.
+    const tag = e.target && e.target.tagName ? String(e.target.tagName).toLowerCase() : "";
+    if (tag === "textarea" || tag === "input") return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      setTourStep(tour.step - 1);
+      return;
+    }
+    if (e.key === "ArrowRight" || e.key === "Enter") {
+      e.preventDefault();
+      if (tour.step >= TOUR_STEPS.length - 1) stopFirstRunTour();
+      else setTourStep(tour.step + 1);
+    }
+  };
+
+  window.addEventListener("resize", onResize);
+  document.addEventListener("scroll", onScroll, true);
+  document.addEventListener("keydown", onKeyDown);
+  tour.dispose.push(() => window.removeEventListener("resize", onResize));
+  tour.dispose.push(() => document.removeEventListener("scroll", onScroll, true));
+  tour.dispose.push(() => document.removeEventListener("keydown", onKeyDown));
+
+  setTourStep(0);
+  scheduleTourUpdate();
+
+  try {
+    if (tour.nextBtn) tour.nextBtn.focus();
+  } catch {
+    // ignore
+  }
+}
+
+function stopFirstRunTour() {
+  if (!tour.active) return;
+  tour.active = false;
+
+  if (tour.updateRaf) {
+    try {
+      window.cancelAnimationFrame(tour.updateRaf);
+    } catch {
+      // ignore
+    }
+    tour.updateRaf = 0;
+  }
+
+  const fns = tour.dispose.splice(0, tour.dispose.length);
+  for (const fn of fns) {
+    try {
+      if (typeof fn === "function") fn();
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    if (tour.root) tour.root.remove();
+  } catch {
+    // ignore
+  }
+
+  tour.root = null;
+  tour.spotlightEl = null;
+  tour.cardEl = null;
+  tour.kickerEl = null;
+  tour.titleEl = null;
+  tour.bodyEl = null;
+  tour.backBtn = null;
+  tour.nextBtn = null;
+  tour.skipBtn = null;
+
+  clearDemoJobs();
+}
+
+function maybeStartFirstRunTour() {
+  if (getStoredOnboardingSeen()) return;
+  if (state.focusLane || state.focusJobId) return;
+
+  // Heuristic: only show on a "fresh" install with no previous job history.
+  if (state.jobs && state.jobs.size > 0) return;
+
+  startFirstRunTour();
+}
+
 function getAudioContext() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
@@ -3082,11 +3639,15 @@ function projectById(id) {
 }
 
 function projectNameById(id) {
+  const pid = String(id || "");
+  if (pid === DEMO.projectId) return "Example project";
   const p = projectById(id);
   return p ? p.name : "Unknown";
 }
 
 function projectLabelById(id) {
+  const pid = String(id || "");
+  if (pid === DEMO.projectId) return "DEMO";
   const p = projectById(id);
   if (!p) return "Unknown";
   const shortName = normalizeShortName(p.shortName);
@@ -3094,6 +3655,8 @@ function projectLabelById(id) {
 }
 
 function projectColorById(id) {
+  const pid = String(id || "");
+  if (pid === DEMO.projectId) return "#5b9ef5";
   const p = projectById(id);
   return p ? normalizeHexColor(p.color) : "";
 }
@@ -3510,6 +4073,39 @@ function setHidden(el, hidden) {
 }
 
 function updateJobDialogActions(job) {
+  if (isDemoJob(job)) {
+    // Demo cards are UI-only; disable actions that would hit the main process.
+    setHidden(els.rerunJobBtn, true);
+    setHidden(els.cancelJobBtn, true);
+    setHidden(els.jobArchiveBtn, true);
+    setHidden(els.jobTrashBtn, true);
+    setHidden(els.jobDeleteBtn, true);
+    setHidden(els.jobRestoreBtn, true);
+
+    if (els.jobDialogPopout) els.jobDialogPopout.hidden = true;
+    if (els.jobDialogMove) els.jobDialogMove.hidden = true;
+
+    if (els.followupInput) {
+      els.followupInput.disabled = true;
+      els.followupInput.placeholder = "Demo card (start a real run to chat)";
+    }
+    if (els.sendFollowupBtn) {
+      els.sendFollowupBtn.disabled = true;
+      els.sendFollowupBtn.textContent = "Send";
+      els.sendFollowupBtn.title = "Demo card";
+    }
+    return;
+  }
+
+  if (els.followupInput) {
+    els.followupInput.disabled = false;
+    if (els.followupInput.placeholder !== DEFAULT_FOLLOWUP_PLACEHOLDER) {
+      els.followupInput.placeholder = DEFAULT_FOLLOWUP_PLACEHOLDER;
+    }
+  }
+  if (els.jobDialogPopout) els.jobDialogPopout.hidden = isJobMode();
+  if (els.jobDialogMove) els.jobDialogMove.hidden = !isJobMode();
+
   const b = jobBox(job);
   const running = job && job.status === "running";
   const hasThreadId = job && typeof job.threadId === "string" && job.threadId.trim().length > 0;
@@ -3581,6 +4177,13 @@ function updateCardContextMenuActions(job) {
     const el = byAction(name);
     if (el) el.hidden = !!hidden;
   };
+
+  if (isDemoJob(job)) {
+    for (const a of ["rerun", "stop", "restore", "archive", "trash", "delete"]) setActionHidden(a, true);
+    const sep = menu.querySelector('[data-ctx-sep="main"]');
+    if (sep) sep.hidden = true;
+    return;
+  }
 
   setActionHidden("rerun", running);
   setActionHidden("stop", !running);
@@ -4082,6 +4685,10 @@ async function startJobFromComposer() {
   const prompt = (els.promptInput.value || "").trim();
   if (!prompt) return;
 
+  // If the user starts a real job during onboarding, clean up demo UI.
+  if (tour.active) stopFirstRunTour();
+  else clearDemoJobs();
+
   // Starting a new run should land you on the active board view.
   setView("board");
 
@@ -4407,12 +5014,13 @@ function hideToast() {
     state.toastTimer = null;
   }
   state.toastUndo = null;
+  state.toastActions = [];
   if (!els.toast) return;
   els.toast.hidden = true;
   els.toast.innerHTML = "";
 }
 
-function showToast(msg, undoHandler = null, ms = 8000) {
+function showToast(msg, undoHandler = null, ms = 8000, opts = null) {
   if (!els.toast) return;
   if (state.toastTimer) window.clearTimeout(state.toastTimer);
 
@@ -4421,7 +5029,23 @@ function showToast(msg, undoHandler = null, ms = 8000) {
     ? `<button type="button" class="btn btn--ghost" data-toast-undo>Undo</button>`
     : "";
 
-  els.toast.innerHTML = `<div class="toast__msg">${escapeHtml(msg)}</div>${undoBtn}`;
+  const actions = opts && typeof opts === "object" && Array.isArray(opts.actions) ? opts.actions : [];
+  const actionFns = [];
+  const actionBtns = [];
+  for (const a of actions) {
+    if (!a || typeof a !== "object") continue;
+    const label = typeof a.label === "string" ? a.label : "";
+    const onClick = typeof a.onClick === "function" ? a.onClick : null;
+    const kind = typeof a.kind === "string" ? a.kind : "";
+    if (!label || !onClick) continue;
+    const idx = actionFns.length;
+    actionFns.push(onClick);
+    const btnClass = kind === "primary" ? "btn btn--primary" : "btn btn--ghost";
+    actionBtns.push(`<button type="button" class="${btnClass}" data-toast-action="${idx}">${escapeHtml(label)}</button>`);
+  }
+  state.toastActions = actionFns;
+
+  els.toast.innerHTML = `<div class="toast__msg">${escapeHtml(msg)}</div>${actionBtns.join("")}${undoBtn}`;
   els.toast.hidden = false;
   state.toastTimer = window.setTimeout(() => hideToast(), Math.max(800, ms));
 }
@@ -4667,6 +5291,14 @@ function wireUi() {
   // Toast interactions.
   if (els.toast) {
     els.toast.addEventListener("click", (e) => {
+      const actionBtn = e.target && e.target.closest ? e.target.closest("[data-toast-action]") : null;
+      if (actionBtn) {
+        const idx = Number(actionBtn.getAttribute("data-toast-action") || "-1");
+        const fn = idx >= 0 && idx < state.toastActions.length ? state.toastActions[idx] : null;
+        hideToast();
+        if (typeof fn === "function") fn();
+        return;
+      }
       const undoBtn = e.target && e.target.closest ? e.target.closest("[data-toast-undo]") : null;
       if (!undoBtn) return;
       const fn = state.toastUndo;
@@ -4824,6 +5456,18 @@ function wireUi() {
   }
   if (els.statusDialogBody) {
     els.statusDialogBody.addEventListener("click", (e) => {
+      const installBtn = e.target && e.target.closest ? e.target.closest("[data-status-install-agents]") : null;
+      if (installBtn) {
+        e.preventDefault();
+        try {
+          if (els.statusDialog && els.statusDialog.open) els.statusDialog.close();
+        } catch {
+          // ignore
+        }
+        openAgentsInstallDialog();
+        return;
+      }
+
       const openSettingsBtn = e.target && e.target.closest ? e.target.closest("[data-status-open-settings]") : null;
       if (openSettingsBtn) {
         e.preventDefault();
@@ -4853,6 +5497,52 @@ function wireUi() {
         // ignore
       }
       openJobDialog(id);
+    });
+  }
+
+  if (els.agentsInstallDialogClose) {
+    els.agentsInstallDialogClose.addEventListener("click", () => {
+      try {
+        if (els.agentsInstallDialog && els.agentsInstallDialog.open) els.agentsInstallDialog.close();
+      } catch {
+        // ignore
+      }
+    });
+  }
+  if (els.agentsInstallDialog) {
+    els.agentsInstallDialog.addEventListener("click", (e) => {
+      if (e.target === els.agentsInstallDialog) els.agentsInstallDialog.close();
+    });
+  }
+  if (els.agentsInstallDialogBody) {
+    els.agentsInstallDialogBody.addEventListener("click", (e) => {
+      const installBtn = e.target && e.target.closest ? e.target.closest("[data-agent-install]") : null;
+      if (installBtn) {
+        e.preventDefault();
+        const agent = installBtn.getAttribute("data-agent-install") || "";
+        const method = installBtn.getAttribute("data-agent-install-method") || "";
+        runAgentInstallFromUi(agent, method);
+        return;
+      }
+
+      const recheckBtn = e.target && e.target.closest ? e.target.closest("[data-agent-install-recheck]") : null;
+      if (recheckBtn) {
+        e.preventDefault();
+        refreshAgentBinaries({ showToastOnMissing: false });
+        return;
+      }
+
+      const openSettingsBtn = e.target && e.target.closest ? e.target.closest("[data-agent-install-open-settings]") : null;
+      if (openSettingsBtn) {
+        e.preventDefault();
+        try {
+          if (els.agentsInstallDialog && els.agentsInstallDialog.open) els.agentsInstallDialog.close();
+        } catch {
+          // ignore
+        }
+        openSettingsDialog();
+        return;
+      }
     });
   }
 
@@ -4932,7 +5622,7 @@ function wireUi() {
   // Attach images via drag&drop.
   document.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
-    if (!dt || !dt.types || !Array.from(dt.types).includes("Files")) return;
+    if (!dataTransferHasFiles(dt)) return;
     e.preventDefault();
   });
   document.addEventListener("drop", (e) => {
@@ -4975,7 +5665,7 @@ function wireUi() {
 
   els.promptDropwrap.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
-    if (!dt || !dt.types || !Array.from(dt.types).includes("Files")) return;
+    if (!dataTransferHasFiles(dt)) return;
     e.preventDefault();
     els.promptDropwrap.classList.add("dropwrap--dragover");
   });
@@ -4994,7 +5684,7 @@ function wireUi() {
 
   els.followupDropwrap.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
-    if (!dt || !dt.types || !Array.from(dt.types).includes("Files")) return;
+    if (!dataTransferHasFiles(dt)) return;
     e.preventDefault();
     els.followupDropwrap.classList.add("dropwrap--dragover");
   });
@@ -5934,11 +6624,13 @@ async function refreshAgentBinaries({ showToastOnMissing = false } = {}) {
 
     // Keep the status overlay fresh if it's open.
     if (els.statusDialog && els.statusDialog.open) renderStatusDialog();
+    if (els.agentsInstallDialog && els.agentsInstallDialog.open) renderAgentsInstallDialog();
 
     if (showToastOnMissing) maybeShowMissingAgentBinariesToast(state.agentBinaries);
   } catch (err) {
     state.agentBinaries = { checkedAt: new Date().toISOString(), error: String(err && err.message ? err.message : err) };
     if (els.statusDialog && els.statusDialog.open) renderStatusDialog();
+    if (els.agentsInstallDialog && els.agentsInstallDialog.open) renderAgentsInstallDialog();
   } finally {
     agentBinariesFetchInFlight = false;
   }
@@ -5983,7 +6675,12 @@ function maybeShowMissingAgentBinariesToast(res) {
     // ignore
   }
 
-  showToast(msg, null, 12_000);
+  showToast(msg, null, 12_000, {
+    actions: [
+      { label: "Install...", kind: "primary", onClick: () => openAgentsInstallDialog() },
+      { label: "Settings", onClick: () => openSettingsDialog() }
+    ]
+  });
 }
 
 		function openSettingsDialog() {
@@ -6028,6 +6725,230 @@ function maybeShowMissingAgentBinariesToast(res) {
 
 	  els.settingsDialog.showModal();
 	}
+
+function isWindowsPlatform() {
+  try {
+    const p = typeof navigator !== "undefined" ? String(navigator.platform || "") : "";
+    const ua = typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "";
+    return /Win/i.test(p) || /Windows/i.test(ua);
+  } catch {
+    return false;
+  }
+}
+
+function installCommandPreview(agent, method) {
+  const a = normalizeAgentKey(agent);
+  const m = typeof method === "string" ? method.trim() : "";
+
+  if (a === "codex") return "npm i -g @openai/codex";
+
+  if (a === "claude") {
+    if (m === "npm") return "npm install -g @anthropic-ai/claude-code";
+    if (isWindowsPlatform()) return "irm https://claude.ai/install.ps1 | iex";
+    return "curl -fsSL https://claude.ai/install.sh | bash";
+  }
+
+  return "";
+}
+
+function renderAgentsInstallDialog() {
+  if (!els.agentsInstallDialogMeta || !els.agentsInstallDialogBody) return;
+
+  const res = state.agentBinaries && typeof state.agentBinaries === "object" ? state.agentBinaries : null;
+  const checkedAt = res && res.checkedAt ? String(res.checkedAt) : "";
+  const codex = res && res.codex && typeof res.codex === "object" ? res.codex : null;
+  const claude = res && res.claude && typeof res.claude === "object" ? res.claude : null;
+
+  const metaBits = [];
+  metaBits.push("Runs install commands in a non-interactive shell on your machine.");
+  if (checkedAt) metaBits.push(`checkedAt=${checkedAt}`);
+  if (state.agentInstallInFlight) metaBits.push(`installing=${state.agentInstallInFlight}`);
+  els.agentsInstallDialogMeta.textContent = metaBits.join("  ");
+
+  function fmtFoundPill(found) {
+    const cls = found ? "pill pill--done" : "pill pill--attn";
+    const label = found ? "found" : "missing";
+    return `<span class="${cls}">${escapeHtml(label)}</span>`;
+  }
+
+  function renderInstallResult(result) {
+    const r = result && typeof result === "object" ? result : null;
+    if (!r) return "";
+
+    const finishedAt = r.finishedAt ? String(r.finishedAt) : "";
+    const command = r.command ? String(r.command) : "";
+    const exitCode = typeof r.exitCode === "number" ? String(r.exitCode) : "—";
+    const timedOut = !!r.timedOut;
+    const signal = r.signal ? String(r.signal) : "";
+    const detectedPath = r.detectedPath ? String(r.detectedPath) : "";
+    const err = r.error ? String(r.error) : "";
+    const stdout = r.stdout ? String(r.stdout) : "";
+    const stderr = r.stderr ? String(r.stderr) : "";
+    const truncated = !!r.truncated;
+
+    const bits = [];
+    if (finishedAt) bits.push(`finishedAt=${finishedAt}`);
+    bits.push(`exitCode=${exitCode}`);
+    if (timedOut) bits.push("timedOut=true");
+    if (signal) bits.push(`signal=${signal}`);
+    if (detectedPath) bits.push(`detectedPath=${detectedPath}`);
+    if (truncated) bits.push("output=truncated");
+
+    const lines = [];
+    lines.push(`<div class="logline">${escapeHtml(`Last install: ${bits.join("  ")}`)}</div>`);
+    if (command) lines.push(`<div class="logline">${escapeHtml(`Command: ${command}`)}</div>`);
+    if (err) lines.push(`<div class="logline logline--stderr">${escapeHtml(err)}</div>`);
+
+    const out = [];
+    if (stdout) out.push(`STDOUT:\n${stdout}`);
+    if (stderr) out.push(`STDERR:\n${stderr}`);
+
+    if (out.length === 0) return lines.join("");
+
+    const detailsOpen = err ? " open" : "";
+    lines.push(`
+      <details${detailsOpen}>
+        <summary>Output</summary>
+        <div class="livefeed"><pre class="livefeed__pre">${escapeHtml(out.join("\n\n"))}</pre></div>
+      </details>
+    `);
+    return lines.join("");
+  }
+
+  function renderAgentSection(agentKey, label, check, result) {
+    const found = !!(check && check.found === true);
+    const path = check && typeof check.path === "string" ? check.path : "";
+    const spawnErr = check && check.error ? String(check.error) : "";
+    const candidates = check && Array.isArray(check.candidates) ? check.candidates.filter(Boolean) : [];
+
+    const installing = state.agentInstallInFlight === agentKey;
+    const disabled = installing ? " disabled" : "";
+
+    const cmdPrimary = installCommandPreview(agentKey, agentKey === "codex" ? "npm" : "native");
+    const cmdAlt = agentKey === "claude" ? installCommandPreview(agentKey, "npm") : "";
+
+    const hintLines = [];
+    if (agentKey === "codex") hintLines.push(`Install (npm): ${cmdPrimary}`);
+    else hintLines.push(`Install (native): ${cmdPrimary}`);
+    if (cmdAlt) hintLines.push(`Alt (npm): ${cmdAlt}`);
+
+    const installBtns = [];
+    if (!found) {
+      if (agentKey === "codex") {
+        installBtns.push(
+          `<button type="button" class="btn btn--primary" data-agent-install="${agentKey}" data-agent-install-method="npm"${disabled}>${
+            installing ? "Installing..." : "Install Codex"
+          }</button>`
+        );
+      } else {
+        installBtns.push(
+          `<button type="button" class="btn btn--primary" data-agent-install="${agentKey}" data-agent-install-method="native"${disabled}>${
+            installing ? "Installing..." : "Install Claude (native)"
+          }</button>`
+        );
+        installBtns.push(
+          `<button type="button" class="btn btn--ghost" data-agent-install="${agentKey}" data-agent-install-method="npm"${disabled}>Install Claude (npm)</button>`
+        );
+      }
+    }
+
+    const lines = [];
+    lines.push(`<div class="logline">${escapeHtml(label)}: ${fmtFoundPill(found)}  ${escapeHtml(`path=${path || "—"}`)}</div>`);
+    if (!found && spawnErr) lines.push(`<div class="logline logline--stderr">${escapeHtml(`${label} error: ${spawnErr}`)}</div>`);
+    if (!found && candidates.length > 0) lines.push(`<div class="logline">${escapeHtml(`${label} candidates: ${candidates.join(", ")}`)}</div>`);
+
+    const resultHtml = renderInstallResult(result);
+
+    return `
+      <div class="statussection">
+        <div class="statussection__title">${escapeHtml(label)}</div>
+        <div class="statussection__hint">${escapeHtml(hintLines.join("\n"))}</div>
+        ${lines.join("")}
+        ${resultHtml ? `<div class="settings__divider"></div>${resultHtml}` : ""}
+        <div class="settings__actions statussection__actions">
+          ${installBtns.join("")}
+          <button type="button" class="btn btn--ghost" data-agent-install-recheck>Recheck</button>
+          <button type="button" class="btn btn--ghost" data-agent-install-open-settings>Open Settings</button>
+        </div>
+      </div>
+    `;
+  }
+
+  const body = [];
+  body.push(renderAgentSection("codex", "Codex CLI", codex, state.agentInstallResults.codex));
+  body.push(renderAgentSection("claude", "Claude CLI", claude, state.agentInstallResults.claude));
+
+  els.agentsInstallDialogBody.innerHTML = body.join("");
+}
+
+async function openAgentsInstallDialog() {
+  if (!els.agentsInstallDialog) return;
+  renderAgentsInstallDialog();
+  try {
+    els.agentsInstallDialog.showModal();
+  } catch {
+    // ignore
+  }
+  // Best-effort: refresh detection right after opening.
+  refreshAgentBinaries({ showToastOnMissing: false });
+}
+
+async function runAgentInstallFromUi(agent, method) {
+  const a = normalizeAgentKey(agent);
+  if (a !== "codex" && a !== "claude") return;
+  const m = typeof method === "string" ? method.trim() : "auto";
+
+  if (!api || typeof api.agentsInstall !== "function") {
+    showToast("Install is not supported in this build.");
+    return;
+  }
+  if (state.agentInstallInFlight) {
+    showToast(`Install already running (${state.agentInstallInFlight}).`);
+    return;
+  }
+
+  const cmd = installCommandPreview(a, m);
+  if (cmd) {
+    const ok = window.confirm(`This will run:\n\n${cmd}\n\nContinue?`);
+    if (!ok) return;
+  }
+
+  state.agentInstallInFlight = a;
+  renderAgentsInstallDialog();
+
+  try {
+    const res = await api.agentsInstall({ agent: a, method: m, timeoutMs: 10 * 60_000 });
+    if (a === "codex") state.agentInstallResults.codex = res;
+    else state.agentInstallResults.claude = res;
+
+    const detectedPath = res && typeof res === "object" && typeof res.detectedPath === "string" ? res.detectedPath.trim() : "";
+    if (detectedPath) {
+      const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+      const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
+      const cur = agents[a] && typeof agents[a] === "object" ? agents[a] : {};
+      const curPath = typeof cur.path === "string" ? cur.path.trim() : "";
+      if (!curPath) {
+        try {
+          const next = await api.settingsUpdate({ agents: { [a]: { path: detectedPath } } });
+          state.settings = next;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    await refreshAgentBinaries({ showToastOnMissing: false });
+
+    const err = res && typeof res === "object" && res.error ? String(res.error) : "";
+    if (err) showToast(err);
+    else showToast(`${a === "codex" ? "Codex" : "Claude"} installed.`);
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err));
+  } finally {
+    state.agentInstallInFlight = "";
+    renderAgentsInstallDialog();
+  }
+}
 
 function renderStatusDialog() {
   if (!els.statusDialogMeta || !els.statusDialogBody) return;
@@ -6096,12 +7017,19 @@ function renderStatusDialog() {
       if (err) lines.push(`<div class="logline logline--stderr">${escapeHtml(err)}</div>`);
     }
 
+    const missing = [];
+    if (codex && codex.found === false) missing.push("codex");
+    if (claude && claude.found === false) missing.push("claude");
+    const installBtn =
+      missing.length > 0 ? `<button type="button" class="btn btn--primary" data-status-install-agents>Install...</button>` : "";
+
     return `
       <div class="statussection">
         <div class="statussection__title">Agent CLIs</div>
         <div class="statussection__hint">${escapeHtml(hintBits.join("  "))}</div>
         ${lines.join("")}
         <div class="settings__actions statussection__actions">
+          ${installBtn}
           <button type="button" class="btn btn--ghost" data-status-open-settings>Open Settings</button>
           <button type="button" class="btn btn--ghost" data-status-refresh-agents>Recheck</button>
         </div>
@@ -6453,6 +7381,8 @@ async function init() {
   refreshCodexModelsDatalist({ showErrors: false });
   refreshAgentBinaries({ showToastOnMissing: true });
 
+  maybeStartFirstRunTour();
+
   // Job popout windows open directly into the selected job.
   if (state.focusJobId) {
     const id = state.focusJobId;
@@ -6472,6 +7402,10 @@ async function init() {
     if (!jobId) return;
 
     if (kind === "created") {
+      if (payload && payload.job && !isDemoJob(payload.job)) {
+        if (tour.active) stopFirstRunTour();
+        else clearDemoJobs();
+      }
       upsertJob(payload.job);
       return;
     }
