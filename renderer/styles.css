@@ -1819,6 +1819,8 @@ body::before {
   overflow: auto;
   padding: 10px;
   display: none;
+  /* Allow this grid item to shrink within dialogs (prevents horizontal overflow). */
+  min-width: 0;
 }
 
 .panel--terminal {
@@ -1881,7 +1883,11 @@ body::before {
 }
 
 .msg__text {
+  /* Prevent long tokens / code blocks from forcing the bubble to overflow its max-width. */
+  min-width: 0;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: 13px;
   line-height: 1.35;
 }
@@ -1937,6 +1943,7 @@ body::before {
   border: 1px solid var(--stroke-soft);
   background: var(--surface5);
   overflow: auto;
+  max-width: 100%;
 }
 
 .msg__text pre.md-code[data-lang]::before {
