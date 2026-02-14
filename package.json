@@ -5,6 +5,9 @@
   "productName": "Agent Heaven",
   "description": "Electron UI that spawns Codex + Claude Code CLI agents as cards and streams output.",
   "license": "MIT",
+  "engines": {
+    "node": "22.x"
+  },
   "main": "build/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",

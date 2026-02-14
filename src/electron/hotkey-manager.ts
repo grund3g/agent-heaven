@@ -68,7 +68,10 @@ export class HotkeyManager {
     const kick = () => {
       setTimeout(() => {
         try {
-          void shell.openExternal("wispr-flow://start-hands-free");
+          // Avoid stealing focus away from Agent Heaven. Wispr's output should go into the focused prompt field.
+          void shell
+            .openExternal("wispr-flow://start-hands-free", { activate: false })
+            .catch(() => shell.openExternal("wispr-flow://start-hands-free"));
         } catch {
           // ignore
         }

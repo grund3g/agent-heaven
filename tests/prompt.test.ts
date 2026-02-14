@@ -40,6 +40,13 @@ describe("core/prompt", () => {
     expect(guessTitleFromPrompt("Please add a system option to dark/light mode")).toBe("Theme: system option");
   });
 
+  it("drops low-signal intros (EN/DE)", () => {
+    expect(guessTitleFromPrompt("Ich habe jetzt mal versucht, Wispr Flow klaut beim Start den Fokus")).toBe(
+      "Wispr Flow klaut beim Start den Fokus"
+    );
+    expect(guessTitleFromPrompt("I just tried, the card title is useless")).toBe("the card title is useless");
+  });
+
   it("derives display titles from earliest meaningful prompt", () => {
     const job = {
       title: "Fallback title",

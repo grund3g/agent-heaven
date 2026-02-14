@@ -30,7 +30,7 @@ Agent Heaven is a local Electron desktop app that spawns AI coding agents (OpenA
 ### Requirements
 
 - `codex` (OpenAI Codex CLI) and/or `claude` (Claude Code CLI) installed and authenticated.
-- For running from source: Node.js + npm.
+- For running from source: Node.js 22 + npm.
 
 ## Quick start
 
@@ -68,7 +68,7 @@ Notes:
 
 - If you distribute unsigned builds, macOS Gatekeeper will likely block the first launch. Recipients can right-click the app -> Open (or allow it via System Settings -> Privacy & Security).
 - For smooth distribution to others, you typically need code signing + notarization (Apple Developer ID).
-- If the app can't find `codex` or `claude` (common when launching packaged apps from Finder), set Settings -> Codex path / Claude path to the full binary path.
+- If the app can't find `codex` or `claude` (common when launching packaged apps from Finder), set Settings -> Codex path / Claude path to the full binary path (Claude local installer is typically `~/.claude/local/claude`).
 
 ## How it works (short)
 

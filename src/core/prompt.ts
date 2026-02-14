@@ -73,6 +73,37 @@ function topicTitleFromPromptSummary(summary: string): string {
   return "";
 }
 
+function looksLikeLowSignalIntro(s: string): boolean {
+  const t = oneLine(s).toLowerCase();
+  if (!t) return false;
+  // EN: "I tried/attempted/tested …"
+  if (/^(i\s+)?(have\s+)?(now\s+|just\s+)?(tried|attempted|tested)\b/.test(t)) return true;
+  // DE: "Ich hab(e) jetzt mal versucht/probiert/getestet …"
+  if (/^(ich\s+)?hab(e)?\s+(jetzt\s+)?(mal\s+)?(versucht|probiert|getestet|gecheckt|gepr\u00fcft)\b/.test(t)) return true;
+  return false;
+}
+
+function stripLowSignalLeadIn(s: string): string {
+  let t = String(s || "");
+  t = t.replace(/^(title|titel|summary|zusammenfassung)\s*[:\-]\s*/i, "");
+
+  // Drop common "polite" / "question" prefixes in EN/DE.
+  t = t.replace(/^(please|pls|plz|bitte)\b[\s,:-]*/i, "");
+  t = t.replace(/^(can|could|would|will|may)\s+you\b[\s,:-]*/i, "");
+  t = t.replace(/^(can|could)\s+we\b[\s,:-]*/i, "");
+  t = t.replace(/^(kannst|k\u00f6nntest|k\u00f6nnen)\s+(du|ihr|wir)\b[\s,:-]*/i, "");
+  t = t.replace(/^(kann\s+man)\b[\s,:-]*/i, "");
+  t = t.replace(/^(das\s+bitte)\b[\s,:-]*/i, "");
+
+  // Drop low-signal intros that frequently precede the actual problem statement.
+  t = t.replace(/^(i\s+)?(have\s+)?(now\s+|just\s+)?(tried|attempted|tested)\b[\s,:-]*/i, "");
+  t = t.replace(/^(ich\s+)?hab(e)?\s+(jetzt\s+)?(mal\s+)?(versucht|probiert|getestet|gecheckt|gepr\u00fcft)\b[\s,:-]*/i, "");
+
+  // Drop hedge words that rarely help as a title.
+  t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\b[\s,:-]*/i, "");
+  return t;
+}
+
 function compactTitleFromPromptSummary(summary: string): string {
   const s = oneLine(summary);
   if (!s) return "";
@@ -84,22 +115,16 @@ function compactTitleFromPromptSummary(summary: string): string {
   }
 
   // Fallback: keep it readable, but drop obvious filler.
-  let t = s;
+  let t = stripLowSignalLeadIn(s);
 
   // Common complaints often add a second clause after a comma.
   const commaIdx = t.indexOf(",");
   if (commaIdx > 12) {
     const head = t.slice(0, commaIdx).trim();
-    if (head.length >= 8) t = head;
+    const tail = t.slice(commaIdx + 1).trim();
+    if (tail && looksLikeLowSignalIntro(head)) t = tail;
+    else if (head.length >= 8) t = head;
   }
-
-  // Drop common "polite" / "question" prefixes in EN/DE.
-  t = t.replace(/^(please|pls|plz|bitte)\b[\s,:-]*/i, "");
-  t = t.replace(/^(can|could|would|will|may)\s+you\b[\s,:-]*/i, "");
-  t = t.replace(/^(can|could)\s+we\b[\s,:-]*/i, "");
-  t = t.replace(/^(kannst|k\u00f6nntest|k\u00f6nnen)\s+(du|ihr|wir)\b[\s,:-]*/i, "");
-  t = t.replace(/^(kann\s+man)\b[\s,:-]*/i, "");
-  t = t.replace(/^(das\s+bitte)\b[\s,:-]*/i, "");
 
   t = t.replace(/[!?]+$/, "");
   t = oneLine(t);

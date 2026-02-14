@@ -1,5 +1,8 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
 import { guessTitleFromPrompt, promptSummary } from "../core/prompt";
 import { addUsageTotals } from "../core/usage";
@@ -171,7 +174,28 @@ export class JobsManager {
     const settings = this.store.getSettings();
     const claude = this.getClaudeSettingsFrom(settings);
     const p = String((claude as any).path || "").trim();
-    return p.length > 0 ? p : "claude";
+    if (p.length > 0) return p;
+
+    // Prefer the Claude Code local installer path if present.
+    // This avoids PATH issues on macOS (Finder-launched apps) and dodges stale global npm installs.
+    const local = this.getDefaultClaudeLocalInstallerPath();
+    if (local) return local;
+
+    return "claude";
+  }
+
+  private getDefaultClaudeLocalInstallerPath(): string {
+    try {
+      const home = os.homedir();
+      if (!home) return "";
+      const p =
+        process.platform === "win32"
+          ? path.join(home, ".claude", "local", "claude.exe")
+          : path.join(home, ".claude", "local", "claude");
+      return fs.existsSync(p) ? p : "";
+    } catch {
+      return "";
+    }
   }
 
   private normalizeAgentKey(value: unknown): "codex" | "claude" {
