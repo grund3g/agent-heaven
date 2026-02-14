@@ -349,6 +349,182 @@ export class JobsManager {
     return promptNeedsAttentionHeuristic(summary || promptText);
   }
 
+  private updateQueuedMeta(job: Job) {
+    const q = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
+    job.queuedPrompts = q;
+    this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { queuedPrompts: q, queuedCount: q.length } });
+    this.markJobDirty(job.id);
+  }
+
+  private tryPersistJobNow(job: Job) {
+    try {
+      this.history.save(snapshotJob(job));
+      this.dirtyJobIds.delete(job.id);
+    } catch {
+      // ignore
+    }
+  }
+
+  private canStartNextQueuedPrompt(job: Job): { ok: true } | { ok: false; error: string } {
+    if (!job) return { ok: false, error: "Unknown job" };
+    if (this.procs.has(job.id)) return { ok: false, error: "Job is running" };
+    if (!Array.isArray(job.queuedPrompts) || job.queuedPrompts.length === 0) return { ok: false, error: "No queued prompts" };
+    if (!job.threadId) return { ok: false, error: "No thread id for this job yet" };
+    const agent = this.normalizeAgentKey(job.agent);
+    if (agent === "claude" && !this.runClaudeResume) return { ok: false, error: "Claude runner not configured" };
+    return { ok: true };
+  }
+
+  private startNextQueuedPrompt(jobId: string): { ok: true } | { ok: false; error: string } {
+    const job = this.jobs.get(jobId);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const can = this.canStartNextQueuedPrompt(job);
+    if (!can.ok) return can;
+
+    const next = job.queuedPrompts[0];
+    if (!next) return { ok: false, error: "No queued prompts" };
+
+    const settings = this.store.getSettings();
+    const codexSettings = this.getCodexSettingsFrom(settings);
+    const claudeSettings = this.getClaudeSettingsFrom(settings);
+    const agent = this.normalizeAgentKey(job.agent);
+
+    let model =
+      (job.model ||
+        (agent === "claude" ? String((claudeSettings as any).model || "") : String(codexSettings.model || settings.agentModel || "")) ||
+        "").trim();
+    if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
+
+    const ts = new Date().toISOString();
+    this.setJobStatus(jobId, "running", { startedAt: ts, finishedAt: "", exitCode: null });
+
+    let child: ChildProcess;
+    try {
+      if (agent === "claude") {
+        const claudePath = this.getClaudePath();
+        child = this.runClaudeResume!({
+          claudePath,
+          settings: claudeSettings,
+          cwd: job.projectPath || process.cwd(),
+          sessionId: job.threadId,
+          model,
+          prompt: next.text,
+          onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
+        });
+      } else {
+        const codexPath = this.getCodexPath();
+        child = this.runCodexResume({
+          codexPath,
+          settings: codexSettings,
+          cwd: job.projectPath || process.cwd(),
+          threadId: job.threadId,
+          model,
+          prompt: next.text,
+          images: next.images || [],
+          onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
+        });
+      }
+    } catch (err: any) {
+      const finishedAt = new Date().toISOString();
+      this.appendLog(job, {
+        ts: finishedAt,
+        stream: "stderr",
+        kind: "log",
+        text: String(err && err.message ? err.message : err)
+      });
+      this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+      this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+
+    this.procs.set(jobId, child);
+    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, err));
+    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, code, signal));
+
+    // Now that the child process is successfully running, dequeue and record the prompt in history.
+    job.queuedPrompts.shift();
+    this.updateQueuedMeta(job);
+
+    job.prompts.push({ ts, text: next.text, images: next.images || [] });
+    const meta = snapshotJobMeta(job);
+    this.sendJobEvent({ jobId, kind: "meta", patch: { prompts: job.prompts, promptPreview: meta.promptPreview } });
+    this.markJobDirty(jobId);
+    this.tryPersistJobNow(job);
+
+    return { ok: true };
+  }
+
+  private handleChildError(jobId: string, err: NodeJS.ErrnoException) {
+    this.procs.delete(jobId);
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    const finishedAt = new Date().toISOString();
+    job.finishedAt = finishedAt;
+    job.exitCode = -1;
+
+    const agent = this.normalizeAgentKey(job.agent);
+    const hint =
+      err && err.code === "ENOENT"
+        ? agent === "claude"
+          ? "claude binary not found. Set Settings -> Claude path (or launch the app from a shell with claude on PATH)."
+          : "codex binary not found. Set Settings -> Codex path (or launch the app from a shell with codex on PATH)."
+        : agent === "claude"
+          ? "failed to start claude process."
+          : "failed to start codex process.";
+
+    this.appendLog(job, {
+      ts: finishedAt,
+      stream: "stderr",
+      kind: "log",
+      text: `ERROR: ${hint} ${String(err && err.message ? err.message : err)}`
+    });
+    this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+
+    this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+  }
+
+  private handleChildClose(jobId: string, code: any, signal: any) {
+    this.procs.delete(jobId);
+    const finishedAt = new Date().toISOString();
+
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+    job.finishedAt = finishedAt;
+    job.exitCode = typeof code === "number" ? code : null;
+
+    const hasQueued = Array.isArray(job.queuedPrompts) && job.queuedPrompts.length > 0;
+    const canAutoContinue = !signal && code === 0 && hasQueued && !!job.threadId;
+    if (canAutoContinue) {
+      const started = this.startNextQueuedPrompt(jobId);
+      if (started.ok) return;
+      const errMsg = "error" in started ? started.error : "Unknown error";
+      // Fall through: if we couldn't start the queued prompt, report failure and keep the queue intact.
+      this.appendLog(job, {
+        ts: finishedAt,
+        stream: "stderr",
+        kind: "log",
+        text: `ERROR: Could not continue queued follow-ups: ${errMsg}`
+      });
+      this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+      this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+      return;
+    }
+
+    const wantsAttention = this.wantsAttentionOnSuccess(job);
+
+    if (signal) {
+      this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
+    } else if (code !== 0) {
+      this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
+    } else if (wantsAttention) {
+      this.setJobStatus(jobId, "needs_attention", { finishedAt, exitCode: code });
+    } else {
+      this.setJobStatus(jobId, "done", { finishedAt, exitCode: code });
+    }
+  }
+
   start(params: any) {
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
@@ -409,6 +585,7 @@ export class JobsManager {
       model,
       threadId,
       prompts: [{ ts: createdAt, text: prompt, images }],
+      queuedPrompts: [],
       messages: [],
       logs: [],
       usage: null,
@@ -466,53 +643,8 @@ export class JobsManager {
 
     this.procs.set(jobId, child);
 
-    child.on("error", (err: NodeJS.ErrnoException) => {
-      this.procs.delete(jobId);
-      const finishedAt = new Date().toISOString();
-      job.finishedAt = finishedAt;
-      job.exitCode = -1;
-
-      const hint =
-        err && err.code === "ENOENT"
-          ? agent === "claude"
-            ? "claude binary not found. Set Settings -> Claude path (or launch the app from a shell with claude on PATH)."
-            : "codex binary not found. Set Settings -> Codex path (or launch the app from a shell with codex on PATH)."
-          : agent === "claude"
-            ? "failed to start claude process."
-            : "failed to start codex process.";
-
-      this.appendLog(job, {
-        ts: finishedAt,
-        stream: "stderr",
-        kind: "log",
-        text: `ERROR: ${hint} ${String(err && err.message ? err.message : err)}`
-      });
-      this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
-
-      this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
-    });
-
-    child.on("close", (code: any, signal: any) => {
-      this.procs.delete(jobId);
-      const finishedAt = new Date().toISOString();
-
-      const j = this.jobs.get(jobId);
-      if (!j) return;
-      j.finishedAt = finishedAt;
-      j.exitCode = typeof code === "number" ? code : null;
-
-      const wantsAttention = this.wantsAttentionOnSuccess(j);
-
-      if (signal) {
-        this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
-      } else if (code !== 0) {
-        this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
-      } else if (wantsAttention) {
-        this.setJobStatus(jobId, "needs_attention", { finishedAt, exitCode: code });
-      } else {
-        this.setJobStatus(jobId, "done", { finishedAt, exitCode: code });
-      }
-    });
+    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, err));
+    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, code, signal));
 
     return { ok: true, jobId };
   }
@@ -521,8 +653,7 @@ export class JobsManager {
     const jobId = params && params.jobId ? String(params.jobId) : "";
     const job = this.jobs.get(jobId);
     if (!job) return { ok: false, error: "Unknown job" };
-    if (job.status === "running") return { ok: false, error: "Job is running" };
-    if (!job.threadId) return { ok: false, error: "No thread id for this job yet" };
+    const isRunning = this.procs.has(jobId) || job.status === "running";
 
     // Resuming a job should bring it back onto the board so it's visible while running.
     if (job.box && job.box !== "board") {
@@ -538,12 +669,6 @@ export class JobsManager {
       this.markJobDirty(jobId);
     }
 
-    const settings = this.store.getSettings();
-    const codexSettings = this.getCodexSettingsFrom(settings);
-    const claudeSettings = this.getClaudeSettingsFrom(settings);
-    const agent = this.normalizeAgentKey(job.agent);
-    let model = (job.model || (agent === "claude" ? String((claudeSettings as any).model || "") : String(codexSettings.model || settings.agentModel || "")) || "").trim();
-    if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
     const text = String(params && params.prompt ? params.prompt : "").trim();
     if (!text) return { ok: false, error: "Prompt is empty" };
 
@@ -551,93 +676,21 @@ export class JobsManager {
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
 
-    const ts = new Date().toISOString();
-    job.prompts.push({ ts, text, images });
-    const meta = snapshotJobMeta(job);
-    this.sendJobEvent({ jobId, kind: "meta", patch: { prompts: job.prompts, promptPreview: meta.promptPreview } });
-    this.markJobDirty(jobId);
-    try {
-      this.history.save(snapshotJob(job));
-      this.dirtyJobIds.delete(jobId);
-    } catch {
-      // ignore
-    }
+    // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
+    // When idle, a thread id is required to resume.
+    if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
 
-    if (agent === "claude" && !this.runClaudeResume) return { ok: false, error: "Claude runner not configured" };
+    const queuedAt = new Date().toISOString();
+    job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
+    job.queuedPrompts.push({ ts: queuedAt, text, images });
+    this.updateQueuedMeta(job);
+    this.tryPersistJobNow(job);
 
-    this.setJobStatus(jobId, "running", { startedAt: ts, finishedAt: "" });
+    // If a process is already running, the prompt stays queued until the current run finishes.
+    if (this.procs.has(jobId)) return { ok: true };
 
-    let child: ChildProcess;
-    if (agent === "claude") {
-      const claudePath = this.getClaudePath();
-      child = this.runClaudeResume!({
-        claudePath,
-        settings: claudeSettings,
-        cwd: job.projectPath || process.cwd(),
-        sessionId: job.threadId,
-        model,
-        prompt: text,
-        onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
-      });
-    } else {
-      const codexPath = this.getCodexPath();
-      child = this.runCodexResume({
-        codexPath,
-        settings: codexSettings,
-        cwd: job.projectPath || process.cwd(),
-        threadId: job.threadId,
-        model,
-        prompt: text,
-        images,
-        onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
-      });
-    }
-    this.procs.set(jobId, child);
-
-    child.on("error", (err: NodeJS.ErrnoException) => {
-      this.procs.delete(jobId);
-      const finishedAt = new Date().toISOString();
-      job.finishedAt = finishedAt;
-      job.exitCode = -1;
-
-      const hint =
-        err && err.code === "ENOENT"
-          ? agent === "claude"
-            ? "claude binary not found. Set Settings -> Claude path (or launch the app from a shell with claude on PATH)."
-            : "codex binary not found. Set Settings -> Codex path (or launch the app from a shell with codex on PATH)."
-          : agent === "claude"
-            ? "failed to start claude process."
-            : "failed to start codex process.";
-
-      this.appendLog(job, {
-        ts: finishedAt,
-        stream: "stderr",
-        kind: "log",
-        text: `ERROR: ${hint} ${String(err && err.message ? err.message : err)}`
-      });
-      this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
-
-      this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
-    });
-
-    child.on("close", (code: any, signal: any) => {
-      this.procs.delete(jobId);
-      const finishedAt = new Date().toISOString();
-      job.finishedAt = finishedAt;
-      job.exitCode = typeof code === "number" ? code : null;
-
-      const wantsAttention = this.wantsAttentionOnSuccess(job);
-
-      if (signal) {
-        this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
-      } else if (code !== 0) {
-        this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
-      } else if (wantsAttention) {
-        this.setJobStatus(jobId, "needs_attention", { finishedAt, exitCode: code });
-      } else {
-        this.setJobStatus(jobId, "done", { finishedAt, exitCode: code });
-      }
-    });
+    const started = this.startNextQueuedPrompt(jobId);
+    if (!started.ok) return started;
 
     return { ok: true };
   }

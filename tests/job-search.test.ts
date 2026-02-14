@@ -20,6 +20,7 @@ function mkJob(patch: Partial<Job>): Job {
     model: "gpt",
     threadId: "",
     prompts: [],
+    queuedPrompts: [],
     messages: [],
     logs: [],
     usage: null,
@@ -39,12 +40,14 @@ describe("core/job-search", () => {
     const jobs = [
       mkJob({ id: "j1", title: "Fix store migration" }),
       mkJob({ id: "j2", prompts: [{ ts: "t1", text: "Hello World", images: [] }] as any }),
-      mkJob({ id: "j3", messages: [{ ts: "t1", role: "assistant", text: "Stack trace here" }] as any })
+      mkJob({ id: "j3", messages: [{ ts: "t1", role: "assistant", text: "Stack trace here" }] as any }),
+      mkJob({ id: "j4", queuedPrompts: [{ ts: "t1", text: "Queued follow-up", images: [] }] as any })
     ];
 
     expect(searchJobs(jobs, "migration").jobIds).toEqual(["j1"]);
     expect(searchJobs(jobs, "hello").jobIds).toEqual(["j2"]);
     expect(searchJobs(jobs, "trace").jobIds).toEqual(["j3"]);
+    expect(searchJobs(jobs, "queued").jobIds).toEqual(["j4"]);
   });
 
   it("includes or excludes logs based on opts.includeLogs", () => {
@@ -90,4 +93,3 @@ describe("core/job-search", () => {
     expect(res.truncated).toBe(true);
   });
 });
-

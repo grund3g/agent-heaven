@@ -31,6 +31,7 @@ describe("core/jobs", () => {
       model: "gpt",
       threadId: "t1",
       prompts: [{ ts: "t0", text: "Fix store migration bug", images: [] }],
+      queuedPrompts: [],
       messages: [{ ts: "t1", role: "assistant", text: "All set." }],
       logs: [{ ts: "t1", stream: "stdout", kind: "log", text: "hello" }],
       usage: null,
@@ -44,4 +45,3 @@ describe("core/jobs", () => {
     expect(meta.previewText).toBe("All set.");
   });
 });
-

@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsUpdate: (patch) => ipcRenderer.invoke("settings:update", patch),
 
+  shellOpenExternal: async (url) => {
+    await invokeOk("shell:openExternal", url);
+    return true;
+  },
+
   codexListModels: async () => {
     const res = await invokeOk("codex:listModels");
     return Array.isArray(res.models) ? res.models : [];

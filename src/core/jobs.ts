@@ -28,6 +28,7 @@ export type Job = {
   model: string;
   threadId: string;
   prompts: JobPrompt[];
+  queuedPrompts: JobPrompt[];
   messages: JobMessage[];
   logs: JobLogEntry[];
   usage: any;
@@ -70,6 +71,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   out.threadId = typeof out.threadId === "string" ? out.threadId : "";
 
   out.prompts = Array.isArray(out.prompts) ? out.prompts : [];
+  out.queuedPrompts = Array.isArray(out.queuedPrompts) ? out.queuedPrompts : [];
   out.messages = Array.isArray(out.messages) ? out.messages : [];
   out.logs = Array.isArray(out.logs) ? out.logs : [];
 
@@ -99,6 +101,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   // Keep caps consistent with in-memory logic.
   if (out.logs.length > 2000) out.logs.splice(0, out.logs.length - 2000);
   if (out.messages.length > 200) out.messages.splice(0, out.messages.length - 200);
+  if (out.queuedPrompts.length > 50) out.queuedPrompts.splice(0, out.queuedPrompts.length - 50);
 
   return out as Job;
 }
@@ -122,6 +125,7 @@ export function snapshotJob(job: Job): Job {
     model,
     threadId,
     prompts,
+    queuedPrompts,
     messages,
     logs,
     usage,
@@ -145,6 +149,7 @@ export function snapshotJob(job: Job): Job {
     model,
     threadId,
     prompts,
+    queuedPrompts,
     messages,
     logs,
     usage,
@@ -234,6 +239,7 @@ export function snapshotJobMeta(job: Job): any {
     agent,
     model,
     threadId,
+    queuedCount: Array.isArray(job.queuedPrompts) ? job.queuedPrompts.length : 0,
     usage,
     usageTotal,
     exitCode,

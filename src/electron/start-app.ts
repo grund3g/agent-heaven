@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { app, BrowserWindow, ipcMain, dialog, globalShortcut, nativeTheme, screen } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, globalShortcut, nativeTheme, screen, shell } from "electron";
 import type { OpenDialogOptions } from "electron";
 import { Store } from "../store";
 import { JobHistory } from "../job-history";
@@ -150,6 +150,27 @@ export async function startApp(): Promise<void> {
     applyRuntimeSettings(next);
     sendSettingsChanged(next);
     return next;
+  });
+
+  ipcMain.handle("shell:openExternal", async (_evt, rawUrl) => {
+    const s = String(rawUrl || "").trim();
+    if (!s) return { ok: false, error: "Missing url" };
+
+    let u: URL;
+    try {
+      u = new URL(s);
+    } catch {
+      return { ok: false, error: "Invalid url" };
+    }
+
+    if (u.protocol !== "https:" && u.protocol !== "http:") return { ok: false, error: "Blocked url protocol" };
+
+    try {
+      await shell.openExternal(u.toString());
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
   });
 
   ipcMain.handle("codex:listModels", async () => {

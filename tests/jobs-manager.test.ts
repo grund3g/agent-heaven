@@ -115,6 +115,69 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("queues follow-ups while running and drains them after a successful run", () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const resumeChild = new FakeChild();
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return resumeChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+
+    // While running, send should queue (not error).
+    expect(jm.send({ jobId: "job1", prompt: "queued follow up", images: [] })).toEqual({ ok: true });
+    const snapQueued = jm.getJob("job1") as any;
+    expect(snapQueued.job.status).toBe("running");
+    expect(Array.isArray(snapQueued.job.queuedPrompts)).toBe(true);
+    expect(snapQueued.job.queuedPrompts.length).toBe(1);
+
+    // First run completes successfully -> queued prompt auto-resumes.
+    execChild.emit("close", 0, null);
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.threadId).toBe("t123");
+
+    const snapRunningAgain = jm.getJob("job1") as any;
+    expect(snapRunningAgain.job.status).toBe("running");
+    expect(snapRunningAgain.job.queuedPrompts.length).toBe(0);
+    expect(snapRunningAgain.job.prompts.length).toBe(2);
+
+    // Second run completes -> job is done.
+    resumeChild.emit("close", 0, null);
+    const snapDone = jm.getJob("job1") as any;
+    expect(snapDone.job.status).toBe("done");
+  });
+
   it("starts claude jobs, handles system init, and can resume", () => {
     const events: any[] = [];
 

@@ -51,6 +51,17 @@ function jobHasToken(job: Job, tokenLower: string, includeLogs: boolean): boolea
     }
   }
 
+  // Queued prompts (follow-ups queued while the job is running).
+  for (const p of job.queuedPrompts || []) {
+    if (!p) continue;
+    if (includesToken((p as any).text, tokenLower)) return true;
+    if ((p as any).images) {
+      for (const img of (p as any).images) {
+        if (includesToken(img, tokenLower)) return true;
+      }
+    }
+  }
+
   // Assistant/user messages (agent output + user follow-ups).
   for (const m of job.messages || []) {
     if (!m) continue;

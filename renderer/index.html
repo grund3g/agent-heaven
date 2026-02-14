@@ -213,7 +213,7 @@
 	          <div id="jobDialogLive" class="panel panel--terminal"></div>
 	          <div id="jobDialogLogs" class="panel panel--terminal"></div>
 	        </div>
-        <div class="dialog__footer">
+	        <div class="dialog__footer">
 	          <div class="followup">
 	            <div id="followupDropwrap" class="dropwrap dropwrap--sm">
 	              <textarea id="followupInput" class="textarea textarea--sm" rows="2" placeholder="Follow-up… (⌘+Enter)"></textarea>
@@ -222,6 +222,7 @@
 	            <div id="followupAttachments" class="attachments attachments--sm"></div>
 	          </div>
 	          <div class="dialog__actions">
+	            <button id="rerunJobBtn" class="btn btn--ghost" type="button">Rerun…</button>
 	            <button id="jobRestoreBtn" class="btn btn--ghost" type="button" hidden>Restore</button>
 	            <button id="jobArchiveBtn" class="btn btn--ghost" type="button" hidden>Archive</button>
 	            <button id="jobTrashBtn" class="btn btn--danger" type="button" hidden>Trash</button>
@@ -232,6 +233,44 @@
         </div>
       </div>
     </dialog>
+
+	    <dialog id="rerunDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--rerun">
+	        <div class="dialog__header">
+	          <div class="dialog__title">Rerun</div>
+	          <button id="rerunDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__meta" id="rerunDialogMeta"></div>
+	        <div class="settings">
+	          <div class="settings__section">
+	            <label class="field">
+	              <div class="field__label">Agent</div>
+	              <select id="rerunAgentSelect" class="select" title="Agent">
+	                <option value="codex">Codex</option>
+	                <option value="claude">Claude</option>
+	              </select>
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Model override (optional)</div>
+	              <input id="rerunModelInput" class="input" placeholder="Model override (optional)" />
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Prompt source</div>
+	              <select id="rerunPromptSelect" class="select" title="Prompt source">
+	                <option value="all">All prompts (combined)</option>
+	                <option value="last">Last prompt</option>
+	                <option value="first">First prompt</option>
+	              </select>
+	            </label>
+	          </div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="rerunStartBtn" class="btn btn--primary" type="button">Start rerun</button>
+	          </div>
+	        </div>
+	      </div>
+	    </dialog>
 
 		    <dialog id="settingsDialog" class="dialog">
 		      <div class="dialog__inner dialog__inner--settings">
@@ -352,16 +391,16 @@
 		              <div class="field__label">Logo variant (test)</div>
 		              <div class="field__controls">
 		                <select id="settingsLogoVariant" class="select" aria-label="Logo variant">
-		                  <option value="v1">V1: Halo</option>
-		                  <option value="v2">V2: Tilted halo</option>
-		                  <option value="v3">V3: Spark</option>
-		                  <option value="v4">V4: Wings</option>
-		                  <option value="v5">V5: Orbit</option>
-		                  <option value="v6">V6: Cloud base</option>
-		                  <option value="v7">V7: Circle badge</option>
-		                  <option value="v8">V8: Diamond badge</option>
-		                  <option value="v9">V9: Organizer</option>
-		                  <option value="v10">V10: Minimal ring</option>
+		                  <option value="v1">V1: Grid</option>
+		                  <option value="v2">V2: Stack</option>
+		                  <option value="v3">V3: Tiles</option>
+		                  <option value="v4">V4: Dots</option>
+		                  <option value="v5">V5: Layers</option>
+		                  <option value="v6">V6: Kanban</option>
+		                  <option value="v7">V7: Nodes</option>
+		                  <option value="v8">V8: Bars</option>
+		                  <option value="v9">V9: Mosaic</option>
+		                  <option value="v10">V10: Shift</option>
 		                </select>
 		                <button id="settingsLogoVariantPrev" class="btn btn--ghost" type="button" aria-label="Previous logo variant" title="Previous logo variant">
 		                  Prev
@@ -495,6 +534,7 @@
 	    <div id="cardContextMenu" class="ctxmenu" hidden role="menu" aria-label="Job actions">
 	      <button type="button" class="ctxmenu__item" data-ctx-action="open">Open</button>
 	      <div class="ctxmenu__sep" data-ctx-sep="main" role="separator"></div>
+	      <button type="button" class="ctxmenu__item" data-ctx-action="rerun" hidden>Rerun…</button>
 	      <button type="button" class="ctxmenu__item" data-ctx-action="stop" hidden>Stop</button>
 	      <button type="button" class="ctxmenu__item" data-ctx-action="restore" hidden>Restore</button>
 	      <button type="button" class="ctxmenu__item" data-ctx-action="archive" hidden>Archive</button>

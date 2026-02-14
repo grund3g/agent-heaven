@@ -42,11 +42,20 @@ const els = {
   followupBadge: document.getElementById("followupBadge"),
   followupAttachments: document.getElementById("followupAttachments"),
   sendFollowupBtn: document.getElementById("sendFollowupBtn"),
+  rerunJobBtn: document.getElementById("rerunJobBtn"),
   cancelJobBtn: document.getElementById("cancelJobBtn"),
   jobRestoreBtn: document.getElementById("jobRestoreBtn"),
   jobArchiveBtn: document.getElementById("jobArchiveBtn"),
   jobTrashBtn: document.getElementById("jobTrashBtn"),
   jobDeleteBtn: document.getElementById("jobDeleteBtn"),
+
+  rerunDialog: document.getElementById("rerunDialog"),
+  rerunDialogClose: document.getElementById("rerunDialogClose"),
+  rerunDialogMeta: document.getElementById("rerunDialogMeta"),
+  rerunAgentSelect: document.getElementById("rerunAgentSelect"),
+  rerunModelInput: document.getElementById("rerunModelInput"),
+  rerunPromptSelect: document.getElementById("rerunPromptSelect"),
+  rerunStartBtn: document.getElementById("rerunStartBtn"),
 
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
@@ -110,6 +119,7 @@ const state = {
   projects: [],
   jobs: new Map(),
   selectedJobId: null,
+  rerunSourceJobId: null,
   activeTab: "chat",
   cardEls: new Map(), // jobId -> HTMLElement
   view: "board", // board | archive | trash
@@ -153,163 +163,45 @@ applySidebarCollapsed(getStoredSidebarCollapsed());
 const THEMES = ["heaven", "nord", "gruvbox", "solarized", "dracula", "ocean"];
 const COLOR_SCHEMES = ["system", "dark", "light"];
 const SOUND_PRESETS = ["classic", "chime", "pop", "bell", "arcade", "goat"];
-const LOGO_VARIANT_ORDER = ["v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10"];
+const LOGO_VARIANT_ORDER = ["v1", "v2", "v3", "v4", "v5"];
+const GRID_SVG = `
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="9" height="9" rx="2" stroke-width="2.0" />
+    <rect x="19" y="4" width="9" height="9" rx="2" stroke-width="2.0" opacity="0.50" />
+    <rect x="4" y="19" width="9" height="9" rx="2" stroke-width="2.0" opacity="0.50" />
+    <rect x="19" y="19" width="9" height="9" rx="2" stroke-width="2.0" opacity="0.30" />
+  </g>
+`.trim();
 const LOGO_VARIANTS = {
   v1: {
-    label: "Halo",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.8" rx="8.2" ry="3.4" stroke-width="1.6" opacity="0.40" />
-        <ellipse cx="16" cy="7.8" rx="6.0" ry="2.2" stroke-width="1.0" opacity="0.22" />
-        <path d="M16 4.4v-1" stroke-width="1.4" opacity="0.30" />
-      </g>
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.80" />
-      <circle cx="16" cy="9.4" r="2.6" fill="currentColor" opacity="0.10" />
-    `.trim()
+    label: "Serif",
+    svg: GRID_SVG,
+    font: '"New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif',
+    weight: 800
   },
   v2: {
-    label: "Tilted halo",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.6" rx="8.6" ry="3.2" stroke-width="1.6" opacity="0.38" transform="rotate(-18 16 7.6)" />
-        <ellipse cx="16" cy="7.6" rx="6.2" ry="2.0" stroke-width="0.9" opacity="0.18" transform="rotate(-18 16 7.6)" />
-        <circle cx="23.8" cy="6.2" r="0.7" fill="currentColor" opacity="0.40" />
-        <circle cx="8.4" cy="9.8" r="0.5" fill="currentColor" opacity="0.28" />
-      </g>
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
-    `.trim()
+    label: "Sans",
+    svg: GRID_SVG,
+    font: '"SF Pro Display", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif',
+    weight: 700
   },
   v3: {
-    label: "Spark",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.8" rx="7.6" ry="3.1" stroke-width="1.5" opacity="0.40" />
-        <path d="M25.5 4.5l-1.2 2.8" stroke-width="1.6" opacity="0.55" />
-        <path d="M27.2 6.4l-2.8 1.0" stroke-width="1.6" opacity="0.55" />
-        <path d="M28.0 3.2l-0.6 1.6" stroke-width="1.2" opacity="0.30" />
-        <path d="M29 4.4l-1.6 0.4" stroke-width="1.2" opacity="0.30" />
-        <path d="M5.8 5.8l1.0 1.4" stroke-width="1.0" opacity="0.25" />
-        <path d="M5.0 7.0l1.6 0.2" stroke-width="1.0" opacity="0.25" />
-      </g>
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
-      <circle cx="25.0" cy="5.2" r="1.0" fill="currentColor" opacity="0.50" />
-    `.trim()
+    label: "Mono",
+    svg: GRID_SVG,
+    font: 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    weight: 600
   },
   v4: {
-    label: "Wings",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.8" rx="7.4" ry="3.0" stroke-width="1.4" opacity="0.38" />
-        <path d="M9.5 17.5C7.5 15.8 4.8 15 2.5 15.4" stroke-width="1.6" opacity="0.45" />
-        <path d="M9.8 19.8C7.2 19.0 4.5 19.2 2.8 20.2" stroke-width="1.4" opacity="0.32" />
-        <path d="M10.2 16.0C8.8 13.6 6.0 12.2 3.5 12.8" stroke-width="1.2" opacity="0.22" />
-        <path d="M22.5 17.5C24.5 15.8 27.2 15 29.5 15.4" stroke-width="1.6" opacity="0.45" />
-        <path d="M22.2 19.8C24.8 19.0 27.5 19.2 29.2 20.2" stroke-width="1.4" opacity="0.32" />
-        <path d="M21.8 16.0C23.2 13.6 26.0 12.2 28.5 12.8" stroke-width="1.2" opacity="0.22" />
-      </g>
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
-    `.trim()
+    label: "Round",
+    svg: GRID_SVG,
+    font: '"Avenir Next", "Nunito", "Quicksand", Avenir, "Century Gothic", sans-serif',
+    weight: 700
   },
   v5: {
-    label: "Orbit",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <ellipse cx="16" cy="15" rx="13.5" ry="5.0" stroke-width="1.2" opacity="0.28" transform="rotate(-28 16 15)" />
-        <ellipse cx="16" cy="15" rx="13.5" ry="5.0" stroke-width="0.7" opacity="0.14" transform="rotate(35 16 15)" />
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-      </g>
-      <circle cx="27.2" cy="12.0" r="1.4" fill="currentColor" opacity="0.65" />
-      <circle cx="5.8" cy="19.0" r="0.9" fill="currentColor" opacity="0.35" />
-      <circle cx="22.0" cy="22.5" r="0.6" fill="currentColor" opacity="0.25" />
-      <circle cx="16" cy="9.4" r="1.2" fill="currentColor" opacity="0.60" />
-    `.trim()
-  },
-  v6: {
-    label: "Cloud base",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 23L16 9l6 14" stroke-width="2.3" />
-        <path d="M12.4 18.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.6" rx="7.6" ry="3.0" stroke-width="1.4" opacity="0.38" />
-        <path d="M7.5 25.5Q7.5 22.5 10 22Q10 19.5 13 19.5Q14.5 17.5 16 17.5Q17.5 17.5 19 19.5Q22 19.5 22 22Q24.5 22.5 24.5 25.5" stroke-width="1.4" opacity="0.35" />
-        <path d="M7.5 25.5Q7.5 28 10 28.5h12Q24.5 28 24.5 25.5" stroke-width="1.2" opacity="0.25" />
-      </g>
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
-    `.trim()
-  },
-  v7: {
-    label: "Circle badge",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="16" cy="16" r="14" stroke-width="1.6" opacity="0.25" />
-        <circle cx="16" cy="16" r="12" stroke-width="0.6" opacity="0.12" stroke-dasharray="2.5 3.5" />
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.8" rx="7.4" ry="3.0" stroke-width="1.4" opacity="0.40" />
-      </g>
-      <circle cx="16" cy="2" r="0.8" fill="currentColor" opacity="0.35" />
-      <circle cx="16" cy="30" r="0.8" fill="currentColor" opacity="0.35" />
-      <circle cx="2" cy="16" r="0.8" fill="currentColor" opacity="0.35" />
-      <circle cx="30" cy="16" r="0.8" fill="currentColor" opacity="0.35" />
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
-    `.trim()
-  },
-  v8: {
-    label: "Diamond badge",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 2L30 16L16 30L2 16z" stroke-width="1.4" opacity="0.22" />
-        <path d="M16 5L27 16L16 27L5 16z" stroke-width="0.7" opacity="0.12" />
-        <path d="M2 16h5M25 16h5" stroke-width="0.8" opacity="0.18" />
-        <path d="M16 2v4M16 26v4" stroke-width="0.8" opacity="0.18" />
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <ellipse cx="16" cy="7.8" rx="7.0" ry="2.8" stroke-width="1.3" opacity="0.38" />
-      </g>
-      <circle cx="16" cy="2" r="0.9" fill="currentColor" opacity="0.30" />
-      <circle cx="30" cy="16" r="0.9" fill="currentColor" opacity="0.30" />
-      <circle cx="16" cy="30" r="0.9" fill="currentColor" opacity="0.30" />
-      <circle cx="2" cy="16" r="0.9" fill="currentColor" opacity="0.30" />
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.78" />
-    `.trim()
-  },
-  v9: {
-    label: "Organizer",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 22L16 9l6 13" stroke-width="2.3" />
-        <path d="M12.4 17.5h7.2" stroke-width="2.0" />
-        <path d="M8 24h16" stroke-width="1.6" opacity="0.45" />
-        <path d="M9.5 26.2h13" stroke-width="1.3" opacity="0.35" />
-        <path d="M11 28.4h10" stroke-width="1.0" opacity="0.25" />
-        <path d="M6 24v5.5" stroke-width="0.8" opacity="0.18" />
-        <path d="M26 24v5.5" stroke-width="0.8" opacity="0.18" />
-        <path d="M6 29.5h20" stroke-width="0.8" opacity="0.18" />
-      </g>
-      <circle cx="16" cy="9.4" r="1.3" fill="currentColor" opacity="0.65" />
-    `.trim()
-  },
-  v10: {
-    label: "Minimal ring",
-    svg: `
-      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 24L16 9l6 15" stroke-width="2.3" />
-        <path d="M12.4 19.2h7.2" stroke-width="2.0" />
-        <circle cx="16" cy="8.2" r="6.4" stroke-width="1.4" opacity="0.35" />
-        <circle cx="16" cy="8.2" r="4.2" stroke-width="0.6" opacity="0.15" />
-      </g>
-      <circle cx="16" cy="8.2" r="1.2" fill="currentColor" opacity="0.75" />
-      <circle cx="16" cy="8.2" r="2.4" fill="currentColor" opacity="0.08" />
-    `.trim()
+    label: "System",
+    svg: GRID_SVG,
+    font: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif',
+    weight: 800
   }
 };
 const UI_MODEL_CUSTOM = "__custom__";
@@ -598,6 +490,11 @@ function renderBrandLogo(variant) {
     els.brandLogo.innerHTML = def.svg;
   } catch {
     // ignore
+  }
+  const nameEl = document.querySelector(".brand__name");
+  if (nameEl && def.font) {
+    nameEl.style.fontFamily = def.font;
+    nameEl.style.fontWeight = def.weight || 800;
   }
   appliedLogoVariant = v;
 }
@@ -903,6 +800,14 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
+function sanitizeExternalUrl(rawUrl) {
+  const u = String(rawUrl || "").trim();
+  if (!u) return "";
+  const low = u.toLowerCase();
+  if (low.startsWith("https://") || low.startsWith("http://")) return u;
+  return "";
+}
+
 function applyMarkdownInlineFormatting(escapedText) {
   let s = String(escapedText || "");
   // Bold before italics to support **_both_** patterns.
@@ -912,6 +817,55 @@ function applyMarkdownInlineFormatting(escapedText) {
   // Italics (asterisk). Avoid list bullets by requiring a non-space right after '*'.
   s = s.replaceAll(/\*(\S[\s\S]*?\S)\*/g, "<em>$1</em>");
   return s;
+}
+
+function renderMarkdownInlineTextSafeHtml(text) {
+  const s = String(text || "");
+  if (!s) return "";
+
+  // Support Markdown links: [label](https://example.com)
+  // Keep it strict (http/https) to avoid navigation/XSS issues.
+  const out = [];
+  let i = 0;
+
+  while (i < s.length) {
+    const open = s.indexOf("[", i);
+    if (open === -1) {
+      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i))));
+      break;
+    }
+
+    if (open > i) out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i, open))));
+
+    const close = s.indexOf("]", open + 1);
+    if (close === -1 || s[close + 1] !== "(") {
+      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(open, open + 1))));
+      i = open + 1;
+      continue;
+    }
+
+    const end = s.indexOf(")", close + 2);
+    if (end === -1) {
+      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(open))));
+      break;
+    }
+
+    const label = s.slice(open + 1, close);
+    const urlRaw = s.slice(close + 2, end);
+    const url = sanitizeExternalUrl(urlRaw);
+    if (!url) {
+      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(open, end + 1))));
+      i = end + 1;
+      continue;
+    }
+
+    const labelHtml = applyMarkdownInlineFormatting(escapeHtml(label));
+    const href = escapeHtml(url);
+    out.push(`<a class="md-link" href="${href}" rel="noreferrer noopener">${labelHtml}</a>`);
+    i = end + 1;
+  }
+
+  return out.join("");
 }
 
 function renderMarkdownInlineSafeHtml(text) {
@@ -925,15 +879,15 @@ function renderMarkdownInlineSafeHtml(text) {
   while (i < s.length) {
     const start = s.indexOf("`", i);
     if (start === -1) {
-      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i))));
+      out.push(renderMarkdownInlineTextSafeHtml(s.slice(i)));
       break;
     }
 
-    out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i, start))));
+    out.push(renderMarkdownInlineTextSafeHtml(s.slice(i, start)));
 
     const end = s.indexOf("`", start + 1);
     if (end === -1) {
-      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(start))));
+      out.push(renderMarkdownInlineTextSafeHtml(s.slice(start)));
       break;
     }
 
@@ -948,6 +902,20 @@ function renderMarkdownCodeBlockHtml(code, info) {
   const lang = String(info || "").trim();
   const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
   return `<pre class="md-code"${langAttr}><code>${escapeHtml(code)}</code></pre>`;
+}
+
+function renderMarkdownLineSafeHtml(line) {
+  const t = String(line || "");
+
+  // Headings (# ... ###### ...)
+  const m = t.match(/^(#{1,6})\s+(.+)$/);
+  if (m) {
+    const lvl = m[1].length;
+    const inner = renderMarkdownInlineSafeHtml(m[2]);
+    return `<span class="md-heading md-h${lvl}">${inner}</span>`;
+  }
+
+  return renderMarkdownInlineSafeHtml(t);
 }
 
 function renderMarkdownSafeHtml(markdownText) {
@@ -965,7 +933,7 @@ function renderMarkdownSafeHtml(markdownText) {
 
   const flushBuf = () => {
     if (buf.length === 0) return;
-    out.push(renderMarkdownInlineSafeHtml(buf.join("\n")));
+    out.push(buf.map(renderMarkdownLineSafeHtml).join("\n"));
     buf = [];
   };
 
@@ -3526,19 +3494,44 @@ function setHidden(el, hidden) {
 function updateJobDialogActions(job) {
   const b = jobBox(job);
   const running = job && job.status === "running";
+  const hasThreadId = job && typeof job.threadId === "string" && job.threadId.trim().length > 0;
+
+  // Rerun only makes sense when the current run is not actively running.
+  setHidden(els.rerunJobBtn, running);
 
   // Stop only makes sense while running.
   setHidden(els.cancelJobBtn, !running);
 
-  // Follow-ups are disabled while running; and disabled for trashed jobs until restored.
-  const canSend = !running && b !== "trash";
+  // Follow-ups:
+  // - while running: queue them (unless user typed /stop)
+  // - while idle: send immediately (requires a thread id)
+  // - while trashed: disabled until restored
+  const followCmd = String(els.followupInput && els.followupInput.value ? els.followupInput.value : "")
+    .trim()
+    .toLowerCase();
+  const isStopCmd = followCmd === "stop" || followCmd === "/stop";
+  const isRerunCmd = followCmd === "rerun" || followCmd === "/rerun";
+
+  const canSend = b !== "trash" && (running || hasThreadId || isRerunCmd);
   if (els.sendFollowupBtn) {
     els.sendFollowupBtn.disabled = !canSend;
-    els.sendFollowupBtn.title = !canSend
-      ? running
-        ? "Job is running"
-        : "Restore this job to send follow-ups"
-      : "";
+    if (!canSend) {
+      els.sendFollowupBtn.title = b === "trash" ? "Restore this job to send follow-ups" : "No thread id for this job yet";
+    } else if (running && isStopCmd) {
+      els.sendFollowupBtn.title = "Stop job";
+    } else if (!running && isRerunCmd) {
+      els.sendFollowupBtn.title = "Open rerun dialog";
+    } else if (running) {
+      els.sendFollowupBtn.title = "Job is running; follow-ups will be queued";
+    } else {
+      els.sendFollowupBtn.title = "";
+    }
+
+    // Button label matches the current mode/command.
+    if (running && isStopCmd) els.sendFollowupBtn.textContent = "Stop";
+    else if (!running && isRerunCmd) els.sendFollowupBtn.textContent = "Rerun";
+    else if (running) els.sendFollowupBtn.textContent = "Queue";
+    else els.sendFollowupBtn.textContent = "Send";
   }
 
   // Board actions.
@@ -3571,6 +3564,7 @@ function updateCardContextMenuActions(job) {
     if (el) el.hidden = !!hidden;
   };
 
+  setActionHidden("rerun", running);
   setActionHidden("stop", !running);
   setActionHidden("restore", !canRestore);
   setActionHidden("archive", !canFile);
@@ -3579,7 +3573,7 @@ function updateCardContextMenuActions(job) {
 
   const sep = menu.querySelector('[data-ctx-sep="main"]');
   if (sep) {
-    const anyVisible = ["stop", "restore", "archive", "trash", "delete"].some((a) => {
+    const anyVisible = ["rerun", "stop", "restore", "archive", "trash", "delete"].some((a) => {
       const el = byAction(a);
       return !!el && !el.hidden;
     });
@@ -3780,6 +3774,15 @@ function renderJobDialogMeta(job) {
   const bits = [];
   bits.push(`status=${job.status || "?"}`);
   bits.push(`box=${jobBox(job)}`);
+  {
+    const qc =
+      typeof job.queuedCount === "number"
+        ? job.queuedCount
+        : Array.isArray(job.queuedPrompts)
+          ? job.queuedPrompts.length
+          : 0;
+    if (qc > 0) bits.push(`queued=${qc}`);
+  }
   if (job && job.status === "running") {
     const dur = jobElapsedText(job);
     if (dur) bits.push(`elapsed=${dur}`);
@@ -4129,12 +4132,36 @@ async function sendFollowup() {
   if (!jobId) return;
   const job = state.jobs.get(jobId);
   if (!job) return;
-  if (job.status === "running") return;
+
+  // Lightweight in-ticket control commands (helpful for voice / keyboard-only flows).
+  // Only trigger on exact matches to avoid interfering with normal prompts.
+  const raw = String(els.followupInput && els.followupInput.value ? els.followupInput.value : "");
+  const cmd = raw.trim();
+  const cmdLow = cmd.toLowerCase();
+  if (job.status === "running" && (cmdLow === "stop" || cmdLow === "/stop")) {
+    els.followupInput.value = "";
+    setFollowupImages([]);
+    await cancelJob(jobId, { closeDialog: true });
+    return;
+  }
+  if (job.status !== "running" && (cmdLow === "rerun" || cmdLow === "/rerun")) {
+    els.followupInput.value = "";
+    setFollowupImages([]);
+    await openRerunDialog(jobId);
+    return;
+  }
+
   if (jobBox(job) === "trash") {
     setTransientHint("Restore this job from Trash to send follow-ups.", "info", 7000);
     return;
   }
-  const text = (els.followupInput.value || "").trim();
+  const running = job.status === "running";
+  const hasThreadId = typeof job.threadId === "string" && job.threadId.trim().length > 0;
+  if (!running && !hasThreadId) {
+    showToast("No thread id for this job yet.");
+    return;
+  }
+  const text = cmd;
   if (!text) return;
   const images = [...(state.followupImages || [])];
   try {
@@ -4143,6 +4170,7 @@ async function sendFollowup() {
     els.followupInput.value = "";
     await api.jobsSend(jobId, text, images);
     setFollowupImages([]);
+    if (running) showToast("Queued follow-up.");
   } catch (err) {
     setHint(String(err && err.message ? err.message : err), "error");
   }
@@ -4167,6 +4195,191 @@ async function cancelJob(jobId, { closeDialog = false } = {}) {
       if (els.jobDialog && els.jobDialog.open) els.jobDialog.close();
       state.selectedJobId = null;
     }
+  }
+}
+
+function normalizeRerunPromptSource(value) {
+  const v = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (v === "first") return "first";
+  if (v === "last") return "last";
+  return "all";
+}
+
+function jobPromptTextAndImagesForRerun(job, promptSource) {
+  const src = normalizeRerunPromptSource(promptSource);
+  const prompts = Array.isArray(job && job.prompts) ? job.prompts : [];
+  if (prompts.length === 0) {
+    const preview = job && typeof job.promptPreview === "string" ? job.promptPreview.trimEnd() : "";
+    return { prompt: preview, images: [] };
+  }
+
+  function pickPrompt(p) {
+    const text = p && typeof p.text === "string" ? p.text.trimEnd() : "";
+    const imgsRaw = p && Array.isArray(p.images) ? p.images : [];
+    const images = [];
+    const seen = new Set();
+    for (const img of imgsRaw) {
+      const s = typeof img === "string" ? img.trim() : "";
+      if (!s || seen.has(s)) continue;
+      seen.add(s);
+      images.push(s);
+    }
+    return { prompt: text, images };
+  }
+
+  if (src === "first") return pickPrompt(prompts[0]);
+  if (src === "last") return pickPrompt(prompts[prompts.length - 1]);
+
+  // Combine prompts: keep the original prompt at the top for better titles,
+  // then add follow-ups with lightweight headings.
+  const parts = [];
+  const images = [];
+  const seen = new Set();
+
+  let followIdx = 0;
+  for (let i = 0; i < prompts.length; i += 1) {
+    const p = prompts[i];
+    const text = p && typeof p.text === "string" ? p.text.trimEnd() : "";
+    if (text) {
+      if (i === 0) parts.push(text);
+      else {
+        followIdx += 1;
+        parts.push(`[Follow-up ${followIdx}]\n${text}`);
+      }
+    }
+
+    const imgsRaw = p && Array.isArray(p.images) ? p.images : [];
+    for (const img of imgsRaw) {
+      const s = typeof img === "string" ? img.trim() : "";
+      if (!s || seen.has(s)) continue;
+      seen.add(s);
+      images.push(s);
+    }
+  }
+
+  return { prompt: parts.join("\n\n"), images };
+}
+
+async function ensureJobDetailsLoaded(jobId) {
+  const id = String(jobId || "");
+  if (!id) return null;
+  let job = state.jobs.get(id) || null;
+  if (job && jobDetailsLoaded(job)) return job;
+  try {
+    const fetched = await api.jobsGet(id);
+    const merged = mergeJobDetails(job, fetched);
+    if (merged) {
+      state.jobs.set(id, merged);
+      job = merged;
+    }
+  } catch {
+    // ignore
+  }
+  return job;
+}
+
+function rerunAgentUiSync() {
+  const agent = normalizeAgentKey(els.rerunAgentSelect ? els.rerunAgentSelect.value : "");
+  if (!els.rerunModelInput) return;
+  const cmb = codexModelComboboxRerun;
+  const hasCombobox = !!(cmb && typeof cmb.setEnabled === "function");
+
+  if (agent === "claude") {
+    if (hasCombobox) cmb.setEnabled(false);
+    else els.rerunModelInput.removeAttribute("list");
+    els.rerunModelInput.placeholder = "Model override (optional, e.g. sonnet)";
+  } else {
+    if (hasCombobox) cmb.setEnabled(true);
+    else els.rerunModelInput.setAttribute("list", "codexModelsList");
+    els.rerunModelInput.placeholder = "Model override (optional)";
+  }
+}
+
+async function openRerunDialog(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  if (!els.rerunDialog) return;
+  const job = await ensureJobDetailsLoaded(id);
+  if (!job) {
+    showToast("Could not load job details for rerun.");
+    return;
+  }
+  if (job.status === "running") {
+    showToast("Stop the job before rerunning.");
+    return;
+  }
+
+  state.rerunSourceJobId = id;
+
+  if (els.rerunDialogMeta) {
+    const bits = [];
+    bits.push(`from=${jobDisplayTitle(job) || id}`);
+    bits.push(`project=${projectNameById(job.projectId)}`);
+    bits.push(`agent=${normalizeAgentKey(job.agent)}`);
+    if (job.model) bits.push(`model=${job.model}`);
+    bits.push(`prompts=${Array.isArray(job.prompts) ? job.prompts.length : 0}`);
+    els.rerunDialogMeta.textContent = bits.join("  ");
+  }
+
+  if (els.rerunAgentSelect) els.rerunAgentSelect.value = normalizeAgentKey(job.agent);
+  if (els.rerunModelInput) els.rerunModelInput.value = job.model || "";
+  if (els.rerunPromptSelect) els.rerunPromptSelect.value = "all";
+
+  rerunAgentUiSync();
+  refreshCodexModelsDatalist({ showErrors: false });
+
+  try {
+    els.rerunDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (els.rerunAgentSelect) els.rerunAgentSelect.focus();
+    else if (els.rerunModelInput) els.rerunModelInput.focus();
+  } catch {
+    // ignore
+  }
+}
+
+async function startRerunFromDialog() {
+  const sourceJobId = String(state.rerunSourceJobId || "");
+  if (!sourceJobId) return;
+  const job = await ensureJobDetailsLoaded(sourceJobId);
+  if (!job) {
+    showToast("Could not load job details for rerun.");
+    return;
+  }
+  if (job.status === "running") {
+    showToast("Stop the job before rerunning.");
+    return;
+  }
+
+  const agent = normalizeAgentKey(els.rerunAgentSelect ? els.rerunAgentSelect.value : "");
+  const model = (els.rerunModelInput && els.rerunModelInput.value ? String(els.rerunModelInput.value) : "").trim();
+  const promptSource = normalizeRerunPromptSource(els.rerunPromptSelect ? els.rerunPromptSelect.value : "");
+  const { prompt, images } = jobPromptTextAndImagesForRerun(job, promptSource);
+  const text = String(prompt || "").trim();
+  if (!text) {
+    showToast("No prompt text found to rerun.");
+    return;
+  }
+
+  try {
+    setView("board");
+    await api.jobsStart({ prompt: text, projectId: job.projectId, agent, model, images });
+    showToast(`Rerun started (${agentDisplayName(agent)}${model ? ` · ${model}` : ""})`);
+    try {
+      if (els.rerunDialog && els.rerunDialog.open) els.rerunDialog.close();
+    } catch {
+      // ignore
+    } finally {
+      state.rerunSourceJobId = null;
+    }
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err));
   }
 }
 
@@ -4306,6 +4519,19 @@ function wireUi() {
   // Some Chromium policies require a user gesture before audio will play.
   document.addEventListener("pointerdown", () => primeAudio(), { once: true });
   document.addEventListener("keydown", () => primeAudio(), { once: true });
+
+  // Prevent the Electron window from navigating away when users click Markdown links.
+  document.addEventListener("click", (e) => {
+    const a = e.target && e.target.closest ? e.target.closest("a.md-link") : null;
+    if (!a) return;
+    const href = a.getAttribute("href") || "";
+    if (!href) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (api && typeof api.shellOpenExternal === "function") {
+      api.shellOpenExternal(href).catch(() => {});
+    }
+  });
 
   // View switcher (Board / Archive / Trash).
   document.querySelectorAll(".seg__btn[data-view]").forEach((btn) => {
@@ -4620,6 +4846,7 @@ function wireUi() {
   if (els.modelInput) codexModelComboboxComposer = attachCodexModelCombobox(els.modelInput, { ariaLabel: "Show models" });
   if (els.settingsCodexModel)
     codexModelComboboxSettings = attachCodexModelCombobox(els.settingsCodexModel, { ariaLabel: "Show models" });
+  if (els.rerunModelInput) codexModelComboboxRerun = attachCodexModelCombobox(els.rerunModelInput, { ariaLabel: "Show models" });
 
   function syncComposerAgentUi() {
     const agent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
@@ -4947,11 +5174,58 @@ function wireUi() {
       sendFollowup();
     }
   });
+  els.followupInput.addEventListener("input", () => {
+    const jobId = state.selectedJobId;
+    if (!jobId) return;
+    const job = state.jobs.get(jobId);
+    if (!job) return;
+    if (els.jobDialog && els.jobDialog.open) updateJobDialogActions(job);
+  });
 
+  if (els.rerunJobBtn) {
+    els.rerunJobBtn.addEventListener("click", () => openRerunDialog(state.selectedJobId));
+  }
   els.cancelJobBtn.addEventListener("click", () => cancelSelectedJob());
 
-			  els.saveSettingsBtn.addEventListener("click", async () => {
-				    const patch = {
+  if (els.rerunStartBtn) {
+    els.rerunStartBtn.addEventListener("click", () => startRerunFromDialog());
+  }
+  if (els.rerunDialogClose) {
+    els.rerunDialogClose.addEventListener("click", () => {
+      try {
+        if (els.rerunDialog && els.rerunDialog.open) els.rerunDialog.close();
+      } catch {
+        // ignore
+      } finally {
+        state.rerunSourceJobId = null;
+      }
+    });
+  }
+  if (els.rerunDialog) {
+    els.rerunDialog.addEventListener("click", (e) => {
+      if (e.target === els.rerunDialog) {
+        try {
+          els.rerunDialog.close();
+        } catch {
+          // ignore
+        } finally {
+          state.rerunSourceJobId = null;
+        }
+      }
+    });
+    els.rerunDialog.addEventListener("cancel", () => {
+      state.rerunSourceJobId = null;
+    });
+    els.rerunDialog.addEventListener("close", () => {
+      state.rerunSourceJobId = null;
+    });
+  }
+  if (els.rerunAgentSelect) {
+    els.rerunAgentSelect.addEventListener("change", () => rerunAgentUiSync());
+  }
+
+				  els.saveSettingsBtn.addEventListener("click", async () => {
+					    const patch = {
 				      uiModel: getUiModelFromControls(),
 				      uiTheme: els.settingsTheme.value,
 				      uiColorScheme: els.settingsColorScheme.value,
@@ -5019,6 +5293,10 @@ function wireUi() {
 
       if (action === "open") {
         openJobDialog(jobId);
+        return;
+      }
+      if (action === "rerun") {
+        await openRerunDialog(jobId);
         return;
       }
       if (action === "stop") {
@@ -5100,6 +5378,7 @@ let codexModelsCache = null; // array of objects from `codex app-server model/li
 
 let codexModelComboboxComposer = null;
 let codexModelComboboxSettings = null;
+let codexModelComboboxRerun = null;
 
 function historyModelStrings(agentKey) {
   const out = new Set();
@@ -5586,6 +5865,7 @@ function renderCodexModelsDatalist() {
   // Keep custom combobox menus in sync (if open).
   if (codexModelComboboxComposer) codexModelComboboxComposer.refresh();
   if (codexModelComboboxSettings) codexModelComboboxSettings.refresh();
+  if (codexModelComboboxRerun) codexModelComboboxRerun.refresh();
 }
 
 async function refreshCodexModelsDatalist({ showErrors = false } = {}) {

@@ -1586,6 +1586,11 @@ body::before {
   height: min(860px, calc(100vh - 24px));
 }
 
+.dialog__inner--rerun {
+  width: min(760px, calc(100vw - 24px));
+  height: min(540px, calc(100vh - 24px));
+}
+
 .dialog__inner--shortcuts {
   width: min(920px, calc(100vw - 24px));
   height: min(780px, calc(100vh - 24px));
@@ -1942,6 +1947,37 @@ body::before {
   white-space: pre-wrap;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.msg__text .md-heading {
+  display: inline-block;
+  margin: 10px 0 6px 0;
+  font-family: var(--serif);
+  font-weight: 820;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.msg__text .md-heading.md-h1 { font-size: 18px; }
+.msg__text .md-heading.md-h2 { font-size: 16px; }
+.msg__text .md-heading.md-h3 { font-size: 14px; }
+.msg__text .md-heading.md-h4 { font-size: 13px; opacity: 0.92; }
+.msg__text .md-heading.md-h5 { font-size: 12px; opacity: 0.90; }
+.msg__text .md-heading.md-h6 { font-size: 12px; opacity: 0.88; letter-spacing: 0.02em; text-transform: uppercase; }
+
+.md-link,
+.md-link:visited {
+  color: rgba(var(--accent2-rgb), 0.92);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.md-link:hover {
+  color: rgba(var(--accent2-rgb), 1);
+  text-decoration-thickness: 2px;
 }
 
 .msg__text strong {
