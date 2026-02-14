@@ -1,0 +1,41 @@
+{
+  "name": "agent-heaven",
+  "version": "0.0.1",
+  "private": true,
+  "productName": "Agent Heaven",
+  "description": "Electron UI that spawns Codex + Claude Code CLI agents as cards and streams output.",
+  "license": "MIT",
+  "main": "build/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "dev": "node scripts/dev.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "chokidar": "^4.0.3",
+    "electron": "^29.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.0",
+    "vitest": "^2.1.9"
+  },
+  "build": {
+    "appId": "com.simonschnabl.agentheaven",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "files": [
+      "build/**/*",
+      "renderer/**/*",
+      "package.json"
+    ]
+  }
+}

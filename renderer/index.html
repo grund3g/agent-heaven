@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; script-src 'self';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Heaven</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+	        <div class="brand">
+	          <div class="brand__mark" aria-hidden="true">
+	            <svg id="brandLogo" class="brand__logo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+	              <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+	                <path d="M10 24L16 10l6 14" />
+	                <path d="M12.8 19h6.4" />
+	                <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+	              </g>
+	              <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+	            </svg>
+	          </div>
+		          <div class="brand__text">
+		            <div class="brand__name">Agent Heaven</div>
+		            <div class="brand__tag">Your agent runs, neatly organized</div>
+		          </div>
+		          <button id="brandLogoToggle" class="iconbtn brand__cycle" type="button" title="Cycle logo variant (Shift = previous)" aria-label="Cycle logo variant">
+		            ⟲
+		          </button>
+		        </div>
+
+        <div class="sidebar__section">
+          <div class="sidebar__title">Projects</div>
+          <div id="projectsList" class="projects"></div>
+          <button id="addProjectBtn" class="btn btn--ghost">Add Project Folder</button>
+        </div>
+
+        <div class="sidebar__section sidebar__section--bottom">
+          <button id="openShortcutsBtn" class="btn btn--ghost" type="button" title="Show shortcuts (⌘+/)">
+            Shortcuts
+          </button>
+          <button id="openSettingsBtn" class="btn btn--ghost">Settings</button>
+        </div>
+      </aside>
+
+	      <main class="main">
+	        <header class="composer">
+		          <div class="composer__row">
+		            <select id="projectSelect" class="select">
+		              <option value="">Select project…</option>
+		            </select>
+		            <select id="agentSelect" class="select" title="Agent">
+		              <option value="codex">Codex</option>
+		              <option value="claude">Claude</option>
+		            </select>
+		            <input id="modelInput" class="input" placeholder="Model override (optional)" list="codexModelsList" />
+		            <button id="runBtn" class="btn btn--primary">Run</button>
+		          </div>
+          <div id="promptDropwrap" class="dropwrap">
+	            <textarea id="promptInput" class="textarea" rows="3" placeholder="Prompt… (⌘+P to focus, ⌘+Enter to run)"></textarea>
+            <div id="promptBadge" class="attachbadge" hidden></div>
+          </div>
+          <div id="promptAttachments" class="attachments"></div>
+          <div class="composer__hint" id="composerHint"></div>
+        </header>
+
+		        <div class="viewbar" aria-label="View switcher">
+		          <button
+		            id="toggleSidebarBtn"
+		            class="iconbtn viewbar__toggle"
+		            type="button"
+		            title="Toggle sidebar"
+		            aria-label="Toggle sidebar"
+		            aria-pressed="false"
+		          >
+		            <span aria-hidden="true">☰</span>
+		          </button>
+		          <div class="seg" role="tablist" aria-label="Views">
+		            <button type="button" class="seg__btn seg__btn--active" data-view="board" aria-selected="true">
+		              Board
+		            </button>
+	            <button type="button" class="seg__btn" data-view="archive" aria-selected="false">Archive</button>
+	            <button type="button" class="seg__btn" data-view="trash" aria-selected="false">Trash</button>
+	          </div>
+	          <div class="sortctl" aria-label="Sort jobs">
+	            <span class="sortctl__label">Sort</span>
+	            <select id="sortSelect" class="select sortselect" title="Sort jobs within lanes">
+	              <option value="lane_newest">Newest in lane</option>
+	              <option value="lane_oldest">Oldest in lane</option>
+	              <option value="duration_longest">Longest running</option>
+	              <option value="created_newest">Created (newest)</option>
+	              <option value="created_oldest">Created (oldest)</option>
+	            </select>
+	          </div>
+	          <div class="searchctl" role="search" aria-label="Search sessions">
+	            <input id="searchInput" class="searchctl__input" type="search" placeholder="Search sessions…" autocomplete="off" />
+	            <button id="searchClearBtn" class="iconbtn searchctl__clear" type="button" title="Clear search (Esc)" aria-label="Clear search" hidden>
+	              ×
+	            </button>
+	          </div>
+	          <div id="searchMeta" class="searchmeta" aria-live="polite"></div>
+	          <button id="openStatusBtn" class="btn btn--ghost" type="button" title="Show status + token usage">
+	            Status
+	          </button>
+	        </div>
+
+        <section class="board">
+	          <div class="lane">
+	            <div class="lane__title">
+	              <span class="lane__titleText">Running</span>
+	              <div class="lane__titleActions">
+	                <button
+	                  class="iconbtn lane__move"
+	                  type="button"
+	                  data-move-window
+	                  title="Move window to display"
+	                  aria-label="Move window to display"
+	                >
+	                  ⇆
+	                </button>
+	                <button
+	                  class="iconbtn lane__pop"
+	                  type="button"
+	                  data-popout-lane="running"
+	                  title="Open Running in new window"
+	                  aria-label="Open Running in new window"
+	                >
+	                  ↗
+	                </button>
+	              </div>
+	            </div>
+	            <div id="laneRunning" class="cards"></div>
+	          </div>
+	          <div class="lane">
+	            <div class="lane__title">
+	              <span class="lane__titleText">Needs Attention</span>
+	              <div class="lane__titleActions">
+	                <button
+	                  class="iconbtn lane__move"
+	                  type="button"
+	                  data-move-window
+	                  title="Move window to display"
+	                  aria-label="Move window to display"
+	                >
+	                  ⇆
+	                </button>
+	                <button
+	                  class="iconbtn lane__pop"
+	                  type="button"
+	                  data-popout-lane="attention"
+	                  title="Open Needs Attention in new window"
+	                  aria-label="Open Needs Attention in new window"
+	                >
+	                  ↗
+	                </button>
+	              </div>
+	            </div>
+	            <div id="laneAttention" class="cards"></div>
+	          </div>
+	          <div class="lane">
+	            <div class="lane__title">
+	              <span class="lane__titleText">Done</span>
+	              <div class="lane__titleActions">
+	                <button
+	                  class="iconbtn lane__move"
+	                  type="button"
+	                  data-move-window
+	                  title="Move window to display"
+	                  aria-label="Move window to display"
+	                >
+	                  ⇆
+	                </button>
+	                <button
+	                  class="iconbtn lane__pop"
+	                  type="button"
+	                  data-popout-lane="done"
+	                  title="Open Done in new window"
+	                  aria-label="Open Done in new window"
+	                >
+	                  ↗
+	                </button>
+	              </div>
+	            </div>
+	            <div id="laneDone" class="cards"></div>
+	          </div>
+	        </section>
+      </main>
+    </div>
+
+	    <dialog id="jobDialog" class="dialog">
+	      <div class="dialog__inner">
+	        <div class="dialog__header">
+	          <div class="dialog__title" id="jobDialogTitle">Job</div>
+	          <div class="dialog__headerActions">
+	            <button id="jobDialogPopout" class="btn btn--ghost" type="button" title="Open in new window">
+	              ↗
+	            </button>
+	            <button id="jobDialogMove" class="btn btn--ghost" type="button" title="Move this window to a display" hidden>
+	              Move
+	            </button>
+	            <button id="jobDialogClose" class="btn btn--ghost" type="button">Close</button>
+	          </div>
+	        </div>
+        <div class="dialog__meta" id="jobDialogMeta"></div>
+        <div class="dialog__body">
+          <div class="tabs">
+            <button class="tab tab--active" data-tab="chat">Chat</button>
+            <button class="tab" data-tab="live">Live</button>
+            <button class="tab" data-tab="logs">Logs</button>
+          </div>
+	          <div id="jobDialogChat" class="panel panel--active"></div>
+	          <div id="jobDialogLive" class="panel panel--terminal"></div>
+	          <div id="jobDialogLogs" class="panel panel--terminal"></div>
+	        </div>
+        <div class="dialog__footer">
+	          <div class="followup">
+	            <div id="followupDropwrap" class="dropwrap dropwrap--sm">
+	              <textarea id="followupInput" class="textarea textarea--sm" rows="2" placeholder="Follow-up… (⌘+Enter)"></textarea>
+	              <div id="followupBadge" class="attachbadge" hidden></div>
+	            </div>
+	            <div id="followupAttachments" class="attachments attachments--sm"></div>
+	          </div>
+	          <div class="dialog__actions">
+	            <button id="jobRestoreBtn" class="btn btn--ghost" type="button" hidden>Restore</button>
+	            <button id="jobArchiveBtn" class="btn btn--ghost" type="button" hidden>Archive</button>
+	            <button id="jobTrashBtn" class="btn btn--danger" type="button" hidden>Trash</button>
+	            <button id="jobDeleteBtn" class="btn btn--danger" type="button" hidden>Delete</button>
+	            <button id="cancelJobBtn" class="btn btn--danger">Stop</button>
+	            <button id="sendFollowupBtn" class="btn btn--primary">Send</button>
+	          </div>
+        </div>
+      </div>
+    </dialog>
+
+		    <dialog id="settingsDialog" class="dialog">
+		      <div class="dialog__inner dialog__inner--settings">
+	        <div class="dialog__header">
+	          <div class="dialog__title">Settings</div>
+	          <button id="settingsDialogClose" class="btn btn--ghost">Close</button>
+	        </div>
+	        <div class="settings">
+	          <div class="settings__section">
+	            <div class="settings__sectionTitle">Agents</div>
+
+	            <div class="settings__groupTitle">Codex</div>
+	            <label class="field">
+	              <div class="field__label">Codex path</div>
+	              <input id="settingsCodexPath" class="input" placeholder="Leave empty to use PATH (codex)" />
+	            </label>
+		            <label class="field">
+		              <div class="field__label">Default model</div>
+		              <input
+		                id="settingsCodexModel"
+		                class="input"
+		                placeholder="e.g. gpt-5.3-codex, ..."
+		                list="codexModelsList"
+		              />
+		            </label>
+	            <label class="field">
+	              <div class="field__label">Sandbox mode</div>
+	              <select id="settingsCodexSandboxMode" class="select">
+	                <option value="read-only">read-only</option>
+	                <option value="workspace-write">workspace-write</option>
+	                <option value="danger-full-access">danger-full-access</option>
+	              </select>
+	            </label>
+	            <label class="field field--row">
+	              <input id="settingsCodexSkipGitRepoCheck" type="checkbox" />
+	              <div class="field__label field__label--inline">Allow running outside git repo (--skip-git-repo-check)</div>
+	            </label>
+	            <label class="field field--row">
+	              <input id="settingsCodexBypass" type="checkbox" />
+	              <div class="field__label field__label--inline">Danger: bypass approvals + sandbox</div>
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Codex color (--color)</div>
+	              <select id="settingsCodexColor" class="select">
+	                <option value="auto">auto</option>
+	                <option value="always">always</option>
+	                <option value="never">never</option>
+	              </select>
+	            </label>
+
+	            <div class="settings__divider"></div>
+
+		            <div class="settings__groupTitle">Claude</div>
+		            <label class="field">
+		              <div class="field__label">Claude path</div>
+		              <input id="settingsClaudePath" class="input" placeholder="Leave empty to use PATH (claude)" />
+		            </label>
+		            <label class="field">
+		              <div class="field__label">Default model</div>
+		              <input id="settingsClaudeModel" class="input" placeholder="e.g. opus, sonnet, ..." />
+		            </label>
+		            <label class="field">
+		              <div class="field__label">Permission mode</div>
+		              <select id="settingsClaudePermissionMode" class="select">
+		                <option value="acceptEdits">acceptEdits (recommended)</option>
+		                <option value="default">default</option>
+		                <option value="plan">plan</option>
+		                <option value="bypassPermissions">bypassPermissions</option>
+		              </select>
+		            </label>
+		            <label class="field field--row">
+		              <input id="settingsClaudeSkipPermissions" type="checkbox" />
+		              <div class="field__label field__label--inline">Danger: skip permissions (--dangerously-skip-permissions)</div>
+		            </label>
+		          </div>
+
+		          <div class="settings__section">
+		            <div class="settings__sectionTitle">UI</div>
+		            <label class="field">
+			              <div class="field__label">UI model (router/summaries later)</div>
+			              <select id="settingsUiModel" class="select">
+			                <option value="">Unset (default)</option>
+			                <optgroup id="settingsUiModelCodexGroup" label="Codex (detected)"></optgroup>
+			                <optgroup label="OpenAI">
+			                  <option value="o3">o3</option>
+			                  <option value="o3-mini">o3-mini</option>
+			                  <option value="gpt-5">gpt-5</option>
+			                  <option value="gpt-5-mini">gpt-5-mini</option>
+			                </optgroup>
+		                <optgroup label="Anthropic">
+		                  <option value="opus">opus</option>
+		                  <option value="sonnet">sonnet</option>
+		                  <option value="haiku">haiku</option>
+		                </optgroup>
+		                <option value="__custom__">Custom...</option>
+		              </select>
+		              <input id="settingsUiModelCustom" class="input" placeholder="Custom model..." hidden />
+		            </label>
+		            <label class="field">
+		              <div class="field__label">Theme</div>
+		              <select id="settingsTheme" class="select">
+		                <option value="heaven">Heaven</option>
+	                <option value="nord">Nord</option>
+	                <option value="gruvbox">Gruvbox</option>
+	                <option value="solarized">Solarized</option>
+	                <option value="dracula">Dracula</option>
+	                <option value="ocean">Ocean</option>
+	              </select>
+	            </label>
+		            <label class="field">
+		              <div class="field__label">Color scheme</div>
+		              <select id="settingsColorScheme" class="select">
+		                <option value="system">System</option>
+		                <option value="dark">Dark</option>
+		                <option value="light">Light</option>
+		              </select>
+		            </label>
+		            <div class="field">
+		              <div class="field__label">Logo variant (test)</div>
+		              <div class="field__controls">
+		                <select id="settingsLogoVariant" class="select" aria-label="Logo variant">
+		                  <option value="v1">V1: Halo</option>
+		                  <option value="v2">V2: Tilted halo</option>
+		                  <option value="v3">V3: Spark</option>
+		                  <option value="v4">V4: Wings</option>
+		                  <option value="v5">V5: Orbit</option>
+		                  <option value="v6">V6: Cloud base</option>
+		                  <option value="v7">V7: Circle badge</option>
+		                  <option value="v8">V8: Diamond badge</option>
+		                  <option value="v9">V9: Organizer</option>
+		                  <option value="v10">V10: Minimal ring</option>
+		                </select>
+		                <button id="settingsLogoVariantPrev" class="btn btn--ghost" type="button" aria-label="Previous logo variant" title="Previous logo variant">
+		                  Prev
+		                </button>
+		                <button id="settingsLogoVariantNext" class="btn btn--ghost" type="button" aria-label="Next logo variant" title="Next logo variant">
+		                  Next
+		                </button>
+		              </div>
+		            </div>
+		            <label class="field field--row">
+		              <input id="settingsMenuBarMode" type="checkbox" />
+		              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>
+		            </label>
+	            <label class="field field--row">
+	              <input id="settingsStartAtLogin" type="checkbox" />
+	              <div class="field__label field__label--inline">macOS: Start at login (best in packaged apps)</div>
+	            </label>
+	            <label class="field field--row">
+	              <input id="settingsOpenOnAllDisplays" type="checkbox" />
+	              <div class="field__label field__label--inline">Open a window on every display</div>
+	            </label>
+		            <label class="field">
+		              <div class="field__label">Board: max Done cards (0 = unlimited)</div>
+		              <input id="settingsBoardDoneLimit" class="input" type="number" min="0" max="5000" step="25" />
+		            </label>
+		            <label class="field field--row">
+		              <input id="settingsAttentionOnQuestionPrompts" type="checkbox" />
+		              <div class="field__label field__label--inline">Board: send question prompts to Needs Attention</div>
+		            </label>
+		          </div>
+
+	          <div class="settings__section">
+	            <div class="settings__sectionTitle">Shortcuts</div>
+	            <label class="field field--row">
+	              <input id="settingsGlobalHotkeyEnabled" type="checkbox" />
+	              <div class="field__label field__label--inline">Enable global hotkey (show app + focus prompt)</div>
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Global hotkey</div>
+	              <input id="settingsGlobalHotkeyAccelerator" class="input" placeholder="CommandOrControl+Shift+P" />
+	            </label>
+	            <label class="field field--row">
+	              <input id="settingsGlobalHotkeyUseClipboard" type="checkbox" />
+	              <div class="field__label field__label--inline">On hotkey: paste clipboard into prompt</div>
+	            </label>
+	            <label class="field field--row">
+	              <input id="settingsGlobalHotkeyStartWisprHandsFree" type="checkbox" />
+	              <div class="field__label field__label--inline">On hotkey: start Wispr hands-free dictation (macOS)</div>
+	            </label>
+	            <div class="settings__note">Accelerator format uses Electron syntax (e.g. CommandOrControl+Shift+P).</div>
+	          </div>
+
+	          <div class="settings__section">
+	            <div class="settings__sectionTitle">Notifications</div>
+	            <label class="field field--row">
+	              <input id="settingsSoundNeedsAttention" type="checkbox" />
+	              <div class="field__label field__label--inline">Play sound when a job enters Needs Attention</div>
+	            </label>
+	            <label class="field field--row">
+	              <input id="settingsSoundDone" type="checkbox" />
+	              <div class="field__label field__label--inline">Play sound when a job is Done</div>
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Sound</div>
+	              <select id="settingsSoundPreset" class="select">
+	                <option value="classic">Classic beeps</option>
+	                <option value="chime">Chime</option>
+	                <option value="pop">Pop</option>
+	                <option value="bell">Bell</option>
+	                <option value="arcade">Arcade</option>
+	              </select>
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Sound volume (0-100)</div>
+	              <input id="settingsSoundVolume" class="input" type="number" min="0" max="100" step="5" />
+	            </label>
+	            <div class="field">
+	              <div class="field__label">Test sound</div>
+	              <div class="settings__actions">
+	                <button id="settingsTestSoundAttention" class="btn btn--ghost" type="button">Test Needs Attention</button>
+	                <button id="settingsTestSoundDone" class="btn btn--ghost" type="button">Test Done</button>
+	              </div>
+	            </div>
+	          </div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="saveSettingsBtn" class="btn btn--primary">Save</button>
+	          </div>
+	        </div>
+	      </div>
+		    </dialog>
+
+	    <dialog id="shortcutsDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--shortcuts">
+	        <div class="dialog__header">
+	          <div class="dialog__title">Shortcuts</div>
+	          <button id="shortcutsDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__body dialog__body--shortcuts">
+	          <div id="shortcutsDialogBody" class="shortcuts"></div>
+	        </div>
+	      </div>
+	    </dialog>
+
+	    <dialog id="statusDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--status">
+	        <div class="dialog__header">
+		          <div class="dialog__title">Status</div>
+		          <button id="statusDialogClose" class="btn btn--ghost" type="button">Close</button>
+		        </div>
+		        <div class="dialog__meta" id="statusDialogMeta"></div>
+		        <div class="dialog__body dialog__body--status">
+		          <div id="statusDialogBody" class="status"></div>
+		        </div>
+	      </div>
+	    </dialog>
+
+	    <dialog id="imageDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--image">
+	        <div class="dialog__header">
+	          <div class="dialog__title" id="imageDialogTitle">Image</div>
+	          <button id="imageDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="imgpreview">
+	          <img id="imageDialogImg" class="imgpreview__img" alt="" />
+	        </div>
+	      </div>
+	    </dialog>
+
+	    <div id="cardContextMenu" class="ctxmenu" hidden role="menu" aria-label="Job actions">
+	      <button type="button" class="ctxmenu__item" data-ctx-action="open">Open</button>
+	      <div class="ctxmenu__sep" data-ctx-sep="main" role="separator"></div>
+	      <button type="button" class="ctxmenu__item" data-ctx-action="stop" hidden>Stop</button>
+	      <button type="button" class="ctxmenu__item" data-ctx-action="restore" hidden>Restore</button>
+	      <button type="button" class="ctxmenu__item" data-ctx-action="archive" hidden>Archive</button>
+	      <button type="button" class="ctxmenu__item" data-ctx-action="trash" hidden>Trash</button>
+	      <button type="button" class="ctxmenu__item ctxmenu__item--danger" data-ctx-action="delete" hidden>Delete</button>
+	    </div>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <datalist id="codexModelsList"></datalist>
+
+    <script src="./renderer.js" type="module"></script>
+  </body>
+</html>
