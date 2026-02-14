@@ -6658,7 +6658,7 @@ function maybeShowMissingAgentBinariesToast(res) {
   if (lastAt && now - lastAt < 30_000) return;
   storeAgentBinariesToastAtMs(now);
 
-  let msg = `Missing agent CLI${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Open Settings to set the binary path${missing.length > 1 ? "s" : ""}.`;
+  let msg = `Missing agent CLI${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Install now or open Settings to set the binary path${missing.length > 1 ? "s" : ""}.`;
 
   try {
     const codex = res && typeof res === "object" ? res.codex : null;
