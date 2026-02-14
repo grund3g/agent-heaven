@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Heaven - Run, monitor, and control parallel agent jobs</title>
+	  <meta name="description" content="Run, monitor, and control parallel agent jobs. A local desktop app that spawns AI coding agents as cards on a Kanban board and streams their output in real-time." />
+  <style>
+    :root {
+      --bg0: #0b0f12;
+      --bg1: #0f1417;
+      --ink: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.66);
+      --muted2: rgba(255,255,255,0.52);
+      --stroke: rgba(255,255,255,0.10);
+      --stroke2: rgba(255,255,255,0.16);
+      --card: rgba(255,255,255,0.06);
+      --surface3: rgba(0,0,0,0.18);
+      --accent: #64d8a3;
+      --accent-rgb: 100,216,163;
+      --accent2: #4bb6ff;
+      --accent2-rgb: 75,182,255;
+      --danger: #ff5b6e;
+      --danger-rgb: 255,91,110;
+      --mono: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+      --ui: "Avenir Next",Avenir,"Helvetica Neue",Helvetica,Arial,sans-serif;
+      --serif: "New York","Times New Roman",Times,serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: var(--ui);
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 800px at 18% 6%, rgba(var(--accent-rgb),0.14), transparent 60%),
+        radial-gradient(900px 600px at 86% 12%, rgba(var(--accent2-rgb),0.10), transparent 55%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height: 100vh;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.15'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: 0.34;
+      z-index: 0;
+    }
+
+    /* Layout */
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+
+    /* Nav */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 0;
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .nav-mark {
+      width: 38px; height: 38px;
+      border-radius: 12px;
+      display: grid; place-items: center;
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.22), rgba(var(--accent2-rgb),0.18));
+      border: 1px solid rgba(var(--accent2-rgb),0.28);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .nav-mark svg { width: 22px; height: 22px; }
+    .nav-name { font-family: var(--serif); font-weight: 800; font-size: 18px; }
+    .nav-links { display: flex; gap: 8px; }
+    .nav-links a {
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--stroke2);
+      background: var(--card);
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 13px;
+      transition: border-color 120ms, background 120ms;
+    }
+    .nav-links a:hover { border-color: rgba(var(--accent2-rgb),0.4); background: rgba(255,255,255,0.08); }
+    .nav-links a.primary {
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.22), rgba(var(--accent2-rgb),0.18));
+      border-color: rgba(var(--accent-rgb),0.3);
+      font-weight: 700;
+    }
+
+    /* Hero */
+    .hero { padding: 80px 0 40px; text-align: center; }
+    .hero h1 {
+      font-family: var(--serif);
+      font-weight: 800;
+      font-size: clamp(36px, 6vw, 64px);
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+      margin: 0 0 20px;
+    }
+    .hero h1 .gr {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto 36px;
+      line-height: 1.5;
+    }
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 24px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke2);
+      background: var(--card);
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 120ms, border-color 120ms, background 120ms;
+    }
+    .btn:hover { transform: translateY(-1px); border-color: rgba(var(--accent2-rgb),0.4); }
+    .btn--primary {
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.24), rgba(var(--accent2-rgb),0.20));
+      border-color: rgba(var(--accent-rgb),0.35);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.3);
+    }
+    .btn svg { width: 18px; height: 18px; }
+
+    /* App mockup */
+    .mockup-wrap {
+      margin: 60px auto 0;
+      max-width: 980px;
+      border-radius: 18px;
+      border: 1px solid var(--stroke2);
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+      box-shadow: 0 40px 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+      overflow: hidden;
+    }
+    .mockup-titlebar {
+      height: 38px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--stroke);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 8px;
+    }
+    .mockup-dot { width: 12px; height: 12px; border-radius: 99px; }
+    .mockup-dot:nth-child(1) { background: #ff5f57; }
+    .mockup-dot:nth-child(2) { background: #febc2e; }
+    .mockup-dot:nth-child(3) { background: #28c840; }
+    .mockup-app {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 420px;
+    }
+    .mockup-sidebar {
+      padding: 16px 14px;
+      border-right: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .mockup-brand {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(var(--accent2-rgb),0.18);
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.08), rgba(var(--accent2-rgb),0.06));
+    }
+    .mockup-brand-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: grid; place-items: center;
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(var(--accent2-rgb),0.16));
+      border: 1px solid rgba(var(--accent2-rgb),0.22);
+    }
+    .mockup-brand-icon svg { width: 20px; height: 20px; }
+    .mockup-brand-name { font-family: var(--serif); font-weight: 800; font-size: 14px; }
+    .mockup-brand-tag { font-size: 10px; color: var(--muted2); margin-top: 1px; }
+    .mockup-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted2);
+    }
+    .mockup-project {
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--stroke);
+      background: var(--surface3);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .mockup-swatch {
+      width: 10px; height: 10px;
+      border-radius: 99px;
+      flex: 0 0 auto;
+    }
+    .mockup-project-path {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--muted2);
+      margin-top: 1px;
+    }
+    .mockup-main {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .mockup-composer {
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025));
+    }
+    .mockup-composer-row {
+      display: grid;
+      grid-template-columns: 1fr 140px auto;
+      gap: 8px;
+      align-items: center;
+    }
+    .mockup-input {
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--stroke);
+      background: var(--surface3);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .mockup-textarea {
+      margin-top: 8px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--stroke);
+      background: var(--surface3);
+      font-size: 11px;
+      color: var(--muted2);
+      min-height: 36px;
+    }
+    .mockup-btn-run {
+      padding: 7px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(var(--accent-rgb),0.3);
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.18), rgba(var(--accent2-rgb),0.14));
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink);
+      text-align: center;
+    }
+    .mockup-board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      flex: 1;
+    }
+    .mockup-lane {
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: rgba(0,0,0,0.10);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .mockup-lane-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted2);
+      margin-bottom: 2px;
+    }
+    .mockup-card {
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+      padding: 10px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+      position: relative;
+    }
+    .mockup-card::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 8px; bottom: 8px; width: 3px;
+      border-radius: 4px;
+      opacity: 0.8;
+    }
+    .mockup-card--run { border-color: rgba(var(--accent-rgb),0.2); }
+    .mockup-card--run::before { background: var(--accent); }
+    .mockup-card--attn { border-color: rgba(var(--danger-rgb),0.2); }
+    .mockup-card--attn::before { background: var(--danger); }
+    .mockup-card--done { border-color: rgba(var(--accent2-rgb),0.15); }
+    .mockup-card--done::before { background: var(--accent2); }
+    .mockup-card-title {
+      font-weight: 700;
+      font-size: 11px;
+      line-height: 1.25;
+      margin-bottom: 4px;
+    }
+    .mockup-card-meta {
+      font-size: 9px;
+      color: var(--muted2);
+      font-family: var(--mono);
+      display: flex;
+      justify-content: space-between;
+    }
+    .mockup-pill {
+      display: inline-block;
+      padding: 3px 7px;
+      border-radius: 99px;
+      font-size: 9px;
+      font-family: var(--mono);
+    }
+    .mockup-pill--run { border: 1px solid rgba(var(--accent-rgb),0.3); color: var(--accent); }
+    .mockup-pill--attn { border: 1px solid rgba(var(--danger-rgb),0.3); color: var(--danger); }
+    .mockup-pill--done { border: 1px solid rgba(var(--accent2-rgb),0.3); color: var(--accent2); }
+    .mockup-card-preview {
+      margin-top: 6px;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--muted2);
+      line-height: 1.35;
+      border-radius: 8px;
+      border: 1px solid var(--stroke);
+      background: var(--surface3);
+      padding: 6px 8px;
+      white-space: pre-wrap;
+    }
+    @keyframes caretBlink { 50% { opacity: 0; } }
+    .mockup-caret {
+      color: var(--accent);
+      animation: caretBlink 1.05s steps(1) infinite;
+    }
+
+    @media (max-width: 768px) {
+      .mockup-app { grid-template-columns: 1fr; }
+      .mockup-sidebar { display: none; }
+      .mockup-board { grid-template-columns: 1fr; }
+      .mockup-composer-row { grid-template-columns: 1fr; }
+    }
+
+    /* Features */
+    .features { padding: 100px 0 80px; }
+    .features h2 {
+      font-family: var(--serif);
+      font-weight: 800;
+      font-size: 32px;
+      text-align: center;
+      margin: 0 0 48px;
+    }
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .feature {
+      padding: 24px;
+      border-radius: 16px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,0.03);
+      transition: border-color 160ms, background 160ms;
+    }
+    .feature:hover { border-color: rgba(var(--accent2-rgb),0.25); background: rgba(255,255,255,0.05); }
+    .feature-icon {
+      width: 40px; height: 40px;
+      border-radius: 12px;
+      display: grid; place-items: center;
+      font-size: 20px;
+      margin-bottom: 14px;
+      border: 1px solid var(--stroke2);
+      background: var(--surface3);
+    }
+    .feature h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+    .feature p {
+      font-size: 14px;
+      color: var(--muted);
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    /* Download */
+    .download { padding: 80px 0; text-align: center; }
+    .download h2 {
+      font-family: var(--serif);
+      font-weight: 800;
+      font-size: 32px;
+      margin: 0 0 12px;
+    }
+    .download p {
+      font-size: 16px;
+      color: var(--muted);
+      margin: 0 0 32px;
+    }
+    .download-cards {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .download-card {
+      padding: 24px 32px;
+      border-radius: 16px;
+      border: 1px solid var(--stroke2);
+      background: rgba(255,255,255,0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      min-width: 200px;
+    }
+    .download-card-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .download-card-sub {
+      font-size: 12px;
+      color: var(--muted2);
+      font-family: var(--mono);
+    }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--stroke);
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted2);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--ink); }
+
+    /* Scroll in animation */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in {
+      opacity: 0;
+      animation: fadeUp 600ms cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+    .fade-in:nth-child(2) { animation-delay: 80ms; }
+    .fade-in:nth-child(3) { animation-delay: 160ms; }
+    .fade-in:nth-child(4) { animation-delay: 240ms; }
+    .fade-in:nth-child(5) { animation-delay: 320ms; }
+    .fade-in:nth-child(6) { animation-delay: 400ms; }
+  </style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <a href="#" class="nav-brand">
+      <div class="nav-mark">
+        <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 24L16 10l6 14" />
+          <path d="M12.8 19h6.4" />
+          <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+          <circle cx="16" cy="10.2" r="1" fill="currentColor" stroke="none" opacity="0.72" />
+        </svg>
+      </div>
+      <span class="nav-name">Agent Heaven</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/simonschnabl/agent-heaven" class="primary">GitHub</a>
+    </div>
+  </nav>
+</div>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>Run, monitor, and control<br/><span class="gr">parallel agent jobs</span></h1>
+	    <p>Agent Heaven is a local desktop app that spawns AI coding agents as cards on a Kanban board and streams their output in real-time.</p>
+    <div class="hero-actions">
+      <a href="#download" class="btn btn--primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </a>
+      <a href="https://github.com/simonschnabl/agent-heaven" class="btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+
+    <!-- App Mockup -->
+    <div class="mockup-wrap">
+      <div class="mockup-titlebar">
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+      </div>
+      <div class="mockup-app">
+        <div class="mockup-sidebar">
+          <div class="mockup-brand">
+            <div class="mockup-brand-icon">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 24L16 10l6 14" /><path d="M12.8 19h6.4" />
+                <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+                <circle cx="16" cy="10.2" r="1" fill="currentColor" stroke="none" opacity="0.72" />
+              </svg>
+            </div>
+            <div>
+              <div class="mockup-brand-name">Agent Heaven</div>
+              <div class="mockup-brand-tag">Run, monitor, and control parallel agent jobs</div>
+            </div>
+          </div>
+          <div class="mockup-label">Projects</div>
+          <div class="mockup-project">
+            <div class="mockup-swatch" style="background:#64d8a3"></div>
+            <div>
+              <div style="font-weight:600">api-server</div>
+              <div class="mockup-project-path">~/code/api-server</div>
+            </div>
+          </div>
+          <div class="mockup-project">
+            <div class="mockup-swatch" style="background:#4bb6ff"></div>
+            <div>
+              <div style="font-weight:600">frontend</div>
+              <div class="mockup-project-path">~/code/frontend</div>
+            </div>
+          </div>
+          <div class="mockup-project">
+            <div class="mockup-swatch" style="background:#bd93f9"></div>
+            <div>
+              <div style="font-weight:600">ml-pipeline</div>
+              <div class="mockup-project-path">~/code/ml-pipeline</div>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-main">
+          <div class="mockup-composer">
+            <div class="mockup-composer-row">
+              <div class="mockup-input">api-server</div>
+              <div class="mockup-input">o3</div>
+              <div class="mockup-btn-run">Run</div>
+            </div>
+            <div class="mockup-textarea">Refactor the auth middleware to use JWT...</div>
+          </div>
+          <div class="mockup-board">
+            <div class="mockup-lane">
+              <div class="mockup-lane-title">Running</div>
+              <div class="mockup-card mockup-card--run">
+                <div class="mockup-card-title">Refactor auth middleware</div>
+                <div class="mockup-card-meta">
+                  <span class="mockup-pill mockup-pill--run">running</span>
+                  <span>2m 14s</span>
+                </div>
+                <div class="mockup-card-preview">Updating jwt.verify() calls...<span class="mockup-caret"> |</span></div>
+              </div>
+              <div class="mockup-card mockup-card--run">
+                <div class="mockup-card-title">Add pagination to /users</div>
+                <div class="mockup-card-meta">
+                  <span class="mockup-pill mockup-pill--run">running</span>
+                  <span>0m 48s</span>
+                </div>
+              </div>
+            </div>
+            <div class="mockup-lane">
+              <div class="mockup-lane-title">Needs Attention</div>
+              <div class="mockup-card mockup-card--attn">
+                <div class="mockup-card-title">Fix CORS config</div>
+                <div class="mockup-card-meta">
+                  <span class="mockup-pill mockup-pill--attn">needs input</span>
+                  <span>5m 02s</span>
+                </div>
+              </div>
+            </div>
+            <div class="mockup-lane">
+              <div class="mockup-lane-title">Done</div>
+              <div class="mockup-card mockup-card--done">
+                <div class="mockup-card-title">Add rate limiter</div>
+                <div class="mockup-card-meta">
+                  <span class="mockup-pill mockup-pill--done">done</span>
+                  <span>3m 21s</span>
+                </div>
+              </div>
+              <div class="mockup-card mockup-card--done">
+                <div class="mockup-card-title">Write integration tests</div>
+                <div class="mockup-card-meta">
+                  <span class="mockup-pill mockup-pill--done">done</span>
+                  <span>8m 45s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap" id="features">
+  <section class="features">
+    <h2>Features</h2>
+    <div class="features-grid">
+      <div class="feature fade-in">
+        <div class="feature-icon">&#9776;</div>
+        <h3>Kanban Board</h3>
+        <p>Agent runs are organized into Running, Needs Attention, and Done lanes. See all your tasks at a glance.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#9889;</div>
+        <h3>Live Streaming</h3>
+        <p>Watch agent output stream in real-time with a live terminal view, chat history, and raw logs.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#128194;</div>
+        <h3>Multi-Project</h3>
+        <p>Manage multiple project folders. Each run is tied to a project with its own color, path, and config.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#127912;</div>
+        <h3>Themes</h3>
+        <p>Six built-in themes (Heaven, Nord, Gruvbox, Solarized, Dracula, Ocean) with dark and light modes.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#128247;</div>
+        <h3>Image Attachments</h3>
+        <p>Drag and drop images onto prompts or follow-ups. They're passed directly to the agent for visual context.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#128276;</div>
+        <h3>Notifications</h3>
+        <p>Sound alerts when jobs finish or need your attention. Five sound presets with configurable volume.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#127760;</div>
+        <h3>Multi-Display</h3>
+        <p>Pop out individual lanes or jobs into their own windows. Spread your workflow across multiple displays.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#9000;</div>
+        <h3>Global Hotkey</h3>
+        <p>Summon the app from anywhere with a configurable keyboard shortcut. Optionally paste clipboard into the prompt.</p>
+      </div>
+      <div class="feature fade-in">
+        <div class="feature-icon">&#128190;</div>
+        <h3>Persistent History</h3>
+        <p>Job history is saved to disk with thread IDs for resuming. Archive or trash runs to keep things tidy.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap" id="download">
+  <section class="download">
+    <h2>Get Agent Heaven</h2>
+    <p>Download the latest release or build from source.</p>
+    <div class="download-cards">
+      <div class="download-card">
+        <div class="download-card-label">macOS (.dmg)</div>
+        <div class="download-card-sub">Apple Silicon + Intel</div>
+        <a href="https://github.com/simonschnabl/agent-heaven/releases/latest" class="btn btn--primary">Download</a>
+      </div>
+      <div class="download-card">
+        <div class="download-card-label">Build from Source</div>
+        <div class="download-card-sub">npm install && npm run dist</div>
+        <a href="https://github.com/simonschnabl/agent-heaven" class="btn">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>Agent Heaven &middot; Built by <a href="https://github.com/simonschnabl">Simon Schnabl</a> &middot; <a href="https://github.com/simonschnabl/agent-heaven">Source on GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
