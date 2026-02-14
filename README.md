@@ -8,9 +8,9 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
 </p>
 
-Agent Heaven is a local Electron desktop app that spawns AI coding agents (OpenAI Codex and Anthropic Claude Code) as "cards" on a Kanban board and streams their output in real time.
+Agent Heaven is a local Electron desktop app that runs AI coding agents (OpenAI Codex CLI and/or Anthropic Claude Code CLI) as "cards" on a Kanban board and streams their output in real time.
 
-[Releases](https://github.com/grund3g/agent-heaven/releases/latest) · [From Source](#from-source-development) · [License](LICENSE)
+[Releases](https://github.com/grund3g/agent-heaven/releases/latest) · [Development](#development) · [License](LICENSE)
 
 ## Highlights
 
@@ -22,15 +22,15 @@ Agent Heaven is a local Electron desktop app that spawns AI coding agents (OpenA
 - Multi-window / multi-display support
 - Themes, sounds, and global hotkey (optional)
 
-## Install (recommended)
+## Download / Install
 
-- macOS: download the latest `.dmg` from Releases.
-- Other platforms: run from source (Electron).
+- macOS: download the latest `.dmg` from GitHub Releases.
+- Other platforms: build/run from source (Electron). Prebuilt binaries are currently macOS-only.
 
 ### Requirements
 
 - `codex` (OpenAI Codex CLI) and/or `claude` (Claude Code CLI) installed and authenticated.
-- For running from source: Node.js 22 + npm.
+- For running from source or packaging: Node.js 22 + npm.
 
 ## Quick start
 
@@ -38,10 +38,10 @@ Agent Heaven is a local Electron desktop app that spawns AI coding agents (OpenA
 2. Start a job with a prompt (choose Codex or Claude).
 3. Watch streaming output; send follow-ups; attach images if needed.
 
-## From source (development)
+## Development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -53,22 +53,22 @@ npm run dev
 npm test
 ```
 
-## Build / Distribution (macOS)
+## Packaging (macOS)
 
-Create a normal `.app` bundle (and a `.dmg`/`.zip`) so others can run it without `npm`:
+Build a local `.app` bundle plus distributable artifacts (`.dmg` / `.zip`):
 
 ```bash
-npm install
+npm ci
 npm run dist
 ```
 
 Build artifacts land in `dist/`.
 
-Notes:
+Notes for distribution:
 
 - If you distribute unsigned builds, macOS Gatekeeper will likely block the first launch. Recipients can right-click the app -> Open (or allow it via System Settings -> Privacy & Security).
 - For smooth distribution to others, you typically need code signing + notarization (Apple Developer ID).
-- If the app can't find `codex` or `claude` (common when launching packaged apps from Finder), set Settings -> Codex path / Claude path to the full binary path (Claude local installer is typically `~/.claude/local/claude`).
+- If the app can't find `codex` or `claude` (common when launching packaged apps from Finder), set Settings -> Codex path / Claude path to the full binary path. (Claude's local installer is typically `~/.claude/local/claude`.)
 
 ## How it works (short)
 
@@ -78,6 +78,13 @@ Agent Heaven spawns a non-interactive agent process per card and parses the stre
 - Claude Code: `claude --print --output-format stream-json --verbose` (and `--resume <session-id>`)
 
 Projects + settings are persisted; job history is persisted on disk (including IDs for resume).
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+- Please include a clear reproduction for bugs.
+- Run tests locally with `npm test`.
 
 ## Safety / sandboxing
 

@@ -19,7 +19,7 @@ export const DEFAULT_STATE = {
     uiModel: "",
     uiTheme: "heaven", // heaven | nord | gruvbox | solarized | dracula | ocean
     uiColorScheme: "dark", // system | dark | light
-    uiLogoVariant: "v1", // v1..v5
+    uiLogoVariant: "v1", // v1..v10
 
     // Global shortcuts
     globalHotkeyEnabled: false,
