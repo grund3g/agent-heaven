@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.4.0...agent-heaven-v0.5.0) (2026-02-14)
+
+
+### Features
+
+* **ui:** add terminal tab; remove font style setting ([3c74d63](https://github.com/grund3g/agent-heaven/commit/3c74d63b35b33e3995e4418db66c4735ecb868df))
+
+
+### Bug Fixes
+
+* **ui:** wire terminal events earlier ([9860999](https://github.com/grund3g/agent-heaven/commit/9860999c65469cfa8a2390a8ed82fa2187a5beb9))
+
 ## [0.4.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.3.2...agent-heaven-v0.4.0) (2026-02-14)
 
 
