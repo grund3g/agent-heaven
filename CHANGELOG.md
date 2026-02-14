@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.3.1...agent-heaven-v0.3.2) (2026-02-14)
+
+
+### Bug Fixes
+
+* ship updated dock icon ([1aa86d1](https://github.com/grund3g/agent-heaven/commit/1aa86d156e405f9b072ebbd25ad74ae0466f0da3))
+
 ## [0.3.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.3.0...agent-heaven-v0.3.1) (2026-02-14)
 
 
