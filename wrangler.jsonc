@@ -1,0 +1,10 @@
+{
+  // Cloudflare Workers: serve the static documentation from ./docs.
+  // This is used by Workers Builds (Git-connected deploys).
+  "name": "agent-heaven",
+  "compatibility_date": "2026-02-14",
+  "assets": {
+    "directory": "./docs"
+  }
+}
+
