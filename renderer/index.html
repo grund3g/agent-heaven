@@ -665,6 +665,42 @@
 	      </div>
 	    </dialog>
 
+	    <dialog id="integrateDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--integrate">
+	        <div class="dialog__header">
+	          <div class="dialog__title" id="integrateDialogTitle">Integrate to default branch</div>
+	          <button id="integrateDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__meta" id="integrateDialogMeta"></div>
+	        <div class="dialog__body dialog__body--integrate">
+	          <div class="integrate">
+	            <div class="integrate__top">
+	              <div id="integrateDialogIcon" class="integrate__icon integrate__icon--idle" aria-hidden="true"></div>
+	              <div class="integrate__texts">
+	                <div id="integrateDialogStatus" class="integrate__status">Ready</div>
+	                <div id="integrateDialogMessage" class="integrate__message settings__note settings__note--prewrap"></div>
+	              </div>
+	            </div>
+	            <div id="integrateDialogResultWrap" class="integrate__result" hidden>
+	              <div class="integrate__resultTitle">Details</div>
+	              <div id="integrateDialogResult" class="integrate__resultText"></div>
+	            </div>
+	          </div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--left">
+	            <button id="integrateDialogRevealBtn" class="btn btn--ghost" type="button" hidden>Reveal target</button>
+	            <button id="integrateDialogDetailsBtn" class="btn btn--ghost" type="button" hidden>Details</button>
+	          </div>
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="integrateDialogCancelBtn" class="btn btn--ghost" type="button">Cancel</button>
+	            <button id="integrateDialogStartBtn" class="btn btn--primary" type="button">Integrate</button>
+	            <button id="integrateDialogArchiveBtn" class="btn btn--primary" type="button" hidden>Archive ticket</button>
+	          </div>
+	        </div>
+	      </div>
+	    </dialog>
+
 	    <dialog id="shortcutsDialog" class="dialog">
 	      <div class="dialog__inner dialog__inner--shortcuts">
 	        <div class="dialog__header">

@@ -71,16 +71,31 @@ const api = window.agentHeaven;
   branchDialog: document.getElementById("branchDialog"),
   branchDialogClose: document.getElementById("branchDialogClose"),
   branchDialogMeta: document.getElementById("branchDialogMeta"),
-  branchDialogText: document.getElementById("branchDialogText"),
-  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
-  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
-  branchDialogRunNoAskBtn: document.getElementById("branchDialogRunNoAskBtn"),
-  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
+	  branchDialogText: document.getElementById("branchDialogText"),
+	  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
+	  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
+	  branchDialogRunNoAskBtn: document.getElementById("branchDialogRunNoAskBtn"),
+	  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
 
-  checkoutsDialog: document.getElementById("checkoutsDialog"),
-  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
-  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
-  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
+	  integrateDialog: document.getElementById("integrateDialog"),
+	  integrateDialogTitle: document.getElementById("integrateDialogTitle"),
+	  integrateDialogMeta: document.getElementById("integrateDialogMeta"),
+	  integrateDialogClose: document.getElementById("integrateDialogClose"),
+	  integrateDialogIcon: document.getElementById("integrateDialogIcon"),
+	  integrateDialogStatus: document.getElementById("integrateDialogStatus"),
+	  integrateDialogMessage: document.getElementById("integrateDialogMessage"),
+	  integrateDialogResultWrap: document.getElementById("integrateDialogResultWrap"),
+	  integrateDialogResult: document.getElementById("integrateDialogResult"),
+	  integrateDialogRevealBtn: document.getElementById("integrateDialogRevealBtn"),
+	  integrateDialogDetailsBtn: document.getElementById("integrateDialogDetailsBtn"),
+	  integrateDialogCancelBtn: document.getElementById("integrateDialogCancelBtn"),
+	  integrateDialogStartBtn: document.getElementById("integrateDialogStartBtn"),
+	  integrateDialogArchiveBtn: document.getElementById("integrateDialogArchiveBtn"),
+
+	  checkoutsDialog: document.getElementById("checkoutsDialog"),
+	  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
+	  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
+	  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
   checkoutsDialogBody: document.getElementById("checkoutsDialogBody"),
   checkoutsDialogRefresh: document.getElementById("checkoutsDialogRefresh"),
 
@@ -4919,85 +4934,256 @@ function defaultIntegrateCommitMessage(job) {
   return msg.slice(0, 72);
 }
 
-let integrateToDefaultInFlight = false;
-async function runIntegrateToDefaultAction(jobId) {
+let integrateDialogJobId = "";
+let integrateDialogPhase = ""; // confirm | pending | success | error
+let integrateDialogStatusText = "";
+let integrateDialogMessageText = "";
+let integrateDialogResultText = "";
+let integrateDialogErrorFull = "";
+let integrateDialogTargetPath = "";
+let integrateDialogTargetBranch = "";
+let integrateDialogArchived = false;
+
+function resetIntegrateDialogState() {
+  integrateDialogJobId = "";
+  integrateDialogPhase = "";
+  integrateDialogStatusText = "";
+  integrateDialogMessageText = "";
+  integrateDialogResultText = "";
+  integrateDialogErrorFull = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  integrateDialogArchived = false;
+  syncIntegrateDialogUi();
+}
+
+function canCloseIntegrateDialog() {
+  return integrateDialogPhase !== "pending";
+}
+
+function setIntegrateDialogPhase(phase, opts = {}) {
+  const p = opts && typeof opts === "object" ? opts : {};
+  integrateDialogPhase = String(phase || "").trim();
+  if (typeof p.status === "string") integrateDialogStatusText = p.status;
+  if (typeof p.message === "string") integrateDialogMessageText = p.message;
+  if (typeof p.details === "string") integrateDialogResultText = p.details;
+  if (typeof p.errorFull === "string") integrateDialogErrorFull = p.errorFull;
+  if (typeof p.targetPath === "string") integrateDialogTargetPath = p.targetPath;
+  if (typeof p.targetBranch === "string") integrateDialogTargetBranch = p.targetBranch;
+  if (typeof p.archived === "boolean") integrateDialogArchived = p.archived;
+  syncIntegrateDialogUi();
+}
+
+function syncIntegrateDialogUi() {
+  if (!els.integrateDialog) return;
+
+  const jobId = String(integrateDialogJobId || "").trim();
+  const job = jobId ? state.jobs.get(jobId) : null;
+  const projectId = job && typeof job.projectId === "string" ? job.projectId : "";
+  const project = projectId ? state.projects.find((p) => p && p.id === projectId) || null : null;
+
+  if (els.integrateDialogTitle) els.integrateDialogTitle.textContent = "Integrate to default branch";
+  if (els.integrateDialogMeta) {
+    const bits = [];
+    if (project && project.name) bits.push(`project=${project.name}`);
+    else if (projectId) bits.push(`project=${projectId}`);
+    if (job) bits.push(`job=${jobDisplayTitle(job)}`);
+    if (jobId) bits.push(`id=${jobId}`);
+    els.integrateDialogMeta.textContent = bits.join("  ");
+    els.integrateDialogMeta.title = jobId ? `jobId=${jobId}` : "";
+  }
+
+  const phase = integrateDialogPhase || "confirm";
+  const iconVariant =
+    phase === "pending" ? "spinner" : phase === "success" ? "success" : phase === "error" ? "error" : "idle";
+  if (els.integrateDialogIcon) {
+    els.integrateDialogIcon.className = `integrate__icon integrate__icon--${iconVariant}`;
+  }
+
+  if (els.integrateDialogStatus) els.integrateDialogStatus.textContent = integrateDialogStatusText || "";
+  if (els.integrateDialogMessage) {
+    els.integrateDialogMessage.textContent = integrateDialogMessageText || "";
+    els.integrateDialogMessage.hidden = !integrateDialogMessageText;
+  }
+
+  const details = String(integrateDialogResultText || integrateDialogErrorFull || "").trim();
+  if (els.integrateDialogResultWrap) els.integrateDialogResultWrap.hidden = !details;
+  if (els.integrateDialogResult) els.integrateDialogResult.textContent = details;
+
+  const isConfirm = phase === "confirm";
+  const isPending = phase === "pending";
+  const isSuccess = phase === "success";
+  const isError = phase === "error";
+
+  if (els.integrateDialogClose) els.integrateDialogClose.disabled = isPending;
+
+  const canArchive = isSuccess && !integrateDialogArchived && job && job.status !== "running" && jobBox(job) === "board";
+  if (els.integrateDialogCancelBtn) {
+    els.integrateDialogCancelBtn.hidden = !isConfirm;
+    els.integrateDialogCancelBtn.disabled = isPending;
+  }
+  if (els.integrateDialogStartBtn) {
+    els.integrateDialogStartBtn.hidden = !isConfirm;
+    els.integrateDialogStartBtn.disabled = isPending;
+    els.integrateDialogStartBtn.textContent = "Integrate";
+  }
+  if (els.integrateDialogArchiveBtn) {
+    els.integrateDialogArchiveBtn.hidden = !canArchive;
+    els.integrateDialogArchiveBtn.disabled = isPending;
+  }
+
+  if (els.integrateDialogRevealBtn) {
+    els.integrateDialogRevealBtn.hidden = !(isSuccess && integrateDialogTargetPath);
+    els.integrateDialogRevealBtn.disabled = !integrateDialogTargetPath || isPending;
+  }
+
+  if (els.integrateDialogDetailsBtn) {
+    els.integrateDialogDetailsBtn.hidden = !(isError && integrateDialogErrorFull);
+    els.integrateDialogDetailsBtn.disabled = isPending;
+  }
+}
+
+function openIntegrateDialog(jobId) {
+  if (!els.integrateDialog) return false;
+  if (els.integrateDialog.open && !canCloseIntegrateDialog()) return false;
+
   const id = String(jobId || "").trim();
+  if (!id) return false;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return false;
+
+  integrateDialogJobId = id;
+  integrateDialogArchived = false;
+
+  integrateDialogResultText = "";
+  integrateDialogErrorFull = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  setIntegrateDialogPhase("confirm", {
+    status: "Integrate checkout",
+    message:
+      "Integrate this job's checkout into the project's default branch?\n\nThis will cherry-pick the job's commits onto the default branch. Conflicts may require manual resolution."
+  });
+
+  try {
+    if (!els.integrateDialog.open) els.integrateDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (els.integrateDialogStartBtn) els.integrateDialogStartBtn.focus();
+  } catch {
+    // ignore
+  }
+
+  return true;
+}
+
+function closeIntegrateDialog() {
+  if (!els.integrateDialog) return;
+  if (!canCloseIntegrateDialog()) return;
+  try {
+    if (els.integrateDialog.open) els.integrateDialog.close();
+  } catch {
+    // ignore
+  }
+}
+
+function revealIntegrateDialogTarget() {
+  const targetPath = String(integrateDialogTargetPath || "").trim();
+  if (!targetPath) return;
+  if (!api || typeof api.shellOpenPath !== "function") return;
+  api.shellOpenPath(targetPath).catch(() => {});
+}
+
+function showIntegrateDialogDetails() {
+  const full = String(integrateDialogErrorFull || "").trim();
+  if (!full) return;
+  try {
+    window.alert(full);
+  } catch {
+    // ignore
+  }
+}
+
+let integrateToDefaultInFlight = false;
+async function startIntegrateToDefaultFromDialog() {
+  const id = String(integrateDialogJobId || "").trim();
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job || isDemoJob(job)) return;
 
   if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
-    showToast("Integration is not supported in this build.");
+    setIntegrateDialogPhase("error", {
+      status: "Integration failed",
+      message: "Integration is not supported in this build.",
+      errorFull: "Integration is not supported in this build."
+    });
     return;
   }
 
   if (job.status === "running") {
-    showToast("Wait until the job has finished before integrating.");
-    return;
-  }
-
-  if (integrateToDefaultInFlight) {
-    showToast("Integration already running.");
-    return;
-  }
-
-  const ok = window.confirm(
-    "Integrate this job's checkout into the project's default branch?\n\nThis will cherry-pick the job's commits onto the default branch. Conflicts may require manual resolution.\n\nContinue?"
-  );
-  if (!ok) return;
-
-  const showError = (msg) => {
-    const full = String(msg || "").trim() || "Integration failed.";
-    const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
-    showToast(first, null, 12_000, {
-      actions: [
-        {
-          label: "Details",
-          onClick: () => {
-            try {
-              window.alert(full);
-            } catch {
-              // ignore
-            }
-          }
-        }
-      ]
+    setIntegrateDialogPhase("error", {
+      status: "Integration failed",
+      message: "Wait until the job has finished before integrating.",
+      errorFull: "Job is still running."
     });
-  };
+    return;
+  }
 
+  if (integrateToDefaultInFlight) return;
   integrateToDefaultInFlight = true;
+
+  integrateDialogResultText = "";
+  integrateDialogErrorFull = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  integrateDialogArchived = false;
+  setIntegrateDialogPhase("pending", {
+    status: "Integrating…",
+    message: "Cherry-picking commits onto the project's default branch. This may take a moment."
+  });
+
   try {
     let res = null;
     try {
       res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
-	    } catch (err) {
-	      const msg = String(err && err.message ? err.message : err);
-	      if (msg.includes("Provide a commit message first")) {
-	        let suggested = "";
-	        try {
-	          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-	            suggested = await api.checkoutsSuggestCommitMessage(id);
-	          }
-	        } catch {
-	          suggested = "";
-	        }
-	        const entered = await promptText({
-	          title: "Commit message",
-	          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
-	          label: "Commit message",
-	          defaultValue: suggested || defaultIntegrateCommitMessage(job),
-	          okLabel: "Continue",
-	          cancelLabel: "Cancel"
-	        });
-	        const commitMessage = String(entered || "").trim();
-	        if (!commitMessage) {
-	          showToast("Integration cancelled.");
-	          return;
-	        }
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (msg.includes("Provide a commit message first")) {
+        setIntegrateDialogPhase("pending", {
+          status: "Commit message required",
+          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
+        });
+
+        let suggested = "";
+        try {
+          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
+            suggested = await api.checkoutsSuggestCommitMessage(id);
+          }
+        } catch {
+          suggested = "";
+        }
+
+        const entered = await promptText({
+          title: "Commit message",
+          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
+          label: "Commit message",
+          defaultValue: suggested || defaultIntegrateCommitMessage(job),
+          okLabel: "Continue",
+          cancelLabel: "Cancel"
+        });
+        const commitMessage = String(entered || "").trim();
+        if (!commitMessage) {
+          setIntegrateDialogPhase("confirm", { status: "Cancelled", message: "Integration cancelled." });
+          return;
+        }
+
+        setIntegrateDialogPhase("pending", { status: "Integrating…", message: "Committing and integrating…" });
         res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
       } else {
-        showError(msg);
-        return;
+        throw err;
       }
     }
 
@@ -5012,25 +5198,151 @@ async function runIntegrateToDefaultAction(jobId) {
     else msg = `Integrated ${applied} commit${applied === 1 ? "" : "s"} into ${targetBranch || "default branch"}.`;
     if (committed && committedSha) msg += ` (Committed: ${committedSha})`;
 
-    const toastOpts = targetPath
-      ? {
-          actions: [
-            {
-              label: "Reveal target",
-              kind: "primary",
-              onClick: () => {
-                if (!api || typeof api.shellOpenPath !== "function") return;
-                api.shellOpenPath(targetPath).catch(() => {});
-              }
-            }
-          ]
-        }
-      : null;
-    showToast(msg, null, 12_000, toastOpts);
+    integrateDialogTargetPath = targetPath;
+    integrateDialogTargetBranch = targetBranch;
+
+    const canArchive = jobBox(job) === "board";
+    const details = [
+      targetBranch ? `Target branch: ${targetBranch}` : "",
+      targetPath ? `Target path: ${targetPath}` : "",
+      `Commits applied: ${applied}`,
+      committed && committedSha ? `Committed local changes: ${committedSha}` : committed ? "Committed local changes: yes" : ""
+    ]
+      .filter(Boolean)
+      .join("\n");
+    integrateDialogResultText = details;
+
+    setIntegrateDialogPhase("success", {
+      status: applied <= 0 ? "Nothing to integrate" : "Integrated",
+      message: canArchive ? `${msg}\n\nArchive this ticket now?` : msg,
+      details,
+      targetPath,
+      targetBranch
+    });
   } catch (err) {
-    showError(String(err && err.message ? err.message : err));
+    const full = String(err && err.message ? err.message : err).trim() || "Integration failed.";
+    const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
+    integrateDialogErrorFull = full;
+    integrateDialogResultText = full;
+    setIntegrateDialogPhase("error", { status: "Integration failed", message: first, errorFull: full, details: full });
   } finally {
     integrateToDefaultInFlight = false;
+    syncIntegrateDialogUi();
+  }
+}
+
+async function archiveIntegrateDialogJob() {
+  const id = String(integrateDialogJobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+  if (job.status === "running") return;
+  if (!api || typeof api.jobsArchive !== "function") return;
+
+  const prevDetails = integrateDialogResultText;
+  const prevTargetPath = integrateDialogTargetPath;
+  const prevTargetBranch = integrateDialogTargetBranch;
+
+  setIntegrateDialogPhase("pending", { status: "Archiving…", message: "Archiving this ticket…" });
+  try {
+    await api.jobsArchive(id);
+    integrateDialogArchived = true;
+    integrateDialogResultText = prevDetails;
+    integrateDialogTargetPath = prevTargetPath;
+    integrateDialogTargetBranch = prevTargetBranch;
+    setIntegrateDialogPhase("success", {
+      status: "Archived",
+      message: "Ticket archived.",
+      details: prevDetails,
+      targetPath: prevTargetPath,
+      targetBranch: prevTargetBranch,
+      archived: true
+    });
+  } catch (err) {
+    const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
+    const first = (full.split("\n")[0] || "").trim() || "Failed to archive.";
+    integrateDialogErrorFull = full;
+    integrateDialogResultText = full;
+    setIntegrateDialogPhase("error", { status: "Archive failed", message: first, errorFull: full, details: full });
+  }
+}
+
+async function runIntegrateToDefaultAction(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+
+  if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
+    if (els.integrateDialog) {
+      integrateDialogJobId = id;
+      integrateDialogArchived = false;
+      integrateDialogErrorFull = "Integration is not supported in this build.";
+      integrateDialogResultText = integrateDialogErrorFull;
+      setIntegrateDialogPhase("error", {
+        status: "Integration failed",
+        message: "Integration is not supported in this build.",
+        errorFull: integrateDialogErrorFull,
+        details: integrateDialogErrorFull
+      });
+      try {
+        if (!els.integrateDialog.open) els.integrateDialog.showModal();
+      } catch {
+        // ignore
+      }
+    } else {
+      showToast("Integration is not supported in this build.");
+    }
+    return;
+  }
+
+  if (job.status === "running") {
+    if (els.integrateDialog) {
+      integrateDialogJobId = id;
+      integrateDialogArchived = false;
+      integrateDialogErrorFull = "Wait until the job has finished before integrating.";
+      integrateDialogResultText = integrateDialogErrorFull;
+      setIntegrateDialogPhase("error", {
+        status: "Integration failed",
+        message: "Wait until the job has finished before integrating.",
+        errorFull: integrateDialogErrorFull,
+        details: integrateDialogErrorFull
+      });
+      try {
+        if (!els.integrateDialog.open) els.integrateDialog.showModal();
+      } catch {
+        // ignore
+      }
+    } else {
+      showToast("Wait until the job has finished before integrating.");
+    }
+    return;
+  }
+
+  if (integrateToDefaultInFlight) {
+    if (els.integrateDialog && els.integrateDialog.open) return;
+    showToast("Integration already running.");
+    return;
+  }
+
+  // Use a modal so feedback isn't hidden behind the already-open job dialog.
+  if (els.integrateDialog) {
+    const ok = openIntegrateDialog(id);
+    if (!ok) showToast("Integration already running.");
+    return;
+  }
+
+  // Fallback: old behavior for builds without the integrate dialog.
+  const ok = window.confirm(
+    "Integrate this job's checkout into the project's default branch?\n\nThis will cherry-pick the job's commits onto the default branch. Conflicts may require manual resolution.\n\nContinue?"
+  );
+  if (!ok) return;
+  showToast("Starting integration…");
+  try {
+    await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
+    showToast("Integrated into default branch.");
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err) || "Integration failed.");
   }
 }
 
@@ -7427,22 +7739,43 @@ function wireUi() {
   if (els.branchDialogRunBtn) els.branchDialogRunBtn.addEventListener("click", () => resolveBranchDialog("run"));
   if (els.branchDialogRunNoAskBtn) els.branchDialogRunNoAskBtn.addEventListener("click", () => resolveBranchDialog("run_no_ask"));
   if (els.branchDialogCancelBtn) els.branchDialogCancelBtn.addEventListener("click", () => resolveBranchDialog("cancel"));
-  if (els.branchDialog) {
-    els.branchDialog.addEventListener("click", (e) => {
-      if (e.target === els.branchDialog) resolveBranchDialog("cancel");
-    });
-    els.branchDialog.addEventListener("cancel", (e) => {
-      e.preventDefault();
-      resolveBranchDialog("cancel");
-    });
-    els.branchDialog.addEventListener("close", () => {
-      if (state.branchDialogResolver) resolveBranchDialog("cancel");
-    });
-  }
+	  if (els.branchDialog) {
+	    els.branchDialog.addEventListener("click", (e) => {
+	      if (e.target === els.branchDialog) resolveBranchDialog("cancel");
+	    });
+	    els.branchDialog.addEventListener("cancel", (e) => {
+	      e.preventDefault();
+	      resolveBranchDialog("cancel");
+	    });
+	    els.branchDialog.addEventListener("close", () => {
+	      if (state.branchDialogResolver) resolveBranchDialog("cancel");
+	    });
+	  }
 
-  els.openSettingsBtn.addEventListener("click", () => {
-    openSettingsDialog();
-  });
+	  // Integrate-to-default dialog
+	  if (els.integrateDialogClose) els.integrateDialogClose.addEventListener("click", () => closeIntegrateDialog());
+	  if (els.integrateDialogCancelBtn) els.integrateDialogCancelBtn.addEventListener("click", () => closeIntegrateDialog());
+	  if (els.integrateDialogStartBtn)
+	    els.integrateDialogStartBtn.addEventListener("click", () => startIntegrateToDefaultFromDialog());
+	  if (els.integrateDialogArchiveBtn) els.integrateDialogArchiveBtn.addEventListener("click", () => archiveIntegrateDialogJob());
+	  if (els.integrateDialogRevealBtn) els.integrateDialogRevealBtn.addEventListener("click", () => revealIntegrateDialogTarget());
+	  if (els.integrateDialogDetailsBtn) els.integrateDialogDetailsBtn.addEventListener("click", () => showIntegrateDialogDetails());
+	  if (els.integrateDialog) {
+	    els.integrateDialog.addEventListener("click", (e) => {
+	      if (e.target === els.integrateDialog) closeIntegrateDialog();
+	    });
+	    els.integrateDialog.addEventListener("cancel", (e) => {
+	      e.preventDefault();
+	      closeIntegrateDialog();
+	    });
+	    els.integrateDialog.addEventListener("close", () => {
+	      resetIntegrateDialogState();
+	    });
+	  }
+
+	  els.openSettingsBtn.addEventListener("click", () => {
+	    openSettingsDialog();
+	  });
 
   if (els.openStatusBtn) {
     els.openStatusBtn.addEventListener("click", () => openStatusDialog());
