@@ -57,6 +57,33 @@ const els = {
   rerunPromptSelect: document.getElementById("rerunPromptSelect"),
   rerunStartBtn: document.getElementById("rerunStartBtn"),
 
+  projectDialog: document.getElementById("projectDialog"),
+  projectDialogTitle: document.getElementById("projectDialogTitle"),
+  projectDialogMeta: document.getElementById("projectDialogMeta"),
+  projectDialogClose: document.getElementById("projectDialogClose"),
+  projectNameInput: document.getElementById("projectNameInput"),
+  projectShortNameInput: document.getElementById("projectShortNameInput"),
+  projectDefaultBranchInput: document.getElementById("projectDefaultBranchInput"),
+  projectCheckoutModeSelect: document.getElementById("projectCheckoutModeSelect"),
+  projectDialogSave: document.getElementById("projectDialogSave"),
+
+  branchDialog: document.getElementById("branchDialog"),
+  branchDialogClose: document.getElementById("branchDialogClose"),
+  branchDialogMeta: document.getElementById("branchDialogMeta"),
+  branchDialogText: document.getElementById("branchDialogText"),
+  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
+  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
+  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
+
+  checkoutsDialog: document.getElementById("checkoutsDialog"),
+  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
+  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
+  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
+  checkoutsDialogBody: document.getElementById("checkoutsDialogBody"),
+  checkoutsDialogRefresh: document.getElementById("checkoutsDialogRefresh"),
+
+  projectDialogCheckoutsBtn: document.getElementById("projectDialogCheckoutsBtn"),
+
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
 		  settingsCodexPath: document.getElementById("settingsCodexPath"),
@@ -139,6 +166,13 @@ const state = {
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
   durationTimer: null,
+  projectRefreshTimer: null,
+
+  editingProjectId: "",
+  branchDialogResolver: null,
+  checkoutsProjectId: "",
+  checkoutsEntries: [],
+  checkoutsLoading: false,
 
   searchQuery: "",
   searchJobIds: null, // Set<string> | null
@@ -3377,12 +3411,323 @@ async function promptEditProjectShortName(projectId, opts = {}) {
   }
 }
 
+function normalizeCheckoutMode(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "worktree" || raw === "worktrees") return "worktree";
+  if (raw === "clone" || raw === "checkout" || raw === "dedicated") return "clone";
+  return "inplace";
+}
+
+function normalizeBranchName(value) {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) return "";
+  const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+  return stripped.slice(0, 200);
+}
+
+async function refreshProjectGitInfo(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id) return null;
+  if (!api || typeof api.projectsGitInfo !== "function") return null;
+
+  try {
+    const info = await api.projectsGitInfo(id);
+    const p = state.projects.find((x) => x && x.id === id) || null;
+    if (p && info && typeof info === "object") {
+      p.gitBranch = typeof info.branch === "string" ? info.branch : "";
+      p.gitSha = typeof info.sha === "string" ? info.sha : "";
+      p.gitDetached = !!info.detached;
+      p.gitDirty = !!info.dirty;
+      p.gitError = typeof info.error === "string" ? info.error : "";
+      renderProjects();
+    }
+    return info;
+  } catch {
+    return null;
+  }
+}
+
+function renderProjectDialogMeta(project) {
+  if (!els.projectDialogMeta) return;
+  const p = project && typeof project === "object" ? project : {};
+  const fullPath = String(p.path || "");
+  const displayPath = formatProjectPathForDisplay(fullPath);
+  const bits = [];
+  if (displayPath) bits.push(`path=${displayPath}`);
+  const br = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
+  if (br) bits.push(`branch=${br}${p.gitDirty ? "*" : ""}`);
+  if (typeof p.checkoutMode === "string" && p.checkoutMode) bits.push(`checkout=${normalizeCheckoutMode(p.checkoutMode)}`);
+  if (typeof p.defaultBranch === "string" && p.defaultBranch.trim()) bits.push(`default=${p.defaultBranch.trim()}`);
+  els.projectDialogMeta.textContent = bits.join("  ");
+  els.projectDialogMeta.title = fullPath ? `path=${fullPath}` : "";
+}
+
+async function openProjectDialog(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id || !els.projectDialog) return false;
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return false;
+
+  state.editingProjectId = id;
+  if (els.projectDialogTitle) els.projectDialogTitle.textContent = project.name ? `Project: ${project.name}` : "Project";
+
+  if (els.projectNameInput) els.projectNameInput.value = String(project.name || "");
+  if (els.projectShortNameInput) els.projectShortNameInput.value = normalizeShortName(project.shortName || "");
+  if (els.projectDefaultBranchInput) els.projectDefaultBranchInput.value = normalizeBranchName(project.defaultBranch || "");
+  if (els.projectCheckoutModeSelect) els.projectCheckoutModeSelect.value = normalizeCheckoutMode(project.checkoutMode);
+
+  renderProjectDialogMeta(project);
+
+  try {
+    els.projectDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (els.projectNameInput) els.projectNameInput.focus();
+  } catch {
+    // ignore
+  }
+
+  // Refresh branch info in the background so the dialog stays accurate if the user switched branches outside the app.
+  void refreshProjectGitInfo(id).then(() => {
+    const p2 = state.projects.find((p) => p && p.id === id) || null;
+    if (p2) renderProjectDialogMeta(p2);
+  });
+
+  return true;
+}
+
+function closeProjectDialog() {
+  state.editingProjectId = "";
+  try {
+    if (els.projectDialog && els.projectDialog.open) els.projectDialog.close();
+  } catch {
+    // ignore
+  }
+}
+
+async function saveProjectDialog() {
+  const id = String(state.editingProjectId || "").trim();
+  if (!id) return;
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return;
+
+  const patch = {};
+  const nextName = els.projectNameInput ? String(els.projectNameInput.value || "").trim() : "";
+  if (nextName && nextName !== String(project.name || "")) patch.name = nextName;
+
+  const nextShort = els.projectShortNameInput ? normalizeShortName(els.projectShortNameInput.value || "") : "";
+  const curShort = normalizeShortName(project.shortName || "");
+  if (nextShort !== curShort) patch.shortName = nextShort;
+
+  const nextDef = els.projectDefaultBranchInput ? normalizeBranchName(els.projectDefaultBranchInput.value || "") : "";
+  const curDef = normalizeBranchName(project.defaultBranch || "");
+  if (nextDef !== curDef) patch.defaultBranch = nextDef;
+
+  const nextMode = els.projectCheckoutModeSelect ? normalizeCheckoutMode(els.projectCheckoutModeSelect.value) : "inplace";
+  const curMode = normalizeCheckoutMode(project.checkoutMode);
+  if (nextMode !== curMode) patch.checkoutMode = nextMode;
+
+  try {
+    setHint("");
+    if (Object.keys(patch).length > 0) await api.projectsUpdate(id, patch);
+    state.projects = await api.projectsList();
+    renderProjects();
+    renderBoard();
+    closeProjectDialog();
+  } catch (err) {
+    setHint(String(err && err.message ? err.message : err), "error");
+  }
+}
+
+function fmtAge(ms) {
+  const t = Number(ms);
+  if (!Number.isFinite(t) || t <= 0) return "";
+  const age = Math.max(0, Date.now() - t);
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (age >= dayMs) {
+    const d = Math.floor(age / dayMs);
+    const h = Math.floor((age % dayMs) / (60 * 60 * 1000));
+    return `${d}d ${h}h ago`;
+  }
+  return `${fmtElapsed(age)} ago`;
+}
+
+function closeCheckoutsDialog() {
+  state.checkoutsProjectId = "";
+  state.checkoutsEntries = [];
+  state.checkoutsLoading = false;
+  try {
+    if (els.checkoutsDialog && els.checkoutsDialog.open) els.checkoutsDialog.close();
+  } catch {
+    // ignore
+  }
+}
+
+function renderCheckoutsDialog() {
+  if (!els.checkoutsDialogBody) return;
+
+  const entries = Array.isArray(state.checkoutsEntries) ? state.checkoutsEntries : [];
+  if (state.checkoutsLoading) {
+    els.checkoutsDialogBody.innerHTML = `<div class="logline">Loading…</div>`;
+    return;
+  }
+
+  if (entries.length === 0) {
+    els.checkoutsDialogBody.innerHTML = `<div class="logline">No checkouts found for this project.</div>`;
+    return;
+  }
+
+  const head = `
+    <div class="checkoutrow checkoutrow--head" role="row">
+      <div class="checkoutcell" role="columnheader">Kind</div>
+      <div class="checkoutcell" role="columnheader">Job</div>
+      <div class="checkoutcell" role="columnheader">Updated</div>
+      <div class="checkoutcell" role="columnheader">Path</div>
+      <div class="checkoutcell" role="columnheader">Actions</div>
+    </div>
+  `;
+
+  const rows = entries
+    .map((e) => {
+      const kind = e && typeof e.kind === "string" ? e.kind : "";
+      const jobId = e && typeof e.jobId === "string" ? e.jobId : "";
+      const p = e && typeof e.path === "string" ? e.path : "";
+      const pDisp = formatProjectPathForDisplay(p);
+      const age = fmtAge(e && typeof e.mtimeMs === "number" ? e.mtimeMs : 0);
+      const title = p ? p : "";
+
+      const job = jobId ? state.jobs.get(jobId) : null;
+      const inUse = !!(job && job.status === "running");
+
+      return `
+        <div class="checkoutrow" role="row">
+          <div class="checkoutcell" role="cell"><div class="checkoutpill">${escapeHtml(kind || "?")}</div></div>
+          <div class="checkoutcell" role="cell"><div class="checkoutpill" title="${escapeHtml(jobId)}">${escapeHtml(jobId)}</div></div>
+          <div class="checkoutcell" role="cell"><div class="checkoutpill" title="${escapeHtml(String(e && e.mtimeMs ? new Date(e.mtimeMs).toISOString() : ""))}">${escapeHtml(age)}</div></div>
+          <div class="checkoutcell" role="cell"><div class="checkoutpath" title="${escapeHtml(title)}">${escapeHtml(pDisp || p)}</div></div>
+          <div class="checkoutcell" role="cell">
+            <div class="checkoutactions">
+              <button class="btn btn--ghost" type="button" data-checkout-open-kind="${escapeHtml(kind)}" data-checkout-open-job="${escapeHtml(jobId)}">Reveal</button>
+              <button class="btn btn--danger" type="button" data-checkout-remove-kind="${escapeHtml(kind)}" data-checkout-remove-job="${escapeHtml(jobId)}" ${inUse ? "disabled" : ""} title="${inUse ? "In use by a running job" : "Remove checkout"}">
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  els.checkoutsDialogBody.innerHTML = `${head}${rows}`;
+}
+
+async function loadCheckouts(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id) return;
+  if (!api || typeof api.checkoutsList !== "function") return;
+
+  state.checkoutsLoading = true;
+  renderCheckoutsDialog();
+  try {
+    const entries = await api.checkoutsList(id);
+    state.checkoutsEntries = Array.isArray(entries) ? entries : [];
+  } catch {
+    state.checkoutsEntries = [];
+  } finally {
+    state.checkoutsLoading = false;
+    renderCheckoutsDialog();
+  }
+}
+
+async function openCheckoutsDialog(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id || !els.checkoutsDialog) return false;
+
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return false;
+
+  state.checkoutsProjectId = id;
+  if (els.checkoutsDialogMeta) {
+    const label = project && project.name ? project.name : id;
+    const pDisp = formatProjectPathForDisplay(project.path);
+    const bits = [];
+    bits.push(`project=${label}`);
+    if (pDisp) bits.push(`path=${pDisp}`);
+    els.checkoutsDialogMeta.textContent = bits.join("  ");
+    els.checkoutsDialogMeta.title = project.path ? `path=${project.path}` : "";
+  }
+
+  state.checkoutsEntries = [];
+  state.checkoutsLoading = true;
+  renderCheckoutsDialog();
+
+  try {
+    els.checkoutsDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  await loadCheckouts(id);
+  return true;
+}
+
+function resolveBranchDialog(action) {
+  const r = state.branchDialogResolver;
+  state.branchDialogResolver = null;
+  try {
+    if (els.branchDialog && els.branchDialog.open) els.branchDialog.close();
+  } catch {
+    // ignore
+  }
+  if (typeof r === "function") r(action);
+}
+
+function promptBranchMismatch({ projectName, projectPath, currentBranch, defaultBranch, dirty }) {
+  if (!els.branchDialog) return Promise.resolve("run");
+  const name = String(projectName || "Project");
+  const cur = String(currentBranch || "").trim();
+  const def = String(defaultBranch || "").trim();
+  const pathDisp = formatProjectPathForDisplay(projectPath);
+  if (els.branchDialogMeta) {
+    const bits = [];
+    if (name) bits.push(`project=${name}`);
+    if (pathDisp) bits.push(`path=${pathDisp}`);
+    if (dirty) bits.push("dirty=true");
+    els.branchDialogMeta.textContent = bits.join("  ");
+    els.branchDialogMeta.title = projectPath ? `path=${projectPath}` : "";
+  }
+  if (els.branchDialogText) {
+    els.branchDialogText.textContent =
+      `You are currently on "${cur || "?"}", but this project's default branch is "${def || "?"}".\n` +
+      `Du bist gerade nicht im Default-Branch.\n\n` +
+      `Checkout the default branch first (safer), run anyway on the current branch, or cancel.\n` +
+      `Default-Branch auschecken (sicherer), trotzdem starten, oder abbrechen.`;
+  }
+
+  return new Promise((resolve) => {
+    state.branchDialogResolver = resolve;
+    try {
+      els.branchDialog.showModal();
+    } catch {
+      resolve("run");
+    }
+  });
+}
+
 function renderProjects() {
   els.projectsList.innerHTML = state.projects
     .map(
       (p) => {
         const color = normalizeHexColor(p.color) || "#64d8a3";
         const shortName = normalizeShortName(p.shortName);
+        const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
+        const dirty = !!p.gitDirty;
+        const branchHtml = branch
+          ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
+          : "";
         const fullPath = String(p.path || "");
         const displayPath = formatProjectPathForDisplay(fullPath);
         return `
@@ -3395,10 +3740,11 @@ function renderProjects() {
 	            title="Project color"
 	            aria-label="Project color"
 	          />
-	          <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Edit short name / Kürzel">
+	          <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
 	            <div class="project__name">
 	              <span class="project__nametext">${escapeHtml(p.name)}</span>
 	              ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
+                ${branchHtml}
 	            </div>
 	            <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
 	          </div>
@@ -4696,6 +5042,34 @@ function renderJobDialogMeta(job) {
     if (dur) bits.push(`elapsed=${dur}`);
   }
   if (job) bits.push(`agent=${normalizeAgentKey(job.agent)}`);
+
+  // Project + checkout path
+  {
+    const project = state.projects.find((p) => p && p.id === job.projectId) || null;
+    const basePath = project && typeof project.path === "string" ? project.path : "";
+    const cwdPath = job && typeof job.projectPath === "string" ? job.projectPath : "";
+
+    const projShort = project ? normalizeShortName(project.shortName || "") : "";
+    const projName = project && project.name ? String(project.name) : "";
+    const projLabel = projShort || projName;
+    if (projLabel) bits.push(`project=${projLabel}`);
+
+    const cwdDisp = formatProjectPathForDisplay(cwdPath);
+    if (cwdDisp) bits.push(`cwd=${cwdDisp}`);
+
+    if (basePath && cwdPath && basePath !== cwdPath) {
+      const baseDisp = formatProjectPathForDisplay(basePath);
+      if (baseDisp) bits.push(`base=${baseDisp}`);
+    }
+
+    if (els.jobDialogMeta) {
+      const titles = [];
+      if (cwdPath) titles.push(`cwd=${cwdPath}`);
+      if (basePath && cwdPath && basePath !== cwdPath) titles.push(`base=${basePath}`);
+      els.jobDialogMeta.title = titles.join("  ");
+    }
+  }
+
   if (job.threadId) bits.push(`thread=${job.threadId}`);
   if (job.model) bits.push(`model=${job.model}`);
   const ut = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : null;
@@ -4970,6 +5344,56 @@ function appendJobMessage(jobId, message) {
   upsertJob(job);
 }
 
+async function maybeConfirmDefaultBranchBeforeRun(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id) return true;
+
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return true;
+
+  const mode = normalizeCheckoutMode(project.checkoutMode);
+  const def = normalizeBranchName(project.defaultBranch);
+  if (mode !== "inplace") return true;
+  if (!def) return true;
+  if (!api || typeof api.projectsGitInfo !== "function") return true;
+
+  let info = null;
+  try {
+    info = await api.projectsGitInfo(id);
+  } catch {
+    info = null;
+  }
+  if (!info || typeof info !== "object") return true;
+  if (!info.isGitRepo) return true;
+
+  const cur = typeof info.branch === "string" ? info.branch.trim() : "";
+  if (!cur || cur === def) return true;
+
+  const action = await promptBranchMismatch({
+    projectName: project.name,
+    projectPath: project.path,
+    currentBranch: cur,
+    defaultBranch: def,
+    dirty: !!info.dirty
+  });
+
+  if (action === "checkout") {
+    try {
+      await api.projectsSwitchBranch(id, def);
+      state.projects = await api.projectsList();
+      renderProjects();
+      renderBoard();
+      return true;
+    } catch (err) {
+      setHint(String(err && err.message ? err.message : err), "error");
+      return false;
+    }
+  }
+
+  if (action === "run") return true;
+  return false; // cancel
+}
+
 async function startJobFromComposer() {
   const prompt = (els.promptInput.value || "").trim();
   if (!prompt) return;
@@ -5004,6 +5428,9 @@ async function startJobFromComposer() {
       storeProjectId(p.id);
       projectId = p.id;
     }
+
+    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId);
+    if (!okBranch) return;
 
     await api.jobsStart({ prompt, projectId, agent, model, images });
     els.promptInput.value = "";
@@ -5627,22 +6054,18 @@ function wireUi() {
 	    const p = await api.projectsAddDialog();
 	    if (!p) return;
 
-    try {
-      const suggested = suggestShortNameFromProjectName(p.name);
-      const input = window.prompt(`Short name / Kürzel for "${p.name}" (optional):`, suggested);
-      if (input != null) {
-        const shortName = normalizeShortName(input);
-        await api.projectsUpdate(p.id, { shortName });
-      }
-    } catch (err) {
-      setHint(String(err && err.message ? err.message : err), "error");
-    }
-
     state.projects = await api.projectsList();
     renderProjects();
     renderBoard();
     els.projectSelect.value = p.id;
     storeProjectId(p.id);
+
+    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
+    try {
+      await openProjectDialog(p.id);
+    } catch {
+      // ignore
+    }
   });
 
   els.projectsList.addEventListener("change", async (e) => {
@@ -5701,7 +6124,7 @@ function wireUi() {
     const id = edit.getAttribute("data-project-edit") || "";
     if (!id) return;
 
-    await promptEditProjectShortName(id);
+    await openProjectDialog(id);
   });
 
   els.projectsList.addEventListener("keydown", async (e) => {
@@ -5711,8 +6134,119 @@ function wireUi() {
     e.preventDefault();
     const id = edit.getAttribute("data-project-edit") || "";
     if (!id) return;
-    await promptEditProjectShortName(id);
+    await openProjectDialog(id);
   });
+
+  // Project settings dialog
+  if (els.projectDialogClose) {
+    els.projectDialogClose.addEventListener("click", () => closeProjectDialog());
+  }
+  if (els.projectDialogSave) {
+    els.projectDialogSave.addEventListener("click", () => saveProjectDialog());
+  }
+  if (els.projectDialogCheckoutsBtn) {
+    els.projectDialogCheckoutsBtn.addEventListener("click", async () => {
+      const id = String(state.editingProjectId || "").trim();
+      if (!id) return;
+      await openCheckoutsDialog(id);
+    });
+  }
+  if (els.projectDialog) {
+    els.projectDialog.addEventListener("click", (e) => {
+      if (e.target === els.projectDialog) closeProjectDialog();
+    });
+    els.projectDialog.addEventListener("close", () => {
+      state.editingProjectId = "";
+    });
+  }
+
+  // Checkouts dialog
+  if (els.checkoutsDialogClose) els.checkoutsDialogClose.addEventListener("click", () => closeCheckoutsDialog());
+  if (els.checkoutsDialogClose2) els.checkoutsDialogClose2.addEventListener("click", () => closeCheckoutsDialog());
+  if (els.checkoutsDialogRefresh) {
+    els.checkoutsDialogRefresh.addEventListener("click", async () => {
+      const id = String(state.checkoutsProjectId || "").trim();
+      if (!id) return;
+      await loadCheckouts(id);
+    });
+  }
+  if (els.checkoutsDialog) {
+    els.checkoutsDialog.addEventListener("click", (e) => {
+      if (e.target === els.checkoutsDialog) closeCheckoutsDialog();
+    });
+    els.checkoutsDialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      closeCheckoutsDialog();
+    });
+    els.checkoutsDialog.addEventListener("close", () => {
+      state.checkoutsProjectId = "";
+      state.checkoutsEntries = [];
+      state.checkoutsLoading = false;
+    });
+  }
+  if (els.checkoutsDialogBody) {
+    els.checkoutsDialogBody.addEventListener("click", async (e) => {
+      const openBtn = e.target && e.target.closest ? e.target.closest("[data-checkout-open-job]") : null;
+      if (openBtn) {
+        const kind = openBtn.getAttribute("data-checkout-open-kind") || "";
+        const jobId = openBtn.getAttribute("data-checkout-open-job") || "";
+        const entry = (state.checkoutsEntries || []).find((x) => x && x.kind === kind && x.jobId === jobId) || null;
+        if (entry && entry.path && api && typeof api.shellOpenPath === "function") {
+          try {
+            await api.shellOpenPath(entry.path);
+          } catch (err) {
+            showToast(String(err && err.message ? err.message : err));
+          }
+        }
+        return;
+      }
+
+      const rmBtn = e.target && e.target.closest ? e.target.closest("[data-checkout-remove-job]") : null;
+      if (!rmBtn) return;
+
+      const kind = rmBtn.getAttribute("data-checkout-remove-kind") || "";
+      const jobId = rmBtn.getAttribute("data-checkout-remove-job") || "";
+      const projectId = String(state.checkoutsProjectId || "").trim();
+      if (!projectId || !kind || !jobId) return;
+
+      const job = state.jobs.get(jobId);
+      if (job && job.status === "running") {
+        showToast("This checkout is in use by a running job.");
+        return;
+      }
+
+      const ok = window.confirm(
+        `Remove ${kind} checkout for job ${jobId}?\n\nThis will delete the checkout folder under the app's checkouts directory (including any uncommitted changes inside it).`
+      );
+      if (!ok) return;
+
+      try {
+        await api.checkoutsRemove(projectId, kind, jobId);
+        showToast("Checkout removed.");
+        await loadCheckouts(projectId);
+      } catch (err) {
+        showToast(String(err && err.message ? err.message : err));
+      }
+    });
+  }
+
+  // Default-branch mismatch dialog
+  if (els.branchDialogClose) els.branchDialogClose.addEventListener("click", () => resolveBranchDialog("cancel"));
+  if (els.branchDialogCheckoutBtn) els.branchDialogCheckoutBtn.addEventListener("click", () => resolveBranchDialog("checkout"));
+  if (els.branchDialogRunBtn) els.branchDialogRunBtn.addEventListener("click", () => resolveBranchDialog("run"));
+  if (els.branchDialogCancelBtn) els.branchDialogCancelBtn.addEventListener("click", () => resolveBranchDialog("cancel"));
+  if (els.branchDialog) {
+    els.branchDialog.addEventListener("click", (e) => {
+      if (e.target === els.branchDialog) resolveBranchDialog("cancel");
+    });
+    els.branchDialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      resolveBranchDialog("cancel");
+    });
+    els.branchDialog.addEventListener("close", () => {
+      if (state.branchDialogResolver) resolveBranchDialog("cancel");
+    });
+  }
 
   els.openSettingsBtn.addEventListener("click", () => {
     openSettingsDialog();
@@ -7655,6 +8189,16 @@ async function init() {
   }
   state.projects = await api.projectsList();
   renderProjects();
+  if (!state.projectRefreshTimer) {
+    state.projectRefreshTimer = setInterval(async () => {
+      try {
+        state.projects = await api.projectsList();
+        renderProjects();
+      } catch {
+        // ignore
+      }
+    }, 30_000);
+  }
 
   const jobs = await api.jobsList();
   for (const j of jobs) state.jobs.set(j.id, j);

@@ -1,4 +1,6 @@
 import type { ChildProcess } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
 import { guessTitleFromPrompt, isBoilerplatePromptLine, promptSummary } from "../core/prompt";
@@ -10,6 +12,7 @@ import { searchJobs, type JobSearchOpts } from "../core/job-search";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
 import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
+import { addWorktree, cloneRepo, createBranchInRepo, detectDefaultBranch } from "./git";
 
 type SendJobEvent = (payload: any) => void;
 
@@ -22,6 +25,7 @@ type NeedsAttentionHeuristic = (text: unknown) => boolean;
 export class JobsManager {
   private store: any;
   private history: any;
+  private checkoutsDir: string;
   private sendJobEvent: SendJobEvent;
   private runCodexExec: RunCodexExec;
   private runCodexResume: RunCodexResume;
@@ -42,6 +46,7 @@ export class JobsManager {
   constructor(opts: {
     store: any;
     history: any;
+    checkoutsDir?: string;
     sendJobEvent: SendJobEvent;
     runCodexExec: RunCodexExec;
     runCodexResume: RunCodexResume;
@@ -52,6 +57,7 @@ export class JobsManager {
   }) {
     this.store = opts.store;
     this.history = opts.history;
+    this.checkoutsDir = typeof opts.checkoutsDir === "string" ? opts.checkoutsDir.trim() : "";
     this.sendJobEvent = opts.sendJobEvent;
     this.runCodexExec = opts.runCodexExec;
     this.runCodexResume = opts.runCodexResume;
@@ -61,6 +67,75 @@ export class JobsManager {
     this.createId = typeof opts.createId === "function" ? opts.createId : newId;
 
     this.loadPersistedJobs();
+  }
+
+  private normalizeCheckoutMode(value: unknown): "inplace" | "worktree" | "clone" {
+    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (raw === "worktree" || raw === "worktrees") return "worktree";
+    if (raw === "clone" || raw === "checkout" || raw === "dedicated") return "clone";
+    return "inplace";
+  }
+
+  private normalizeBranchName(value: unknown): string {
+    const s = typeof value === "string" ? value.trim() : "";
+    if (!s) return "";
+    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+    return stripped.slice(0, 200);
+  }
+
+  private ensureDir(dirPath: string) {
+    const p = String(dirPath || "").trim();
+    if (!p) return;
+    try {
+      fs.mkdirSync(p, { recursive: true });
+    } catch {
+      // ignore
+    }
+  }
+
+  private async prepareCheckout(project: any, jobId: string): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
+    const mode = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+    const projectPath = project && typeof project.path === "string" ? project.path : "";
+    if (!projectPath) throw new Error("Project path is missing");
+
+    if (mode === "inplace") return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
+
+    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
+
+    const projectId = project && typeof project.id === "string" ? project.id : "project";
+    const branchName = `ah/job/${jobId}`;
+
+    const configuredBase = this.normalizeBranchName(project && typeof project === "object" ? (project as any).defaultBranch : "");
+    let baseBranch = configuredBase;
+    if (!baseBranch) {
+      try {
+        baseBranch = await detectDefaultBranch(projectPath);
+      } catch {
+        baseBranch = "";
+      }
+    }
+
+    if (mode === "worktree") {
+      const baseRef = baseBranch || "HEAD";
+      const dest = path.join(this.checkoutsDir, "worktrees", projectId, jobId);
+      this.ensureDir(path.dirname(dest));
+      if (fs.existsSync(dest)) throw new Error(`Checkout path already exists: ${dest}`);
+      await addWorktree({ repoDir: projectPath, worktreeDir: dest, branchName, baseRef });
+      return { projectPath: dest, checkoutMode: "worktree", checkoutBranch: branchName };
+    }
+
+    // mode === "clone"
+    const dest = path.join(this.checkoutsDir, "clones", projectId, jobId);
+    this.ensureDir(path.dirname(dest));
+    if (fs.existsSync(dest)) throw new Error(`Checkout path already exists: ${dest}`);
+    await cloneRepo({ srcDir: projectPath, destDir: dest, baseBranch: baseBranch || "" });
+    // Always put the agent on a unique branch (safer even in separate clones).
+    try {
+      await createBranchInRepo({ cwd: dest, branchName });
+    } catch {
+      // If branch creation fails, it's still usable on the cloned branch; treat as best-effort.
+    }
+    return { projectPath: dest, checkoutMode: "clone", checkoutBranch: branchName };
   }
 
   private flushPersist() {
@@ -753,7 +828,7 @@ export class JobsManager {
     }
   }
 
-  start(params: any) {
+  async start(params: any) {
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
     const claudeSettings = this.getClaudeSettingsFrom(settings);
@@ -785,6 +860,15 @@ export class JobsManager {
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
 
+    const jobId = this.createId();
+
+    let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
+    try {
+      run = await this.prepareCheckout(project, jobId);
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+
     const modelOverride = (params && params.model ? String(params.model) : "").trim();
     let model = modelOverride;
     if (!model) {
@@ -795,7 +879,6 @@ export class JobsManager {
 
     const threadId = agent === "claude" ? randomUUID() : "";
 
-    const jobId = this.createId();
     const createdAt = new Date().toISOString();
 
     const job: Job = {
@@ -811,7 +894,7 @@ export class JobsManager {
       startedAt: createdAt,
       finishedAt: "",
       projectId: project.id,
-      projectPath: project.path,
+      projectPath: run.projectPath || project.path,
       agent,
       model,
       threadId,
@@ -845,7 +928,7 @@ export class JobsManager {
         child = this.runClaudeExec({
           claudePath,
           settings: claudeSettings,
-          projectPath: project.path,
+          projectPath: run.projectPath || project.path,
           model,
           sessionId: threadId,
           prompt,
@@ -856,7 +939,7 @@ export class JobsManager {
         child = this.runCodexExec({
           codexPath,
           settings: codexSettings,
-          projectPath: project.path,
+          projectPath: run.projectPath || project.path,
           model,
           prompt,
           images,

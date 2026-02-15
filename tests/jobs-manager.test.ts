@@ -21,7 +21,7 @@ describe("electron/jobs-manager", () => {
     vi.useRealTimers();
   });
 
-  it("validates start params", () => {
+  it("validates start params", async () => {
     const store = {
       getSettings: () => ({}),
       listProjects: () => []
@@ -37,14 +37,14 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
-    expect(jm.start({ prompt: "" })).toEqual({ ok: false, error: "Prompt is empty" });
-    expect(jm.start({ prompt: "hi", projectId: "p1" })).toEqual({
+    expect(await jm.start({ prompt: "" })).toEqual({ ok: false, error: "Prompt is empty" });
+    expect(await jm.start({ prompt: "hi", projectId: "p1" })).toEqual({
       ok: false,
       error: "No projects configured. Add one in sidebar."
     });
   });
 
-  it("starts jobs, handles thread.started, and can resume", () => {
+  it("starts jobs, handles thread.started, and can resume", async () => {
     const events: any[] = [];
     const saved: any[] = [];
 
@@ -85,7 +85,7 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
-    const startRes = jm.start({ prompt: "Do the thing", projectId: "p1", images: [] });
+    const startRes = await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] });
     expect(startRes).toEqual({ ok: true, jobId: "job1" });
     expect(events.some((e) => e.kind === "created" && e.jobId === "job1")).toBe(true);
     expect(saved.length).toBeGreaterThan(0);
@@ -115,7 +115,7 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
-  it("queues follow-ups while running and drains them after a successful run", () => {
+  it("queues follow-ups while running and drains them after a successful run", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
@@ -146,7 +146,7 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
-    expect(jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
     expect(execOnEvent).not.toBeNull();
     execOnEvent!({
       ts: "2020-01-01T00:00:00.000Z",
@@ -178,7 +178,7 @@ describe("electron/jobs-manager", () => {
     expect(snapDone.job.status).toBe("done");
   });
 
-  it("starts claude jobs, handles system init, and can resume", () => {
+  it("starts claude jobs, handles system init, and can resume", async () => {
     const events: any[] = [];
 
     const store = {
@@ -220,7 +220,7 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
-    const startRes = jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] });
+    const startRes = await jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] });
     expect(startRes).toEqual({ ok: true, jobId: "job1" });
     expect(execOpts && execOpts.model).toBe("sonnet");
     expect(execOpts && typeof execOpts.sessionId === "string" && execOpts.sessionId.length > 0).toBe(true);

@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     await invokeOk("shell:openExternal", url);
     return true;
   },
+  shellOpenPath: async (filePath) => {
+    await invokeOk("shell:openPath", filePath);
+    return true;
+  },
 
   agentsCheckBinaries: async () => {
     const res = await invokeOk("agents:checkBinaries");
@@ -64,6 +68,23 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   projectsAddDialog: () => ipcRenderer.invoke("projects:addDialog"),
   projectsRemove: (id) => ipcRenderer.invoke("projects:remove", id),
   projectsUpdate: (id, patch) => ipcRenderer.invoke("projects:update", { id, patch }),
+  projectsGitInfo: async (projectId) => {
+    const res = await invokeOk("projects:gitInfo", projectId);
+    return res.info;
+  },
+  projectsSwitchBranch: async (projectId, branch) => {
+    await invokeOk("projects:switchBranch", { projectId, branch });
+    return true;
+  },
+
+  checkoutsList: async (projectId) => {
+    const res = await invokeOk("checkouts:list", projectId);
+    return Array.isArray(res.entries) ? res.entries : [];
+  },
+  checkoutsRemove: async (projectId, kind, jobId) => {
+    await invokeOk("checkouts:remove", { projectId, kind, jobId });
+    return true;
+  },
 
   jobsList: () => ipcRenderer.invoke("jobs:list"),
   jobsGet: async (jobId) => {

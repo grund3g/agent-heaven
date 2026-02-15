@@ -119,6 +119,22 @@ function normalizeShortName(value) {
   return s.slice(0, 16);
 }
 
+function normalizeBranchName(value) {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) return "";
+  const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+  return stripped.slice(0, 200);
+}
+
+function normalizeCheckoutMode(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!raw) return "";
+  if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
+  if (raw === "worktree" || raw === "worktrees") return "worktree";
+  if (raw === "clone" || raw === "checkout" || raw === "dedicated" || raw === "dedicated_checkout") return "clone";
+  return "";
+}
+
 function pickNextProjectColor(usedLower) {
   const used = usedLower instanceof Set ? usedLower : new Set();
   for (const c of PROJECT_COLOR_PALETTE) {
@@ -173,6 +189,36 @@ function ensureProjectShortNames(projects) {
     if (obj.shortName !== next) {
       changed = true;
       return { ...obj, shortName: next };
+    }
+
+    return obj;
+  });
+
+  return { projects: out, changed };
+}
+
+function ensureProjectCheckoutSettings(projects) {
+  const arr = Array.isArray(projects) ? projects : [];
+  let changed = false;
+
+  const out = arr.map((p) => {
+    const obj = p && typeof p === "object" ? { ...(p as any) } : {};
+
+    const nextMode = normalizeCheckoutMode((obj as any).checkoutMode) || "inplace";
+    if ((obj as any).checkoutMode !== nextMode) {
+      (obj as any).checkoutMode = nextMode;
+      changed = true;
+    }
+
+    const nextBranch = normalizeBranchName((obj as any).defaultBranch);
+    if (!nextBranch) {
+      if (Object.prototype.hasOwnProperty.call(obj, "defaultBranch")) {
+        delete (obj as any).defaultBranch;
+        changed = true;
+      }
+    } else if ((obj as any).defaultBranch !== nextBranch) {
+      (obj as any).defaultBranch = nextBranch;
+      changed = true;
     }
 
     return obj;
@@ -414,6 +460,10 @@ export class Store {
 	    this.state.projects = snRes.projects;
 	    if (snRes.changed) changed = true;
 
+	    const coRes = ensureProjectCheckoutSettings(this.state.projects);
+	    this.state.projects = coRes.projects;
+	    if (coRes.changed) changed = true;
+
 	    const setRes = ensureSettings(this.state.settings);
 	    this.state.settings = setRes.settings;
 	    if (setRes.changed) changed = true;
@@ -464,6 +514,16 @@ export class Store {
       if (!p.shortName) delete p.shortName;
     }
 
+    {
+      const mode = normalizeCheckoutMode((p as any).checkoutMode) || "inplace";
+      (p as any).checkoutMode = mode;
+    }
+    {
+      const b = normalizeBranchName((p as any).defaultBranch);
+      if (b) (p as any).defaultBranch = b;
+      else if (Object.prototype.hasOwnProperty.call(p, "defaultBranch")) delete (p as any).defaultBranch;
+    }
+
     this.state.projects = [...this.state.projects, p];
     this.save();
     return p;
@@ -489,6 +549,14 @@ export class Store {
     const nextShortName = hasShortName ? normalizeShortName(rawPatch.shortName) : "";
     if (hasShortName) delete rawPatch.shortName;
 
+    const hasDefaultBranch = Object.prototype.hasOwnProperty.call(rawPatch, "defaultBranch");
+    const nextDefaultBranch = hasDefaultBranch ? normalizeBranchName((rawPatch as any).defaultBranch) : "";
+    if (hasDefaultBranch) delete (rawPatch as any).defaultBranch;
+
+    const hasCheckoutMode = Object.prototype.hasOwnProperty.call(rawPatch, "checkoutMode");
+    const nextCheckoutMode = hasCheckoutMode ? normalizeCheckoutMode((rawPatch as any).checkoutMode) || "inplace" : "";
+    if (hasCheckoutMode) delete (rawPatch as any).checkoutMode;
+
     let updated = null;
     this.state.projects = this.state.projects.map((p) => {
       if (p.id !== id) return p;
@@ -496,6 +564,13 @@ export class Store {
       if (hasShortName) {
         if (nextShortName) updated.shortName = nextShortName;
         else delete updated.shortName;
+      }
+      if (hasDefaultBranch) {
+        if (nextDefaultBranch) (updated as any).defaultBranch = nextDefaultBranch;
+        else delete (updated as any).defaultBranch;
+      }
+      if (hasCheckoutMode) {
+        (updated as any).checkoutMode = nextCheckoutMode;
       }
       return updated;
     });

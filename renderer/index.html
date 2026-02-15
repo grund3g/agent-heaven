@@ -470,6 +470,90 @@
 	      </div>
 		    </dialog>
 
+	    <dialog id="projectDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--project">
+	        <div class="dialog__header">
+	          <div class="dialog__title" id="projectDialogTitle">Project</div>
+	          <button id="projectDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__meta" id="projectDialogMeta"></div>
+	        <div class="settings">
+	          <div class="settings__section">
+	            <div class="settings__sectionTitle">Project</div>
+	            <label class="field">
+	              <div class="field__label">Name</div>
+	              <input id="projectNameInput" class="input" placeholder="Project name" />
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Short name / Kürzel (optional)</div>
+	              <input id="projectShortNameInput" class="input" placeholder="e.g. API, FE, ..." />
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Default branch (optional)</div>
+	              <input id="projectDefaultBranchInput" class="input" placeholder="e.g. main, master, develop" />
+	            </label>
+	            <label class="field">
+	              <div class="field__label">Checkout strategy for new prompts</div>
+	              <select id="projectCheckoutModeSelect" class="select">
+	                <option value="inplace">Use project folder (current checkout)</option>
+	                <option value="worktree">Git worktree (isolated per job)</option>
+	                <option value="clone">Dedicated clone (isolated per job)</option>
+	              </select>
+	            </label>
+	          </div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--left">
+	            <button id="projectDialogCheckoutsBtn" class="btn btn--ghost" type="button">Manage checkouts…</button>
+	          </div>
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="projectDialogSave" class="btn btn--primary" type="button">Save</button>
+	          </div>
+	        </div>
+	      </div>
+	    </dialog>
+
+	    <dialog id="checkoutsDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--checkouts">
+	        <div class="dialog__header">
+	          <div class="dialog__title">Checkouts</div>
+	          <button id="checkoutsDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__meta" id="checkoutsDialogMeta"></div>
+	        <div class="dialog__body dialog__body--checkouts">
+	          <div id="checkoutsDialogBody" class="checkoutlist"></div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--left">
+	            <button id="checkoutsDialogRefresh" class="btn btn--ghost" type="button">Refresh</button>
+	          </div>
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="checkoutsDialogClose2" class="btn btn--ghost" type="button">Close</button>
+	          </div>
+	        </div>
+	      </div>
+	    </dialog>
+
+	    <dialog id="branchDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--branch">
+	        <div class="dialog__header">
+	          <div class="dialog__title">Not On Default Branch / Nicht im Default-Branch</div>
+	          <button id="branchDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__meta" id="branchDialogMeta"></div>
+	        <div class="dialog__body dialog__body--branch">
+	          <div id="branchDialogText" class="logline"></div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="branchDialogCheckoutBtn" class="btn btn--primary" type="button">Checkout Default</button>
+	            <button id="branchDialogRunBtn" class="btn btn--ghost" type="button">Run Anyway</button>
+	            <button id="branchDialogCancelBtn" class="btn btn--ghost" type="button">Cancel</button>
+	          </div>
+	        </div>
+	      </div>
+	    </dialog>
+
 	    <dialog id="shortcutsDialog" class="dialog">
 	      <div class="dialog__inner dialog__inner--shortcuts">
 	        <div class="dialog__header">
