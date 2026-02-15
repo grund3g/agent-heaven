@@ -8,6 +8,7 @@ const els = {
   openStatusBtn: document.getElementById("openStatusBtn"),
   toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
   sortSelect: document.getElementById("sortSelect"),
+  projectFilterSelect: document.getElementById("projectFilterSelect"),
   searchInput: document.getElementById("searchInput"),
 		  searchClearBtn: document.getElementById("searchClearBtn"),
 		  searchMeta: document.getElementById("searchMeta"),
@@ -48,6 +49,10 @@ const els = {
   jobArchiveBtn: document.getElementById("jobArchiveBtn"),
   jobTrashBtn: document.getElementById("jobTrashBtn"),
   jobDeleteBtn: document.getElementById("jobDeleteBtn"),
+
+  jobActionsWrap: document.getElementById("jobActionsWrap"),
+  jobActionsSelect: document.getElementById("jobActionsSelect"),
+  jobActionsRunBtn: document.getElementById("jobActionsRunBtn"),
 
   rerunDialog: document.getElementById("rerunDialog"),
   rerunDialogClose: document.getElementById("rerunDialogClose"),
@@ -110,12 +115,23 @@ const els = {
   settingsGlobalHotkeyStartWisprHandsFree: document.getElementById("settingsGlobalHotkeyStartWisprHandsFree"),
 		  settingsSoundNeedsAttention: document.getElementById("settingsSoundNeedsAttention"),
 		  settingsSoundDone: document.getElementById("settingsSoundDone"),
-		  settingsSoundPreset: document.getElementById("settingsSoundPreset"),
-		  settingsSoundVolume: document.getElementById("settingsSoundVolume"),
+	  settingsSoundPreset: document.getElementById("settingsSoundPreset"),
+	  settingsSoundVolume: document.getElementById("settingsSoundVolume"),
 			  settingsTestSoundAttention: document.getElementById("settingsTestSoundAttention"),
 			  settingsTestSoundDone: document.getElementById("settingsTestSoundDone"),
 	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
+
+  settingsActionsList: document.getElementById("settingsActionsList"),
+  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
+  settingsActionsPromptBtn: document.getElementById("settingsActionsPromptBtn"),
+
+  actionPromptDialog: document.getElementById("actionPromptDialog"),
+  actionPromptDialogClose: document.getElementById("actionPromptDialogClose"),
+  actionPromptDialogMeta: document.getElementById("actionPromptDialogMeta"),
+  actionPromptInput: document.getElementById("actionPromptInput"),
+  actionPromptGenerateBtn: document.getElementById("actionPromptGenerateBtn"),
+
 		  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
 
   codexModelsList: document.getElementById("codexModelsList"),
@@ -174,6 +190,7 @@ const state = {
   checkoutsEntries: [],
   checkoutsLoading: false,
 
+  projectFilterId: "", // projectId | ""
   searchQuery: "",
   searchJobIds: null, // Set<string> | null
   searchTotal: 0,
@@ -194,6 +211,7 @@ const STORAGE = {
   lastProjectId: "agentHeaven.lastProjectId",
   lastAgent: "agentHeaven.lastAgent",
   sortMode: "agentHeaven.sortMode",
+  projectFilterId: "agentHeaven.projectFilterId",
   sidebarCollapsed: "agentHeaven.sidebarCollapsed",
   composerDraft: "agentHeaven.draft.composer",
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
@@ -722,6 +740,27 @@ function storeProjectId(id) {
   try {
     if (!id) return;
     window.localStorage.setItem(STORAGE.lastProjectId, id);
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredProjectFilterId() {
+  try {
+    return window.localStorage.getItem(STORAGE.projectFilterId) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storeProjectFilterId(id) {
+  try {
+    const v = String(id || "");
+    if (!v) {
+      window.localStorage.removeItem(STORAGE.projectFilterId);
+      return;
+    }
+    window.localStorage.setItem(STORAGE.projectFilterId, v);
   } catch {
     // ignore
   }
@@ -2283,10 +2322,7 @@ function renderSearchUi() {
   for (const id of ids.values()) {
     const job = state.jobs.get(id);
     if (!job) continue;
-    if (!jobVisibleInView(job, state.view)) continue;
-    if (state.view === "board" && state.focusLane) {
-      if (pickLane(job.status) !== state.focusLane) continue;
-    }
+    if (!jobVisibleInCurrentView(job)) continue;
     inView += 1;
   }
 
@@ -2515,6 +2551,11 @@ function jobVisibleInCurrentView(job) {
       const id = job && typeof job.id === "string" ? job.id : "";
       if (!id || !ids.has(id)) return false;
     }
+  }
+  const filterId = String(state.projectFilterId || "").trim();
+  if (filterId) {
+    const pid = job && typeof job.projectId === "string" ? job.projectId : "";
+    if (pid !== filterId) return false;
   }
   if (!jobVisibleInView(job, state.view)) return false;
   if (state.view === "board" && state.focusLane) {
@@ -3779,6 +3820,35 @@ function renderProjects() {
   els.projectSelect.innerHTML = opts.join("");
   if (current) els.projectSelect.value = current;
   applyDefaultProjectSelection();
+
+  // project filter select (Board)
+  if (els.projectFilterSelect) {
+    const stored = getStoredProjectFilterId();
+    const currentFilter = String(els.projectFilterSelect.value || "").trim();
+    const want = currentFilter || String(state.projectFilterId || "").trim() || String(stored || "").trim();
+
+    const filterOpts = [
+      `<option value="">All projects</option>`,
+      ...state.projects.map((p) => {
+        const shortName = normalizeShortName(p.shortName);
+        const label = shortName ? `${shortName} · ${p.name}` : p.name;
+        return `<option value="${escapeHtml(p.id)}">${escapeHtml(label)}</option>`;
+      })
+    ];
+    els.projectFilterSelect.innerHTML = filterOpts.join("");
+
+    if (want && selectHasOptionValue(els.projectFilterSelect, want)) {
+      els.projectFilterSelect.value = want;
+      state.projectFilterId = want;
+    } else {
+      els.projectFilterSelect.value = "";
+      state.projectFilterId = "";
+      storeProjectFilterId("");
+    }
+
+    const wrap = els.projectFilterSelect.closest ? els.projectFilterSelect.closest(".filterctl") : null;
+    if (wrap) wrap.hidden = state.projects.length <= 1 && !state.projectFilterId;
+  }
 }
 
 function setLaneHidden(laneEl, hidden) {
@@ -4393,6 +4463,361 @@ function setHidden(el, hidden) {
   el.hidden = !!hidden;
 }
 
+function safeUuid() {
+  try {
+    if (typeof crypto !== "undefined" && crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  } catch {
+    // ignore
+  }
+  return `ah_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeActions(value) {
+  const arr = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+
+  for (const item of arr) {
+    const obj = item && typeof item === "object" ? item : {};
+    let id = typeof obj.id === "string" ? obj.id.trim() : "";
+    let name = typeof obj.name === "string" ? obj.name.trim() : "";
+    let command = typeof obj.command === "string" ? obj.command : "";
+
+    command = command.replaceAll("\r\n", "\n").trimEnd();
+    if (!command) continue;
+
+    if (!id || seen.has(id)) id = safeUuid();
+    seen.add(id);
+
+    if (!name) {
+      const first = (command.split("\n")[0] || "").trim();
+      name = first.slice(0, 80) || "Action";
+    }
+
+    out.push({ id, name, command });
+  }
+
+  return out;
+}
+
+function jobActionsFromSettings() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return normalizeActions(s.actions);
+}
+
+function syncJobActionsUi(job) {
+  if (!els.jobActionsWrap || !els.jobActionsSelect || !els.jobActionsRunBtn) return;
+
+  if (isDemoJob(job)) {
+    els.jobActionsSelect.disabled = true;
+    els.jobActionsRunBtn.disabled = true;
+    els.jobActionsWrap.hidden = true;
+    return;
+  }
+
+  els.jobActionsWrap.hidden = false;
+
+  const actions = jobActionsFromSettings();
+  const prev = String(els.jobActionsSelect.value || "");
+
+  if (actions.length === 0) {
+    els.jobActionsSelect.innerHTML = `<option value="">No actions (Settings → Actions)</option>`;
+    els.jobActionsSelect.value = "";
+    els.jobActionsSelect.disabled = true;
+    els.jobActionsRunBtn.disabled = true;
+    return;
+  }
+
+  const opts = [`<option value="">Actions…</option>`];
+  for (const a of actions) {
+    const id = escapeHtml(a.id);
+    const label = escapeHtml(a.name);
+    opts.push(`<option value="${id}">${label}</option>`);
+  }
+  els.jobActionsSelect.innerHTML = opts.join("");
+  els.jobActionsSelect.disabled = false;
+  if (prev && actions.some((a) => a.id === prev)) els.jobActionsSelect.value = prev;
+  else els.jobActionsSelect.value = "";
+
+  els.jobActionsRunBtn.disabled = !String(els.jobActionsSelect.value || "");
+}
+
+async function runSelectedJobAction() {
+  const jobId = state.selectedJobId;
+  if (!jobId) return;
+  const job = state.jobs.get(jobId);
+  if (!job || isDemoJob(job)) return;
+  if (!els.jobActionsSelect) return;
+
+  const actionId = String(els.jobActionsSelect.value || "").trim();
+  if (!actionId) return;
+
+  const action = jobActionsFromSettings().find((a) => a.id === actionId) || null;
+  if (!action) {
+    showToast("Unknown action.");
+    return;
+  }
+
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
+  }
+
+  if (job && job.status === "running") {
+    const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
+    if (!ok) return;
+  }
+
+  // Actions run via the per-job terminal session so interactive commands work
+  // (git commit editor, auth prompts, ...). We don't force a tab switch; the toast
+  // offers a one-click "Open Terminal" if the user wants to watch or interact.
+  if (!api || typeof api.termEnsure !== "function" || typeof api.termWrite !== "function") {
+    showToast("Terminal is not supported in this build.");
+    return;
+  }
+
+  try {
+    await api.termEnsure(jobId, 110, 34);
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err) || "Failed to start terminal.");
+    return;
+  }
+
+  try {
+    const payload = cmd.replaceAll("\n", "\r") + "\r";
+    await api.termWrite(jobId, payload);
+    showToast(`Action started: ${action.name}`, null, 8000, {
+      actions: [
+        {
+          label: "Open Terminal",
+          kind: "primary",
+          onClick: () => {
+            setActiveTab("term");
+            attachTerminalToJob(jobId).catch(() => {});
+          }
+        }
+      ]
+    });
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err) || "Failed to run action.");
+  }
+}
+
+function renderSettingsActions(actions) {
+  if (!els.settingsActionsList) return;
+
+  const arr = normalizeActions(actions);
+  const list = els.settingsActionsList;
+
+  if (arr.length === 0) {
+    list.innerHTML = `<div class="actionslist__empty">No actions yet. Add one below (examples: <code class="md-inline">git status</code>, <code class="md-inline">git add -A && git commit && git push</code>).</div>`;
+    return;
+  }
+
+  // Render with DOM nodes (not innerHTML) so values are preserved exactly while editing.
+  list.innerHTML = "";
+  for (const a of arr) {
+    const row = document.createElement("div");
+    row.className = "actionrow";
+    row.setAttribute("data-action-row", "1");
+    row.setAttribute("data-action-id", a.id);
+
+    const name = document.createElement("input");
+    name.className = "input";
+    name.placeholder = "Name";
+    name.value = a.name || "";
+    name.setAttribute("data-action-field", "name");
+
+    const cmd = document.createElement("textarea");
+    cmd.className = "textarea textarea--sm";
+    cmd.rows = 2;
+    cmd.placeholder = "Command (shell)";
+    cmd.value = a.command || "";
+    cmd.setAttribute("data-action-field", "command");
+
+    const rm = document.createElement("button");
+    rm.type = "button";
+    rm.className = "iconbtn iconbtn--danger";
+    rm.title = "Remove action";
+    rm.textContent = "×";
+    rm.setAttribute("data-action-remove", "1");
+
+    row.appendChild(name);
+    row.appendChild(cmd);
+    row.appendChild(rm);
+    list.appendChild(row);
+  }
+}
+
+function addBlankSettingsActionRow(initial = null) {
+  if (!els.settingsActionsList) return;
+  const list = els.settingsActionsList;
+
+  // If we're in the empty state, swap to real list mode.
+  if (list.querySelector(".actionslist__empty")) list.innerHTML = "";
+
+  const init = initial && typeof initial === "object" ? initial : {};
+  const initName = typeof init.name === "string" ? init.name : "";
+  const initCommand = typeof init.command === "string" ? init.command : "";
+
+  const id = safeUuid();
+  const row = document.createElement("div");
+  row.className = "actionrow";
+  row.setAttribute("data-action-row", "1");
+  row.setAttribute("data-action-id", id);
+
+  const name = document.createElement("input");
+  name.className = "input";
+  name.placeholder = "Name";
+  name.value = initName;
+  name.setAttribute("data-action-field", "name");
+
+  const cmd = document.createElement("textarea");
+  cmd.className = "textarea textarea--sm";
+  cmd.rows = 2;
+  cmd.placeholder = "Command (shell)";
+  cmd.value = initCommand;
+  cmd.setAttribute("data-action-field", "command");
+
+  const rm = document.createElement("button");
+  rm.type = "button";
+  rm.className = "iconbtn iconbtn--danger";
+  rm.title = "Remove action";
+  rm.textContent = "×";
+  rm.setAttribute("data-action-remove", "1");
+
+  row.appendChild(name);
+  row.appendChild(cmd);
+  row.appendChild(rm);
+  list.appendChild(row);
+
+  try {
+    if (!initCommand) name.focus();
+    else cmd.focus();
+  } catch {
+    // ignore
+  }
+
+  return { row, name, cmd };
+}
+
+function readSettingsActionsFromUi() {
+  if (!els.settingsActionsList) return [];
+  const rows = Array.from(els.settingsActionsList.querySelectorAll("[data-action-row]"));
+  const out = [];
+  const seen = new Set();
+
+  for (const row of rows) {
+    const idRaw = String(row.getAttribute("data-action-id") || "").trim();
+    let id = idRaw || safeUuid();
+    if (seen.has(id)) id = safeUuid();
+    seen.add(id);
+
+    const nameEl = row.querySelector('[data-action-field="name"]');
+    const cmdEl = row.querySelector('[data-action-field="command"]');
+    const name = nameEl && "value" in nameEl ? String(nameEl.value || "").trim() : "";
+    let command = cmdEl && "value" in cmdEl ? String(cmdEl.value || "") : "";
+    command = command.replaceAll("\r\n", "\n").trimEnd();
+    if (!command) continue;
+
+    let finalName = name;
+    if (!finalName) {
+      const first = (command.split("\n")[0] || "").trim();
+      finalName = first.slice(0, 80) || "Action";
+    }
+
+    out.push({ id, name: finalName, command });
+  }
+
+  return out;
+}
+
+function uiModelForMeta() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  const uiModel = typeof s.uiModel === "string" ? s.uiModel.trim() : "";
+  if (uiModel) return uiModel;
+
+  const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
+  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
+  const fallback = typeof codex.model === "string" ? codex.model.trim() : "";
+  return fallback;
+}
+
+function openActionPromptDialog() {
+  if (!els.actionPromptDialog) return;
+
+  const model = uiModelForMeta();
+  if (els.actionPromptDialogMeta) {
+    const bits = [];
+    if (model) bits.push(`model=${model}`);
+    else bits.push("model=default");
+    els.actionPromptDialogMeta.textContent = bits.join("  ");
+  }
+
+  if (els.actionPromptInput) els.actionPromptInput.value = "";
+  if (els.actionPromptGenerateBtn) {
+    els.actionPromptGenerateBtn.disabled = false;
+    els.actionPromptGenerateBtn.textContent = "Generate";
+  }
+
+  try {
+    els.actionPromptDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (els.actionPromptInput) els.actionPromptInput.focus();
+  } catch {
+    // ignore
+  }
+}
+
+function closeActionPromptDialog() {
+  if (!els.actionPromptDialog) return;
+  try {
+    if (els.actionPromptDialog.open) els.actionPromptDialog.close();
+  } catch {
+    // ignore
+  }
+}
+
+let actionPromptInFlight = false;
+async function generateActionFromPrompt() {
+  if (!els.actionPromptInput || !els.actionPromptGenerateBtn) return;
+  if (actionPromptInFlight) return;
+  if (!api || typeof api.actionsGenerate !== "function") {
+    showToast("Action generator is not supported in this build.");
+    return;
+  }
+
+  const text = String(els.actionPromptInput.value || "").trim();
+  if (!text) return;
+
+  actionPromptInFlight = true;
+  const prevText = els.actionPromptGenerateBtn.textContent;
+  els.actionPromptGenerateBtn.disabled = true;
+  els.actionPromptGenerateBtn.textContent = "Generating…";
+
+  try {
+    const action = await api.actionsGenerate(text);
+    const name = action && typeof action === "object" ? String(action.name || "").trim() : "";
+    const command = action && typeof action === "object" ? String(action.command || "").trimEnd() : "";
+    if (!command) throw new Error("No command generated.");
+
+    addBlankSettingsActionRow({ name, command });
+    closeActionPromptDialog();
+    showToast("Action added. Don't forget to Save.");
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err));
+  } finally {
+    actionPromptInFlight = false;
+    els.actionPromptGenerateBtn.disabled = false;
+    els.actionPromptGenerateBtn.textContent = prevText || "Generate";
+  }
+}
+
 function updateJobDialogActions(job) {
   if (isDemoJob(job)) {
     // Demo cards are UI-only; disable actions that would hit the main process.
@@ -4415,6 +4840,7 @@ function updateJobDialogActions(job) {
       els.sendFollowupBtn.textContent = "Send";
       els.sendFollowupBtn.title = "Demo card";
     }
+    syncJobActionsUi(job);
     return;
   }
 
@@ -4480,6 +4906,8 @@ function updateJobDialogActions(job) {
 
   // Restore is available from archive or trash.
   setHidden(els.jobRestoreBtn, !(b === "archive" || b === "trash"));
+
+  syncJobActionsUi(job);
 }
 
 function updateCardContextMenuActions(job) {
@@ -5878,6 +6306,25 @@ function wireUi() {
   document.addEventListener("pointerdown", () => primeAudio(), { once: true });
   document.addEventListener("keydown", () => primeAudio(), { once: true });
 
+  // Sync the project filter across windows (main board + popouts).
+  window.addEventListener("storage", (e) => {
+    if (!e) return;
+    if (e.storageArea !== window.localStorage) return;
+    if (e.key !== STORAGE.projectFilterId) return;
+    const next = typeof e.newValue === "string" ? e.newValue : "";
+    if (next === state.projectFilterId) return;
+    state.projectFilterId = next;
+    if (els.projectFilterSelect) {
+      // Best-effort: if the option doesn't exist yet, renderProjects() will correct later.
+      els.projectFilterSelect.value = next;
+      const wrap = els.projectFilterSelect.closest ? els.projectFilterSelect.closest(".filterctl") : null;
+      if (wrap) wrap.hidden = state.projects.length <= 1 && !state.projectFilterId;
+    }
+    renderBoard();
+    renderSearchUi();
+    scheduleStatusDialogRender();
+  });
+
   // Prevent the Electron window from navigating away when users click Markdown links.
   document.addEventListener("click", (e) => {
     const a = e.target && e.target.closest ? e.target.closest("a.md-link") : null;
@@ -5939,6 +6386,20 @@ function wireUi() {
 	  // Sorting.
 	  if (els.sortSelect) {
 	    els.sortSelect.addEventListener("change", () => setSortMode(els.sortSelect.value));
+	  }
+
+	  // Project filter.
+	  if (els.projectFilterSelect) {
+	    els.projectFilterSelect.addEventListener("change", () => {
+	      const v = String(els.projectFilterSelect.value || "").trim();
+	      state.projectFilterId = v;
+	      storeProjectFilterId(v);
+	      const wrap = els.projectFilterSelect.closest ? els.projectFilterSelect.closest(".filterctl") : null;
+	      if (wrap) wrap.hidden = state.projects.length <= 1 && !state.projectFilterId;
+	      renderBoard();
+	      renderSearchUi();
+	      scheduleStatusDialogRender();
+	    });
 	  }
 
 	  // Search across sessions (prompts/messages/logs).
@@ -6571,6 +7032,50 @@ function wireUi() {
     if (e.target === els.settingsDialog) els.settingsDialog.close();
   });
 
+  if (els.settingsActionsAddBtn) {
+    els.settingsActionsAddBtn.addEventListener("click", () => addBlankSettingsActionRow());
+  }
+  if (els.settingsActionsPromptBtn) {
+    els.settingsActionsPromptBtn.addEventListener("click", () => openActionPromptDialog());
+  }
+  if (els.settingsActionsList) {
+    els.settingsActionsList.addEventListener("click", (e) => {
+      const rm = e.target && e.target.closest ? e.target.closest("[data-action-remove]") : null;
+      if (!rm) return;
+      e.preventDefault();
+
+      const row = rm.closest("[data-action-row]");
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+
+      const anyRows = els.settingsActionsList.querySelector("[data-action-row]");
+      if (!anyRows) renderSettingsActions([]);
+    });
+  }
+
+  if (els.actionPromptDialogClose) {
+    els.actionPromptDialogClose.addEventListener("click", () => closeActionPromptDialog());
+  }
+  if (els.actionPromptDialog) {
+    els.actionPromptDialog.addEventListener("click", (e) => {
+      if (e.target === els.actionPromptDialog) closeActionPromptDialog();
+    });
+    els.actionPromptDialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      closeActionPromptDialog();
+    });
+  }
+  if (els.actionPromptGenerateBtn) {
+    els.actionPromptGenerateBtn.addEventListener("click", () => generateActionFromPrompt());
+  }
+  if (els.actionPromptInput) {
+    els.actionPromptInput.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        generateActionFromPrompt();
+      }
+    });
+  }
+
   // Settings live previews should not persist unless saved.
   if (els.settingsDialog) {
     els.settingsDialog.addEventListener("close", () => {
@@ -6721,6 +7226,16 @@ function wireUi() {
     if (els.jobDialog && els.jobDialog.open) updateJobDialogActions(job);
   });
 
+  if (els.jobActionsSelect) {
+    els.jobActionsSelect.addEventListener("change", () => {
+      if (!els.jobActionsRunBtn) return;
+      els.jobActionsRunBtn.disabled = !!els.jobActionsSelect.disabled || !String(els.jobActionsSelect.value || "");
+    });
+  }
+  if (els.jobActionsRunBtn) {
+    els.jobActionsRunBtn.addEventListener("click", () => runSelectedJobAction());
+  }
+
   if (els.rerunJobBtn) {
     els.rerunJobBtn.addEventListener("click", () => openRerunDialog(state.selectedJobId));
   }
@@ -6781,6 +7296,7 @@ function wireUi() {
 				      soundVolume: clampNumber(els.settingsSoundVolume.value, 0, 100, 35),
 				      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
 				      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
+				      actions: readSettingsActionsFromUi(),
 				      agents: {
 			        codex: {
 			          path: els.settingsCodexPath.value.trim(),
@@ -7530,6 +8046,7 @@ function maybeShowMissingAgentBinariesToast(res) {
 				  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
 				  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
 				  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
+	  renderSettingsActions(s.actions);
 
 	  refreshCodexModelsDatalist({ showErrors: true });
 
@@ -8175,6 +8692,8 @@ async function init() {
   state.sortMode = normalizeSortMode(getStoredSortMode());
   if (els.sortSelect) els.sortSelect.value = state.sortMode;
 
+  state.projectFilterId = String(getStoredProjectFilterId() || "").trim();
+
   state.settings = await api.settingsGet();
   applyThemeFromSettings(state.settings);
   applyXtermTheme();
@@ -8184,6 +8703,11 @@ async function init() {
       applyThemeFromSettings(next);
       applyXtermTheme();
       renderBoard();
+      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
+        const job = state.jobs.get(state.selectedJobId);
+        if (job) updateJobDialogActions(job);
+      }
+      if (els.settingsDialog && els.settingsDialog.open) renderSettingsActions(next && next.actions);
       refreshAgentBinaries({ showToastOnMissing: false });
     });
   }

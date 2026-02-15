@@ -73,12 +73,18 @@
 		          >
 		            <span aria-hidden="true">☰</span>
 		          </button>
-		          <div class="seg" role="tablist" aria-label="Views">
+	          <div class="seg" role="tablist" aria-label="Views">
 		            <button type="button" class="seg__btn seg__btn--active" data-view="board" aria-selected="true">
 		              Board
 		            </button>
 	            <button type="button" class="seg__btn" data-view="archive" aria-selected="false">Archive</button>
 	            <button type="button" class="seg__btn" data-view="trash" aria-selected="false">Trash</button>
+	          </div>
+	          <div class="filterctl" aria-label="Filter jobs by project">
+	            <span class="filterctl__label">Project</span>
+	            <select id="projectFilterSelect" class="select filterselect" title="Filter jobs by project">
+	              <option value="">All projects</option>
+	            </select>
 	          </div>
 	          <div class="sortctl" aria-label="Sort jobs">
 	            <span class="sortctl__label">Sort</span>
@@ -221,6 +227,12 @@
 	            <div id="followupAttachments" class="attachments attachments--sm"></div>
 	          </div>
 	          <div class="dialog__actions">
+	            <div id="jobActionsWrap" class="jobactions">
+	              <select id="jobActionsSelect" class="select" title="Actions">
+	                <option value="">Actions…</option>
+	              </select>
+	              <button id="jobActionsRunBtn" class="btn btn--ghost" type="button" disabled>Run</button>
+	            </div>
 	            <button id="rerunJobBtn" class="btn btn--ghost" type="button">Rerun…</button>
 	            <button id="jobRestoreBtn" class="btn btn--ghost" type="button" hidden>Restore</button>
 	            <button id="jobArchiveBtn" class="btn btn--ghost" type="button" hidden>Archive</button>
@@ -461,6 +473,18 @@
 	              </div>
 	            </div>
 	          </div>
+
+	          <div class="settings__section">
+	            <div class="settings__sectionTitle">Actions</div>
+	            <div class="settings__note">
+	              Saved shell commands you can run from a job card (executed in that job's checkout folder via the Terminal tab).
+	            </div>
+	            <div id="settingsActionsList" class="actionslist"></div>
+	            <div class="settings__actions">
+	              <button id="settingsActionsAddBtn" class="btn btn--ghost" type="button">Add action</button>
+	              <button id="settingsActionsPromptBtn" class="btn btn--ghost" type="button" title="Generate an action with an LLM">Prompt…</button>
+	            </div>
+	          </div>
 	        </div>
 	        <div class="dialog__footer">
 	          <div class="dialog__actions dialog__actions--right">
@@ -469,6 +493,30 @@
 	        </div>
 	      </div>
 		    </dialog>
+
+	    <dialog id="actionPromptDialog" class="dialog">
+	      <div class="dialog__inner dialog__inner--rerun">
+	        <div class="dialog__header">
+	          <div class="dialog__title">Action prompt</div>
+	          <button id="actionPromptDialogClose" class="btn btn--ghost" type="button">Close</button>
+	        </div>
+	        <div class="dialog__meta" id="actionPromptDialogMeta"></div>
+	        <div class="settings">
+	          <div class="settings__section">
+	            <label class="field">
+	              <div class="field__label">Describe the action</div>
+	              <textarea id="actionPromptInput" class="textarea" rows="3" placeholder="e.g. Create an action that stages all changes, opens the commit editor, then pushes"></textarea>
+	            </label>
+	            <div class="settings__note">The result will be added to Settings → Actions. Don't forget to Save.</div>
+	          </div>
+	        </div>
+	        <div class="dialog__footer">
+	          <div class="dialog__actions dialog__actions--right">
+	            <button id="actionPromptGenerateBtn" class="btn btn--primary" type="button">Generate</button>
+	          </div>
+	        </div>
+	      </div>
+	    </dialog>
 
 	    <dialog id="projectDialog" class="dialog">
 	      <div class="dialog__inner dialog__inner--project">
