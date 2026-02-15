@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnPlatform } from "./platform-spawn";
 
 function nowIso() {
   return new Date().toISOString();
@@ -76,7 +76,7 @@ function buildResumeArgs({ settings, model, sessionId }: { settings: any; model:
 }
 
 function spawnClaude({ claudePath, cwd, args, prompt }: { claudePath: string; cwd: string; args: string[]; prompt: string }) {
-  const child = spawn(claudePath, args, {
+  const child = spawnPlatform(claudePath, args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env

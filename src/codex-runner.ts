@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnPlatform } from "./platform-spawn";
 
 function nowIso() {
   return new Date().toISOString();
@@ -81,7 +81,7 @@ function buildResumeArgs({ settings, model, threadId, images }) {
 }
 
 function spawnCodex({ codexPath, cwd, args, prompt }) {
-  const child = spawn(codexPath, args, {
+  const child = spawnPlatform(codexPath, args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env

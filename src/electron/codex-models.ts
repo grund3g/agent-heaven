@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnPlatform } from "../platform-spawn";
 
 function getAgentHeavenVersion(): string {
   // Prefer Electron's app version when available (packaged app),
@@ -52,7 +52,7 @@ export async function listCodexModels(opts: { codexPath: string; timeoutMs?: num
   const codexPath = String(opts && opts.codexPath ? opts.codexPath : "").trim() || "codex";
   const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 12_000;
 
-  const child = spawn(codexPath, ["app-server"], {
+  const child = spawnPlatform(codexPath, ["app-server"], {
     stdio: ["pipe", "pipe", "pipe"],
     env: process.env
   });

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
+import { spawnPlatform } from "./platform-spawn";
 
 export type AgentBinaryKey = "codex" | "claude";
 
@@ -116,7 +117,7 @@ async function checkSpawnableBinary(binPath: string, args: string[], timeoutMs: 
 
     let child: ReturnType<typeof spawn> | null = null;
     try {
-      child = spawn(p, args, { stdio: ["ignore", "ignore", "ignore"], windowsHide: true });
+      child = spawnPlatform(p, args, { stdio: ["ignore", "ignore", "ignore"], windowsHide: true } as any);
     } catch (err: any) {
       error = safeErrorString(err);
       finish(false);
@@ -236,4 +237,3 @@ export async function checkAgentBinaries(
     claude: { agent: "claude", ...claudeRes, candidates: claudeCandidates }
   };
 }
-
