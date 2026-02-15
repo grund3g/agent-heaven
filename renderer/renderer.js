@@ -208,14 +208,6 @@ const api = window.agentHeaven;
 		  textPromptDialogCancel: document.getElementById("textPromptDialogCancel"),
 		  textPromptDialogOk: document.getElementById("textPromptDialogOk"),
 
-		  projectRemoveDialog: document.getElementById("projectRemoveDialog"),
-		  projectRemoveDialogMessage: document.getElementById("projectRemoveDialogMessage"),
-		  projectRemoveDialogDeleteRow: document.getElementById("projectRemoveDialogDeleteRow"),
-		  projectRemoveDialogDeleteFolder: document.getElementById("projectRemoveDialogDeleteFolder"),
-		  projectRemoveDialogClose: document.getElementById("projectRemoveDialogClose"),
-		  projectRemoveDialogCancel: document.getElementById("projectRemoveDialogCancel"),
-		  projectRemoveDialogRemove: document.getElementById("projectRemoveDialogRemove"),
-
 			  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
 
   codexModelsList: document.getElementById("codexModelsList"),
@@ -668,92 +660,7 @@ function laneTitleForKey(key) {
 	  });
 	}
 
-	let projectRemoveDialogInFlight = false;
-	let projectRemoveDialogResolve = null;
-	function closeProjectRemoveDialog() {
-	  if (!els.projectRemoveDialog) return;
-	  try {
-	    if (els.projectRemoveDialog.open) els.projectRemoveDialog.close();
-	  } catch {
-	    // ignore
-	  }
-	}
-	function resolveProjectRemoveDialog(value) {
-	  if (typeof projectRemoveDialogResolve !== "function") return;
-	  const resolve = projectRemoveDialogResolve;
-	  projectRemoveDialogResolve = null;
-	  projectRemoveDialogInFlight = false;
-	  resolve(value);
-	}
-	async function promptProjectRemove(project) {
-	  const p = project && typeof project === "object" ? project : null;
-	  const label = p && p.name ? `"${p.name}"` : "this project";
-	  const isTemporary = !!(p && p.isTemporary);
-	  const fullPath = p && typeof p.path === "string" ? p.path : "";
-	  const displayPath = formatProjectPathForDisplay(fullPath);
-
-	  // Fallback for builds without the custom dialog.
-	  if (!els.projectRemoveDialog || !els.projectRemoveDialogRemove) {
-	    const ok = window.confirm(`Remove ${label} from the sidebar list?`);
-	    if (!ok) return { confirmed: false, deleteFolder: false };
-	    let deleteFolder = false;
-	    if (isTemporary) {
-	      deleteFolder = window.confirm(
-	        `Also delete the temporary folder from disk?\n\n${fullPath || displayPath || "(path unknown)"}`
-	      );
-	    }
-	    return { confirmed: true, deleteFolder };
-	  }
-
-	  if (projectRemoveDialogInFlight) return { confirmed: false, deleteFolder: false };
-	  projectRemoveDialogInFlight = true;
-
-	  if (els.projectRemoveDialogMessage) {
-	    const lines = [`Remove ${label} from the sidebar list?`];
-	    if (isTemporary) {
-	      lines.push("");
-	      lines.push("Temporary project folder:");
-	      lines.push(fullPath || displayPath || "(path unknown)");
-	      lines.push("");
-	      lines.push("Enable the checkbox below to also delete the folder from disk.");
-	    }
-	    els.projectRemoveDialogMessage.textContent = lines.join("\n");
-	  }
-
-	  if (els.projectRemoveDialogDeleteRow) els.projectRemoveDialogDeleteRow.hidden = !isTemporary;
-	  if (els.projectRemoveDialogDeleteFolder) {
-	    els.projectRemoveDialogDeleteFolder.checked = false;
-	    els.projectRemoveDialogDeleteFolder.disabled = !isTemporary;
-	  }
-
-	  return await new Promise((resolve) => {
-	    projectRemoveDialogResolve = resolve;
-	    try {
-	      els.projectRemoveDialog.showModal();
-	    } catch {
-	      projectRemoveDialogResolve = null;
-	      projectRemoveDialogInFlight = false;
-	      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
-	      if (!ok) {
-	        resolve({ confirmed: false, deleteFolder: false });
-	        return;
-	      }
-	      const deleteFolder = isTemporary
-	        ? window.confirm(`Also delete the temporary folder from disk?\n\n${fullPath || displayPath || "(path unknown)"}`)
-	        : false;
-	      resolve({ confirmed: true, deleteFolder });
-	      return;
-	    }
-
-	    try {
-	      if (els.projectRemoveDialogRemove) els.projectRemoveDialogRemove.focus();
-	    } catch {
-	      // ignore
-	    }
-	  });
-	}
-
-async function pickDisplayId(actionLabel) {
+	async function pickDisplayId(actionLabel) {
 	  if (!api.windowListDisplays) return null;
 	  const title = String(actionLabel || "Select display").trim() || "Select display";
 
@@ -7198,7 +7105,31 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
   const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
 
   try {
-    const res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
+    let res = null;
+    try {
+      res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
+	    } catch (err) {
+	      const msg = String(err && err.message ? err.message : err);
+	      if (msg.includes("Provide a commit message first")) {
+	        const entered = await promptText({
+	          title: "Commit message",
+	          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
+	          label: "Commit message",
+	          defaultValue: defaultIntegrateCommitMessage(job),
+	          okLabel: "Continue",
+	          cancelLabel: "Cancel"
+	        });
+	        const commitMessage = String(entered || "").trim();
+	        if (!commitMessage) {
+	          showToast("Integration cancelled.");
+	          return;
+	        }
+        res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
+      } else {
+        showError(msg);
+        return;
+      }
+    }
 
     const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
     const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
@@ -12050,46 +11981,6 @@ function wireUi() {
 	    });
 	    els.textPromptDialog.addEventListener("close", () => {
 	      resolveTextPromptDialog(null);
-	    });
-	  }
-
-	  if (els.projectRemoveDialogClose) {
-	    els.projectRemoveDialogClose.addEventListener("click", () => {
-	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
-	      closeProjectRemoveDialog();
-	    });
-	  }
-	  if (els.projectRemoveDialogCancel) {
-	    els.projectRemoveDialogCancel.addEventListener("click", () => {
-	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
-	      closeProjectRemoveDialog();
-	    });
-	  }
-	  if (els.projectRemoveDialogRemove) {
-	    els.projectRemoveDialogRemove.addEventListener("click", () => {
-	      const deleteFolder = !!(
-	        els.projectRemoveDialogDeleteFolder &&
-	        !els.projectRemoveDialogDeleteFolder.disabled &&
-	        els.projectRemoveDialogDeleteFolder.checked
-	      );
-	      resolveProjectRemoveDialog({ confirmed: true, deleteFolder });
-	      closeProjectRemoveDialog();
-	    });
-	  }
-	  if (els.projectRemoveDialog) {
-	    els.projectRemoveDialog.addEventListener("click", (e) => {
-	      if (e.target === els.projectRemoveDialog) {
-	        resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
-	        closeProjectRemoveDialog();
-	      }
-	    });
-	    els.projectRemoveDialog.addEventListener("cancel", (e) => {
-	      e.preventDefault();
-	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
-	      closeProjectRemoveDialog();
-	    });
-	    els.projectRemoveDialog.addEventListener("close", () => {
-	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
 	    });
 	  }
 
