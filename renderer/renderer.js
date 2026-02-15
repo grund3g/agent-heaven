@@ -5092,9 +5092,10 @@ function setTerminalTabHidden(hidden) {
   tab.hidden = !!hidden;
 }
 
-function cssVar(name, fallback = "") {
+function cssVar(name, fallback = "", el) {
   try {
-    const v = window.getComputedStyle(document.documentElement).getPropertyValue(name);
+    const target = el && el.nodeType === 1 ? el : document.documentElement;
+    const v = window.getComputedStyle(target).getPropertyValue(name);
     const s = typeof v === "string" ? v.trim() : "";
     return s || fallback;
   } catch {
@@ -5107,11 +5108,13 @@ function applyXtermTheme() {
   if (!t) return;
 
   try {
-    const bg = cssVar("--surface5", "#000000");
-    const fg = cssVar("--ink-mono", "rgba(255, 255, 255, 0.8)");
-    const cursor = cssVar("--accent2", "#4bb6ff");
-    const selection = cssVar("--card2", "rgba(255, 255, 255, 0.12)");
-    const mono = cssVar("--mono", "");
+    // Theme should follow the panel tokens so we can keep terminal output dark even in light scheme.
+    const scopeEl = els.jobDialogTerm || document.documentElement;
+    const bg = cssVar("--surface5", "#000000", scopeEl);
+    const fg = cssVar("--ink-mono", "rgba(255, 255, 255, 0.8)", scopeEl);
+    const cursor = cssVar("--accent2", "#4bb6ff", scopeEl);
+    const selection = cssVar("--card2", "rgba(255, 255, 255, 0.12)", scopeEl);
+    const mono = cssVar("--mono", "", scopeEl);
 
     if (mono) t.options.fontFamily = mono;
     t.options.theme = {

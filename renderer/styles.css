@@ -1913,6 +1913,23 @@ body::before {
 .panel--terminal {
   background: var(--surface5);
   border-color: var(--stroke-strong);
+  color: var(--ink);
+}
+
+:root[data-scheme="light"] .panel--terminal {
+  /* Keep terminal-style panels dark even when the overall UI is light. */
+  color-scheme: dark;
+
+  /* Override the shared design tokens inside this panel only. */
+  --surface5: #0b0f12;
+  --card2: rgba(255, 255, 255, 0.085);
+  --stroke-strong: rgba(255, 255, 255, 0.18);
+  --ink: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.66);
+  --muted2: rgba(255, 255, 255, 0.52);
+  --ink-mid: rgba(255, 255, 255, 0.80);
+  --ink-mono: rgba(255, 255, 255, 0.76);
+  --ink-code: rgba(255, 255, 255, 0.88);
 }
 
 .panel--xterm {
