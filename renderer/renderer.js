@@ -5493,13 +5493,11 @@ function renderProjects() {
     .map((p) => {
       const color = normalizeHexColor(p.color) || "#64d8a3";
       const shortName = normalizeShortName(p.shortName);
-      const isTemporary = !!p.isTemporary;
       const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
       const dirty = !!p.gitDirty;
       const branchHtml = branch
         ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
         : "";
-      const tempHtml = isTemporary ? `<span class="project__tag" title="Temporary project">TMP</span>` : "";
       const fullPath = String(p.path || "");
       const displayPath = formatProjectPathForDisplay(fullPath);
       return `
@@ -5515,7 +5513,6 @@ function renderProjects() {
           <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
             <div class="project__name">
               <span class="project__nametext">${escapeHtml(p.name)}</span>
-              ${tempHtml}
               ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
             </div>
             <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
@@ -9995,16 +9992,6 @@ function wireUi() {
   });
 
   els.projectsList.addEventListener("click", async (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest("[data-project-remove]") : null;
-    if (btn) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const id = btn.getAttribute("data-project-remove") || "";
-      if (!id) return;
-      await removeProjectWithConfirm(id);
-      return;
-    }
     const colorInp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
     if (colorInp) return;
 
@@ -10041,30 +10028,30 @@ function wireUi() {
       await openCheckoutsDialog(id);
     });
   }
-  if (els.projectDialogOpenFinderBtn) {
-    els.projectDialogOpenFinderBtn.addEventListener("click", async () => {
-      const id = String(state.editingProjectId || "").trim();
-      if (!id) return;
-      const project = state.projects.find((p) => p && p.id === id) || null;
-      if (!project || !project.isTemporary) return;
-      const fullPath = String(project.path || "").trim();
-      if (!fullPath) {
-        showToast("Temporary project path is missing.");
-        return;
-      }
-      if (!api || typeof api.shellOpenPath !== "function") return;
-      try {
-        await api.shellOpenPath(fullPath);
-      } catch (err) {
-        showToast(String(err && err.message ? err.message : err));
-      }
-    });
-  }
   if (els.projectDialogRemoveBtn) {
     els.projectDialogRemoveBtn.addEventListener("click", async () => {
       const id = String(state.editingProjectId || "").trim();
       if (!id) return;
-      await removeProjectWithConfirm(id, { closeDialog: true });
+
+      const project = state.projects.find((p) => p && p.id === id) || null;
+      const label = project ? `"${project.name}"` : "this project";
+      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
+      if (!ok) return;
+
+      try {
+        setHint("");
+        const removed = await api.projectsRemove(id);
+        if (!removed) return;
+
+        if (getStoredProjectId() === id) clearStoredProjectId();
+
+        state.projects = await api.projectsList();
+        renderProjects();
+        renderBoard();
+        closeProjectDialog();
+      } catch (err) {
+        setHint(String(err && err.message ? err.message : err), "error");
+      }
     });
   }
   if (els.projectDialog) {
