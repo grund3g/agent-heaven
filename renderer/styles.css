@@ -70,7 +70,10 @@
 }
 
 :root[data-platform="mac"] {
-  --titlebar-safe-top: 12px;
+  /* `titleBarStyle: hiddenInset` makes the web contents extend into the native titlebar area.
+     Reserve space for macOS traffic lights and provide a reliable draggable region. */
+  --titlebar-safe-top: 28px;
+  --titlebar-drag-left: 84px;
 }
 
 :root[data-theme="nord"] {
@@ -220,6 +223,27 @@ body::before {
   opacity: 0.34;
 }
 
+.titlebarDrag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--titlebar-safe-top);
+  background: transparent;
+  /* Electron macOS hit-testing: mark this region draggable so the window can be moved. */
+  -webkit-app-region: drag;
+  z-index: 2;
+}
+
+:root[data-platform="mac"] .titlebarDrag {
+  /* Keep native traffic lights clickable by not covering their hit area with a drag region. */
+  left: var(--titlebar-drag-left);
+}
+
+:root[data-platform="other"] .titlebarDrag {
+  display: none;
+}
+
 #app {
   height: 100%;
   display: grid;
@@ -353,6 +377,12 @@ body::before {
   align-items: center;
   padding: 12px 12px;
   animation: brandIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+:root[data-platform="mac"] .brand {
+  /* Extra easy grab point for moving the window. */
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
 .brand__mark {

@@ -1,4 +1,5 @@
 const { execFileSync, spawn } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 function bin(name) {
@@ -6,11 +7,31 @@ function bin(name) {
   return path.join(__dirname, "..", "node_modules", ".bin", `${name}${ext}`);
 }
 
+function patchMacElectronBundleName(appName) {
+  if (process.platform !== "darwin") return;
+  const plistPath = path.join(__dirname, "..", "node_modules", "electron", "dist", "Electron.app", "Contents", "Info.plist");
+  if (!fs.existsSync(plistPath)) return;
+
+  // In dev (`electron .`), macOS uses Electron.app's bundle name for the menu bar label.
+  // Patch the dev Electron bundle so it shows our app name instead of "Electron".
+  try {
+    execFileSync("plutil", ["-replace", "CFBundleDisplayName", "-string", String(appName || ""), plistPath], { stdio: "ignore" });
+  } catch {
+    // ignore
+  }
+  try {
+    execFileSync("plutil", ["-replace", "CFBundleName", "-string", String(appName || ""), plistPath], { stdio: "ignore" });
+  } catch {
+    // ignore
+  }
+}
+
 function runInitialBuild() {
   execFileSync(bin("tsc"), ["-p", "tsconfig.json"], { stdio: "inherit" });
 }
 
 function main() {
+  patchMacElectronBundleName("Agent Heaven");
   runInitialBuild();
 
   const tsc = spawn(bin("tsc"), ["-w", "-p", "tsconfig.json"], { stdio: "inherit" });
@@ -47,4 +68,3 @@ function main() {
 }
 
 main();
-

@@ -40,6 +40,10 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build-res/icon.icns",
+      "extendInfo": {
+        "CFBundleDisplayName": "Agent Heaven",
+        "CFBundleName": "Agent Heaven"
+      },
       "target": [
         "dmg",
         "zip"
