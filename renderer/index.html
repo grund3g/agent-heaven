@@ -27,19 +27,28 @@
 		          </div>
 		        </div>
 
-        <div class="sidebar__section">
-          <div class="sidebar__title">Projects</div>
-          <div id="projectsList" class="projects"></div>
-          <button id="addProjectBtn" class="btn btn--ghost">Add Project Folder</button>
-        </div>
+	        <div class="sidebar__section">
+	          <div class="sidebar__titleRow">
+	            <div class="sidebar__title">Projects</div>
+	            <button
+	              id="addProjectBtn"
+	              class="iconbtn sidebar__titleIcon"
+	              type="button"
+	              title="Add project folder"
+	              aria-label="Add project folder"
+	            >
+	              +
+	            </button>
+	          </div>
+	          <div id="projectsList" class="projects"></div>
+	        </div>
 
-        <div class="sidebar__section sidebar__section--bottom">
-          <button id="openShortcutsBtn" class="btn btn--ghost" type="button" title="Show shortcuts (⌘+/)">
-            Shortcuts
-          </button>
-          <button id="openSettingsBtn" class="btn btn--ghost">Settings</button>
-        </div>
-      </aside>
+	        <div class="sidebar__section sidebar__section--bottom sidebar__footer">
+	          <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>
+	          <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">⌘</button>
+	          <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">⚙</button>
+	        </div>
+	      </aside>
 
 	      <main class="main">
 	        <header class="composer">
@@ -283,11 +292,11 @@
 	      </div>
 	    </dialog>
 
-		    <dialog id="settingsDialog" class="dialog">
-		      <div class="dialog__inner dialog__inner--settings">
-	        <div class="dialog__header">
-	          <div class="dialog__title">Settings</div>
-	          <button id="settingsDialogClose" class="btn btn--ghost">Close</button>
+			    <dialog id="settingsDialog" class="dialog">
+			      <div class="dialog__inner dialog__inner--settings">
+		        <div class="dialog__header">
+		          <div class="dialog__title">Settings</div>
+		          <button id="settingsDialogClose" class="btn btn--ghost">Close</button>
 	        </div>
 	        <div class="settings">
 	          <div class="settings__section">
@@ -465,54 +474,69 @@
 	              <div class="field__label">Sound volume (0-100)</div>
 	              <input id="settingsSoundVolume" class="input" type="number" min="0" max="100" step="5" />
 	            </label>
-	            <div class="field">
-	              <div class="field__label">Test sound</div>
-	              <div class="settings__actions">
-	                <button id="settingsTestSoundAttention" class="btn btn--ghost" type="button">Test Needs Attention</button>
-	                <button id="settingsTestSoundDone" class="btn btn--ghost" type="button">Test Done</button>
-	              </div>
-	            </div>
-	          </div>
+		            <div class="field">
+		              <div class="field__label">Test sound</div>
+		              <div class="settings__actions">
+		                <button id="settingsTestSoundAttention" class="btn btn--ghost" type="button">Test Needs Attention</button>
+		                <button id="settingsTestSoundDone" class="btn btn--ghost" type="button">Test Done</button>
+		              </div>
+		            </div>
+		          </div>
+		        </div>
+		        <div class="dialog__footer">
+		          <div class="dialog__actions dialog__actions--right">
+		            <button id="saveSettingsBtn" class="btn btn--primary">Save</button>
+		          </div>
+		        </div>
+		      </div>
+			    </dialog>
 
-	          <div class="settings__section">
-	            <div class="settings__sectionTitle">Actions</div>
-	            <div class="settings__note">
-	              Saved shell commands you can run from a job card (executed in that job's checkout folder via the Terminal tab).
-	            </div>
-	            <div id="settingsActionsList" class="actionslist"></div>
-	            <div class="settings__actions">
-	              <button id="settingsActionsAddBtn" class="btn btn--ghost" type="button">Add action</button>
-	              <button id="settingsActionsPromptBtn" class="btn btn--ghost" type="button" title="Generate an action with an LLM">Prompt…</button>
-	            </div>
-	          </div>
-	        </div>
-	        <div class="dialog__footer">
-	          <div class="dialog__actions dialog__actions--right">
-	            <button id="saveSettingsBtn" class="btn btn--primary">Save</button>
-	          </div>
-	        </div>
-	      </div>
-		    </dialog>
+			    <dialog id="actionsDialog" class="dialog">
+			      <div class="dialog__inner dialog__inner--settings">
+		        <div class="dialog__header">
+		          <div class="dialog__title">Actions</div>
+		          <button id="actionsDialogClose" class="btn btn--ghost" type="button">Close</button>
+		        </div>
+		        <div class="settings">
+		          <div class="settings__section">
+		            <div class="settings__sectionTitle">Actions</div>
+		            <div class="settings__note">
+		              Saved shell commands you can run from a job card (executed in that job's checkout folder via the Terminal tab).
+		            </div>
+		            <div id="settingsActionsList" class="actionslist"></div>
+		            <div class="settings__actions">
+		              <button id="settingsActionsAddBtn" class="btn btn--ghost" type="button">Add action</button>
+		              <button id="settingsActionsPromptBtn" class="btn btn--ghost" type="button" title="Generate an action with an LLM">Prompt…</button>
+		            </div>
+		          </div>
+		        </div>
+		        <div class="dialog__footer">
+		          <div class="dialog__actions dialog__actions--right">
+		            <button id="saveActionsBtn" class="btn btn--primary" type="button">Save</button>
+		          </div>
+		        </div>
+		      </div>
+			    </dialog>
 
-	    <dialog id="actionPromptDialog" class="dialog">
-	      <div class="dialog__inner dialog__inner--rerun">
-	        <div class="dialog__header">
-	          <div class="dialog__title">Action prompt</div>
+		    <dialog id="actionPromptDialog" class="dialog">
+		      <div class="dialog__inner dialog__inner--rerun">
+		        <div class="dialog__header">
+		          <div class="dialog__title">Action prompt</div>
 	          <button id="actionPromptDialogClose" class="btn btn--ghost" type="button">Close</button>
 	        </div>
 	        <div class="dialog__meta" id="actionPromptDialogMeta"></div>
 	        <div class="settings">
-	          <div class="settings__section">
-	            <label class="field">
-	              <div class="field__label">Describe the action</div>
-	              <textarea id="actionPromptInput" class="textarea" rows="3" placeholder="e.g. Create an action that stages all changes, opens the commit editor, then pushes"></textarea>
-	            </label>
-	            <div class="settings__note">The result will be added to Settings → Actions. Don't forget to Save.</div>
-	          </div>
-	        </div>
-	        <div class="dialog__footer">
-	          <div class="dialog__actions dialog__actions--right">
-	            <button id="actionPromptGenerateBtn" class="btn btn--primary" type="button">Generate</button>
+		          <div class="settings__section">
+		            <label class="field">
+		              <div class="field__label">Describe the action</div>
+		              <textarea id="actionPromptInput" class="textarea" rows="3" placeholder="e.g. Create an action that stages all changes, opens the commit editor, then pushes"></textarea>
+		            </label>
+		            <div class="settings__note">The result will be added to Actions. Don't forget to Save.</div>
+		          </div>
+		        </div>
+		        <div class="dialog__footer">
+		          <div class="dialog__actions dialog__actions--right">
+		            <button id="actionPromptGenerateBtn" class="btn btn--primary" type="button">Generate</button>
 	          </div>
 	        </div>
 	      </div>

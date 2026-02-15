@@ -1,12 +1,13 @@
 const api = window.agentHeaven;
 
-const els = {
-  projectsList: document.getElementById("projectsList"),
-  addProjectBtn: document.getElementById("addProjectBtn"),
-  openShortcutsBtn: document.getElementById("openShortcutsBtn"),
-  openSettingsBtn: document.getElementById("openSettingsBtn"),
-  openStatusBtn: document.getElementById("openStatusBtn"),
-  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
+	const els = {
+	  projectsList: document.getElementById("projectsList"),
+	  addProjectBtn: document.getElementById("addProjectBtn"),
+	  openActionsBtn: document.getElementById("openActionsBtn"),
+	  openShortcutsBtn: document.getElementById("openShortcutsBtn"),
+	  openSettingsBtn: document.getElementById("openSettingsBtn"),
+	  openStatusBtn: document.getElementById("openStatusBtn"),
+	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
   sortSelect: document.getElementById("sortSelect"),
   projectFilterSelect: document.getElementById("projectFilterSelect"),
   searchInput: document.getElementById("searchInput"),
@@ -122,15 +123,19 @@ const els = {
 	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
 
-  settingsActionsList: document.getElementById("settingsActionsList"),
-  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
-  settingsActionsPromptBtn: document.getElementById("settingsActionsPromptBtn"),
+	  settingsActionsList: document.getElementById("settingsActionsList"),
+	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
+	  settingsActionsPromptBtn: document.getElementById("settingsActionsPromptBtn"),
 
-  actionPromptDialog: document.getElementById("actionPromptDialog"),
-  actionPromptDialogClose: document.getElementById("actionPromptDialogClose"),
-  actionPromptDialogMeta: document.getElementById("actionPromptDialogMeta"),
-  actionPromptInput: document.getElementById("actionPromptInput"),
-  actionPromptGenerateBtn: document.getElementById("actionPromptGenerateBtn"),
+	  actionsDialog: document.getElementById("actionsDialog"),
+	  actionsDialogClose: document.getElementById("actionsDialogClose"),
+	  saveActionsBtn: document.getElementById("saveActionsBtn"),
+
+	  actionPromptDialog: document.getElementById("actionPromptDialog"),
+	  actionPromptDialogClose: document.getElementById("actionPromptDialogClose"),
+	  actionPromptDialogMeta: document.getElementById("actionPromptDialogMeta"),
+	  actionPromptInput: document.getElementById("actionPromptInput"),
+	  actionPromptGenerateBtn: document.getElementById("actionPromptGenerateBtn"),
 
 		  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
 
@@ -4566,7 +4571,7 @@ function syncJobActionsUi(job) {
   const prev = String(els.jobActionsSelect.value || "");
 
   if (actions.length === 0) {
-    els.jobActionsSelect.innerHTML = `<option value="">No actions (Settings → Actions)</option>`;
+    els.jobActionsSelect.innerHTML = `<option value="">No actions (Actions)</option>`;
     els.jobActionsSelect.value = "";
     els.jobActionsSelect.disabled = true;
     els.jobActionsRunBtn.disabled = true;
@@ -6913,9 +6918,12 @@ function wireUi() {
     });
   }
 
-  if (els.openShortcutsBtn) {
-    els.openShortcutsBtn.addEventListener("click", () => openShortcutsDialog());
-  }
+	  if (els.openShortcutsBtn) {
+	    els.openShortcutsBtn.addEventListener("click", () => openShortcutsDialog());
+	  }
+	  if (els.openActionsBtn) {
+	    els.openActionsBtn.addEventListener("click", () => openActionsDialog());
+	  }
   if (els.shortcutsDialogClose) {
     els.shortcutsDialogClose.addEventListener("click", () => {
       try {
@@ -7115,20 +7123,49 @@ function wireUi() {
     upsertJob(compactJobForList(job));
   });
 
-  els.settingsDialogClose.addEventListener("click", () => {
-    els.settingsDialog.close();
-  });
+	  els.settingsDialogClose.addEventListener("click", () => {
+	    els.settingsDialog.close();
+	  });
 
-  els.settingsDialog.addEventListener("click", (e) => {
-    if (e.target === els.settingsDialog) els.settingsDialog.close();
-  });
+	  els.settingsDialog.addEventListener("click", (e) => {
+	    if (e.target === els.settingsDialog) els.settingsDialog.close();
+	  });
 
-  if (els.settingsActionsAddBtn) {
-    els.settingsActionsAddBtn.addEventListener("click", () => addBlankSettingsActionRow());
-  }
-  if (els.settingsActionsPromptBtn) {
-    els.settingsActionsPromptBtn.addEventListener("click", () => openActionPromptDialog());
-  }
+	  if (els.actionsDialogClose) {
+	    els.actionsDialogClose.addEventListener("click", () => {
+	      try {
+	        if (els.actionsDialog && els.actionsDialog.open) els.actionsDialog.close();
+	      } catch {
+	        // ignore
+	      }
+	    });
+	  }
+	  if (els.actionsDialog) {
+	    els.actionsDialog.addEventListener("click", (e) => {
+	      if (e.target === els.actionsDialog) {
+	        try {
+	          els.actionsDialog.close();
+	        } catch {
+	          // ignore
+	        }
+	      }
+	    });
+	    els.actionsDialog.addEventListener("cancel", (e) => {
+	      e.preventDefault();
+	      try {
+	        els.actionsDialog.close();
+	      } catch {
+	        // ignore
+	      }
+	    });
+	  }
+
+	  if (els.settingsActionsAddBtn) {
+	    els.settingsActionsAddBtn.addEventListener("click", () => addBlankSettingsActionRow());
+	  }
+	  if (els.settingsActionsPromptBtn) {
+	    els.settingsActionsPromptBtn.addEventListener("click", () => openActionPromptDialog());
+	  }
   if (els.settingsActionsList) {
     els.settingsActionsList.addEventListener("click", (e) => {
       const rm = e.target && e.target.closest ? e.target.closest("[data-action-remove]") : null;
@@ -7155,9 +7192,9 @@ function wireUi() {
       closeActionPromptDialog();
     });
   }
-  if (els.actionPromptGenerateBtn) {
-    els.actionPromptGenerateBtn.addEventListener("click", () => generateActionFromPrompt());
-  }
+	  if (els.actionPromptGenerateBtn) {
+	    els.actionPromptGenerateBtn.addEventListener("click", () => generateActionFromPrompt());
+	  }
   if (els.actionPromptInput) {
     els.actionPromptInput.addEventListener("keydown", (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -7369,11 +7406,11 @@ function wireUi() {
     els.rerunAgentSelect.addEventListener("change", () => rerunAgentUiSync());
   }
 
-				  els.saveSettingsBtn.addEventListener("click", async () => {
-						    const patch = {
-					      uiModel: getUiModelFromControls(),
-					      uiTheme: els.settingsTheme.value,
-					      uiColorScheme: els.settingsColorScheme.value,
+					  els.saveSettingsBtn.addEventListener("click", async () => {
+							    const patch = {
+						      uiModel: getUiModelFromControls(),
+						      uiTheme: els.settingsTheme.value,
+						      uiColorScheme: els.settingsColorScheme.value,
 					      menuBarMode: !!els.settingsMenuBarMode.checked,
 					      startAtLogin: !!els.settingsStartAtLogin.checked,
 					      openOnAllDisplays: !!els.settingsOpenOnAllDisplays.checked,
@@ -7383,15 +7420,14 @@ function wireUi() {
 			      globalHotkeyStartWisprHandsFree: !!els.settingsGlobalHotkeyStartWisprHandsFree.checked,
 			      soundOnNeedsAttention: !!els.settingsSoundNeedsAttention.checked,
 			      soundOnDone: !!els.settingsSoundDone.checked,
-				      soundPreset: normalizeSoundPreset(els.settingsSoundPreset ? els.settingsSoundPreset.value : ""),
-				      soundVolume: clampNumber(els.settingsSoundVolume.value, 0, 100, 35),
-				      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
-				      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
-				      actions: readSettingsActionsFromUi(),
-				      agents: {
-			        codex: {
-			          path: els.settingsCodexPath.value.trim(),
-		          model: els.settingsCodexModel.value.trim(),
+					      soundPreset: normalizeSoundPreset(els.settingsSoundPreset ? els.settingsSoundPreset.value : ""),
+					      soundVolume: clampNumber(els.settingsSoundVolume.value, 0, 100, 35),
+					      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
+					      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
+					      agents: {
+				        codex: {
+				          path: els.settingsCodexPath.value.trim(),
+			          model: els.settingsCodexModel.value.trim(),
 		          sandboxMode: els.settingsCodexSandboxMode.value,
 		          skipGitRepoCheck: !!els.settingsCodexSkipGitRepoCheck.checked,
 		          bypassApprovalsAndSandbox: !!els.settingsCodexBypass.checked,
@@ -7408,8 +7444,26 @@ function wireUi() {
 		    state.settings = await api.settingsUpdate(patch);
 		    applyThemeFromSettings(state.settings);
 		    renderBoard();
-		    els.settingsDialog.close();
-		  });
+			    els.settingsDialog.close();
+			  });
+
+	  if (els.saveActionsBtn) {
+	    els.saveActionsBtn.addEventListener("click", async () => {
+	      if (!api || typeof api.settingsUpdate !== "function") return;
+	      try {
+	        state.settings = await api.settingsUpdate({ actions: readSettingsActionsFromUi() });
+	        renderBoard();
+	        if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
+	          const job = state.jobs.get(state.selectedJobId);
+	          if (job) updateJobDialogActions(job);
+	        }
+	        showToast("Actions saved.");
+	        if (els.actionsDialog && els.actionsDialog.open) els.actionsDialog.close();
+	      } catch (err) {
+	        showToast(String(err && err.message ? err.message : err) || "Failed to save actions.");
+	      }
+	    });
+	  }
 
   // Done lane overflow controls.
   document.addEventListener("click", (e) => {
@@ -8101,11 +8155,11 @@ function maybeShowMissingAgentBinariesToast(res) {
   });
 }
 
-		function openSettingsDialog() {
-		  const s = state.settings || {};
-		  const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
-		  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
-		  const claude = agents.claude && typeof agents.claude === "object" ? agents.claude : {};
+			function openSettingsDialog() {
+			  const s = state.settings || {};
+			  const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
+			  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
+			  const claude = agents.claude && typeof agents.claude === "object" ? agents.claude : {};
 
 		  els.settingsCodexPath.value = codex.path || "";
 		  els.settingsCodexModel.value = codex.model || "";
@@ -8134,15 +8188,25 @@ function maybeShowMissingAgentBinariesToast(res) {
 			    if (preset === "goat") ensureSelectOption(els.settingsSoundPreset, "goat", "Goat");
 			    els.settingsSoundPreset.value = preset;
 			  }
-				  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
-				  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
-				  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
-	  renderSettingsActions(s.actions);
+					  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
+					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
+					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
 
-	  refreshCodexModelsDatalist({ showErrors: true });
+		  refreshCodexModelsDatalist({ showErrors: true });
 
-	  els.settingsDialog.showModal();
-	}
+		  els.settingsDialog.showModal();
+		}
+
+		function openActionsDialog() {
+		  if (!els.actionsDialog) return;
+		  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+		  renderSettingsActions(s.actions);
+		  try {
+		    els.actionsDialog.showModal();
+		  } catch {
+		    // ignore
+		  }
+		}
 
 function isWindowsPlatform() {
   try {
@@ -8794,14 +8858,14 @@ async function init() {
       applyThemeFromSettings(next);
       applyXtermTheme();
       renderBoard();
-      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
-        const job = state.jobs.get(state.selectedJobId);
-        if (job) updateJobDialogActions(job);
-      }
-      if (els.settingsDialog && els.settingsDialog.open) renderSettingsActions(next && next.actions);
-      refreshAgentBinaries({ showToastOnMissing: false });
-    });
-  }
+	      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
+	        const job = state.jobs.get(state.selectedJobId);
+	        if (job) updateJobDialogActions(job);
+	      }
+	      if (els.actionsDialog && els.actionsDialog.open) renderSettingsActions(next && next.actions);
+	      refreshAgentBinaries({ showToastOnMissing: false });
+	    });
+	  }
   state.projects = await api.projectsList();
   renderProjects();
   if (!state.projectRefreshTimer) {

@@ -426,6 +426,25 @@ body::before {
   color: var(--muted2);
 }
 
+.sidebar__titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.iconbtn.sidebar__titleIcon {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  font-size: 16px;
+}
+
+.sidebar__footer {
+  flex-direction: row;
+  align-items: center;
+}
+
 .projects {
   display: flex;
   flex-direction: column;
