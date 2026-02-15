@@ -2186,16 +2186,17 @@ function claudeEntryToLiveChunks(entry) {
 
 function logEntryToLiveChunks(entry) {
   if (!entry) return [];
+  const entryMs = isoMs(entry && typeof entry.ts === "string" ? entry.ts : "");
 
   if (entry.kind === "log") {
     const raw = stripAnsi(normalizeNewlines(String(entry.text || "")));
     if (!raw.trim()) return [];
     if (isNoisyLogLine(raw)) return [];
-    return raw.split("\n").map((ln) => ({ kind: "output", stream: entry.stream, text: ln }));
+    return raw.split("\n").map((ln) => ({ kind: "output", stream: entry.stream, text: ln, ms: entryMs }));
   }
 
-  if (entry.kind === "codex") return codexEntryToLiveChunks(entry);
-  if (entry.kind === "claude") return claudeEntryToLiveChunks(entry);
+  if (entry.kind === "codex") return codexEntryToLiveChunks(entry).map((c) => ({ ...c, ms: c.ms ?? entryMs }));
+  if (entry.kind === "claude") return claudeEntryToLiveChunks(entry).map((c) => ({ ...c, ms: c.ms ?? entryMs }));
 
   return [];
 }
@@ -2221,14 +2222,16 @@ function buildLiveTailChunks(job, maxLines) {
 function renderLiveTailHtml(chunks, { running } = {}) {
   const arr = Array.isArray(chunks) ? chunks : [];
   const cls = running ? "term term--running" : "term";
+  const nowMs = Date.now();
 
   if (arr.length === 0) {
     const msg = running ? "Working…" : "No output yet.";
     return `<div class="${cls}"><div class="term__line term__line--meta">${escapeHtml(msg)}</div></div>`;
   }
 
+  const lastIdx = arr.length - 1;
   const lines = arr
-    .map((c) => {
+    .map((c, idx) => {
       const kind = String(c && c.kind ? c.kind : "output");
       const stream = c && typeof c.stream === "string" ? c.stream : "";
       const text = c && typeof c.text === "string" ? c.text : "";
@@ -2242,6 +2245,16 @@ function renderLiveTailHtml(chunks, { running } = {}) {
       if (kind === "assistant") inner = renderMarkdownInlineSafeHtml(text);
       else inner = escapeHtml(text);
       if (text === "") inner = "&nbsp;";
+
+      // While running, show a live "silence" counter next to the most recent line.
+      // This helps gauge how long the current step has been ongoing without new output.
+      if (running && idx === lastIdx) {
+        const baseMs = Number.isFinite(Number(c && c.ms)) ? Number(c.ms) : NaN;
+        if (Number.isFinite(baseMs)) {
+          const counter = fmtOffset(Math.max(0, nowMs - baseMs));
+          inner += ` <span class="term__counter" data-live-running-base-ms="${escapeHtml(String(baseMs))}" title="Time since last output">(+${escapeHtml(counter)})</span>`;
+        }
+      }
 
       return `<div class="${classes.join(" ")}">${inner}</div>`;
     })
@@ -4417,7 +4430,10 @@ function tickRunningDurations() {
   const openId = state.selectedJobId;
   if (openId && els.jobDialog && els.jobDialog.open) {
     const job = state.jobs.get(openId);
-    if (job && job.status === "running") renderJobDialogMeta(job);
+    if (job && job.status === "running") {
+      renderJobDialogMeta(job);
+      tickRunningJobDialogCounters(job, nowMs);
+    }
   }
 
   // If the status overlay is open, keep the elapsed fields fresh.
@@ -4427,6 +4443,35 @@ function tickRunningDurations() {
       const el = els.statusDialogBody.querySelector(`[data-status-elapsed="${job.id}"]`);
       if (!el) continue;
       const next = jobDurationText(job, nowMs);
+      if (el.textContent !== next) el.textContent = next;
+    }
+  }
+}
+
+function tickRunningJobDialogCounters(job, nowMs = Date.now()) {
+  if (!job || job.status !== "running") return;
+  if (!els.jobDialog || !els.jobDialog.open) return;
+
+  // Chat: update the "running since last message" counter.
+  if (els.jobDialogChat && els.jobDialogChat.querySelectorAll) {
+    const nodes = els.jobDialogChat.querySelectorAll("[data-msg-running-base-ms]");
+    for (const el of nodes) {
+      const raw = el && el.getAttribute ? el.getAttribute("data-msg-running-base-ms") : null;
+      const baseMs = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(baseMs)) continue;
+      const next = `running ${fmtOffset(Math.max(0, nowMs - baseMs))}`;
+      if (el.textContent !== next) el.textContent = next;
+    }
+  }
+
+  // Live: update the "time since last output" counter.
+  if (els.jobDialogLive && els.jobDialogLive.querySelectorAll) {
+    const nodes = els.jobDialogLive.querySelectorAll("[data-live-running-base-ms]");
+    for (const el of nodes) {
+      const raw = el && el.getAttribute ? el.getAttribute("data-live-running-base-ms") : null;
+      const baseMs = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(baseMs)) continue;
+      const next = `(+${fmtOffset(Math.max(0, nowMs - baseMs))})`;
       if (el.textContent !== next) el.textContent = next;
     }
   }
@@ -5651,6 +5696,8 @@ function renderJobDialogPanels(job) {
   const stickLive = isNearBottom(els.jobDialogLive);
   const stickLogs = isNearBottom(els.jobDialogLogs);
   const agentName = agentDisplayName(job && job.agent);
+  const nowMs = Date.now();
+  const running = job && job.status === "running";
 
   // queued follow-ups (entered while a job is running)
   const queuedPrompts = Array.isArray(job && job.queuedPrompts) ? job.queuedPrompts : [];
@@ -5711,7 +5758,8 @@ function renderJobDialogPanels(job) {
     enriched.push({ ...t, _ms: tMs, _baseMs: lastPromptMs });
   }
 
-  const items = enriched.map((t) => {
+  const items = enriched.map((t, idx) => {
+    const isLast = idx === enriched.length - 1;
     const isUser = t.role === "user";
     const clock = fmtClock(t._ms);
     const relMs =
@@ -5720,9 +5768,20 @@ function renderJobDialogPanels(job) {
     const showRel = rel && rel !== "0:00";
     const meta = clock && showRel ? `${clock} (+${rel})` : clock || "";
     const timeHtml = meta ? ` <span class="msg__time" title="${escapeHtml(t.ts)}">${escapeHtml(meta)}</span>` : "";
+
+    // While the job is running, keep a live counter on the latest chat entry so you can
+    // see how long it's been since the last message appeared.
+    let runningHtml = "";
+    if (running && isLast) {
+      const baseMs = Number.isFinite(t._ms) ? t._ms : jobStartMs(job);
+      if (Number.isFinite(baseMs)) {
+        const counter = fmtOffset(Math.max(0, nowMs - baseMs));
+        runningHtml = ` <span class="msg__time" data-msg-running-base-ms="${escapeHtml(String(baseMs))}" title="Time since last message">running ${escapeHtml(counter)}</span>`;
+      }
+    }
 	      return `
 	      <div class="msg ${isUser ? "msg--user" : "msg--assistant"}">
-		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}</div>
+		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}${runningHtml}</div>
 	        <div class="msg__text">${renderMarkdownSafeHtml(t.text)}</div>
 	        ${attachmentChipsHtml(t.images)}
 		      </div>

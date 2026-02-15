@@ -2172,6 +2172,13 @@ body::before {
   color: rgba(var(--accent2-rgb), 0.92);
 }
 
+.term__counter {
+  margin-left: 10px;
+  color: var(--muted2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .term--running .term__line:last-child::after {
   content: " |";
   color: rgba(var(--accent-rgb), 0.72);
