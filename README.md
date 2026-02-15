@@ -25,7 +25,8 @@ Agent Heaven is a local Electron desktop app that runs AI coding agents (OpenAI 
 ## Download / Install
 
 - macOS: download the latest `.dmg` from GitHub Releases.
-- Other platforms: build/run from source (Electron). Prebuilt binaries are currently macOS-only.
+- Windows: download the latest `.exe` (installer) or `.zip` from GitHub Releases.
+- Other platforms: build/run from source (Electron).
 
 ### Requirements
 
@@ -53,9 +54,9 @@ npm run dev
 npm test
 ```
 
-## Packaging (macOS)
+## Packaging
 
-Build a local `.app` bundle plus distributable artifacts (`.dmg` / `.zip`):
+Build distributable artifacts:
 
 ```bash
 npm ci
@@ -64,11 +65,19 @@ npm run dist
 
 Build artifacts land in `dist/`.
 
-Notes for distribution:
+### macOS notes
 
+- Outputs: `.dmg` / `.zip`
 - If you distribute unsigned builds, macOS Gatekeeper will likely block the first launch. Recipients can right-click the app -> Open (or allow it via System Settings -> Privacy & Security).
 - For smooth distribution to others, you typically need code signing + notarization (Apple Developer ID).
 - If the app can't find `codex` or `claude` (common when launching packaged apps from Finder), set Settings -> Codex path / Claude path to the full binary path. (Claude's local installer is typically `~/.claude/local/claude`.)
+
+### Windows notes
+
+- Outputs: `.exe` (NSIS installer) / `.zip`
+- Unsigned builds will often trigger Windows SmartScreen warnings; code signing is recommended for distribution.
+- If `node-pty` (native module) fails to build during install/packaging, install Visual Studio Build Tools (Desktop development with C++) and try again.
+- If the app can't find `codex` or `claude`, set Settings -> Codex path / Claude path to the full binary path (Claude local installer is commonly `%USERPROFILE%\\.claude\\local\\claude.exe`).
 
 ## How it works (short)
 
