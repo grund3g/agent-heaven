@@ -156,47 +156,19 @@ function normalizeShortName(value) {
 }
 
 function normalizeBranchName(value) {
-  return normalizeGitBranchName(value);
-}
-
-function normalizeBranchList(value, maxLen = 100) {
-  const arr = Array.isArray(value) ? value : value == null ? [] : [value];
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const item of arr) {
-    const b = normalizeBranchName(item);
-    if (!b) continue;
-    if (seen.has(b)) continue;
-    seen.add(b);
-    out.push(b);
-    if (out.length >= maxLen) break;
-  }
-  return out;
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) return "";
+  const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+  return stripped.slice(0, 200);
 }
 
 function normalizeCheckoutMode(value) {
-  return normalizeGitCheckoutMode(value);
-}
-
-function normalizeIntegrateToDefaultMode(value) {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (!raw) return "";
-  if (raw === "agent" || raw === "llm" || raw === "ai") return "agent";
-  if (raw === "cli" || raw === "git" || raw === "shell" || raw === "local") return "cli";
+  if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
+  if (raw === "worktree" || raw === "worktrees") return "worktree";
+  if (raw === "clone" || raw === "checkout" || raw === "dedicated" || raw === "dedicated_checkout") return "clone";
   return "";
-}
-
-function normalizeHelperDefaultAgent(value) {
-  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (raw === "claude" || raw === "anthropic") return "claude";
-  if (raw === "codex" || raw === "openai") return "codex";
-  return "";
-}
-
-function normalizeHelperDefaultModel(value) {
-  const raw = typeof value === "string" ? value.trim() : "";
-  if (!raw) return "";
-  return raw.slice(0, 160);
 }
 
 function pickNextProjectColor(usedLower) {
@@ -283,24 +255,6 @@ function ensureProjectCheckoutSettings(projects) {
     } else if ((obj as any).defaultBranch !== nextBranch) {
       (obj as any).defaultBranch = nextBranch;
       changed = true;
-    }
-
-    {
-      const curRaw = (obj as any).skipDefaultBranchConfirmBranches;
-      const next = normalizeBranchList(curRaw);
-      const same =
-        Array.isArray(curRaw) &&
-        curRaw.length === next.length &&
-        curRaw.every((x: any, i: number) => x === next[i]);
-      if (next.length === 0) {
-        if (Object.prototype.hasOwnProperty.call(obj, "skipDefaultBranchConfirmBranches")) {
-          delete (obj as any).skipDefaultBranchConfirmBranches;
-          changed = true;
-        }
-      } else if (!same) {
-        (obj as any).skipDefaultBranchConfirmBranches = next;
-        changed = true;
-      }
     }
 
     return obj;
@@ -805,11 +759,6 @@ export class Store {
       if (b) (p as any).defaultBranch = b;
       else if (Object.prototype.hasOwnProperty.call(p, "defaultBranch")) delete (p as any).defaultBranch;
     }
-    {
-      const next = normalizeBranchList((p as any).skipDefaultBranchConfirmBranches);
-      if (next.length > 0) (p as any).skipDefaultBranchConfirmBranches = next;
-      else if (Object.prototype.hasOwnProperty.call(p, "skipDefaultBranchConfirmBranches")) delete (p as any).skipDefaultBranchConfirmBranches;
-    }
 
     this.state.projects = [...this.state.projects, p];
     this.save();
@@ -842,12 +791,6 @@ export class Store {
     const nextDefaultBranch = hasDefaultBranch ? normalizeBranchName((rawPatch as any).defaultBranch) : "";
     if (hasDefaultBranch) delete (rawPatch as any).defaultBranch;
 
-    const hasSkipDefaultBranchConfirmBranches = Object.prototype.hasOwnProperty.call(rawPatch, "skipDefaultBranchConfirmBranches");
-    const nextSkipDefaultBranchConfirmBranches = hasSkipDefaultBranchConfirmBranches
-      ? normalizeBranchList((rawPatch as any).skipDefaultBranchConfirmBranches)
-      : [];
-    if (hasSkipDefaultBranchConfirmBranches) delete (rawPatch as any).skipDefaultBranchConfirmBranches;
-
     const hasCheckoutMode = Object.prototype.hasOwnProperty.call(rawPatch, "checkoutMode");
     const nextCheckoutMode = hasCheckoutMode ? normalizeCheckoutMode((rawPatch as any).checkoutMode) || "inplace" : "";
     if (hasCheckoutMode) delete (rawPatch as any).checkoutMode;
@@ -863,13 +806,6 @@ export class Store {
       if (hasDefaultBranch) {
         if (nextDefaultBranch) (updated as any).defaultBranch = nextDefaultBranch;
         else delete (updated as any).defaultBranch;
-      }
-      if (hasSkipDefaultBranchConfirmBranches) {
-        if (nextSkipDefaultBranchConfirmBranches.length > 0) {
-          (updated as any).skipDefaultBranchConfirmBranches = nextSkipDefaultBranchConfirmBranches;
-        } else {
-          delete (updated as any).skipDefaultBranchConfirmBranches;
-        }
       }
       if (hasCheckoutMode) {
         (updated as any).checkoutMode = nextCheckoutMode;

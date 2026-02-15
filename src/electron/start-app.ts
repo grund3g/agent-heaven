@@ -22,27 +22,7 @@ import { ensureMacAppMenu } from "./mac-app-menu";
 import { listCodexModels } from "./codex-models";
 import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
 import { installAgentCli } from "../agent-install";
-import { inferCommitMessageStyleFromSubjects, suggestCommitMessage } from "../core/commit-message";
-import { buildEditorLaunchCommand } from "../core/command-line";
-import { jobDisplayTitle } from "../core/prompt";
-import { spawnPlatform } from "../platform-spawn";
-import {
-  addAll,
-  buildCheckoutReviewDiff,
-  cherryPick,
-  commitWithMessage,
-  detectDefaultBranch,
-  findWorktreePathForBranch,
-  getGitCommonDir,
-  getGitInfo,
-  hasCherryPickInProgress,
-  listChangedPaths,
-  listCommitsInRange,
-  listRecentCommitSubjects,
-  pushCurrentBranch,
-  removeWorktree,
-  switchBranch
-} from "./git";
+import { detectDefaultBranch, getGitInfo, removeWorktree, switchBranch } from "./git";
 
 function isMenuBarMode(settings: any) {
   return process.platform === "darwin" && !!(settings && settings.menuBarMode);
@@ -1322,55 +1302,6 @@ export async function startApp(): Promise<void> {
     }
   });
 
-  ipcMain.handle("editor:openPath", async (evt, rawPath) => {
-    assertTrustedIpcSender(evt);
-    const targetPath = String(rawPath || "").trim();
-    if (!targetPath) return { ok: false, error: "Missing path" };
-
-    const settings = store.getSettings();
-    const editorCommand = settings && typeof settings === "object" ? String((settings as any).editorCommand || "").trim() : "";
-    if (!editorCommand) {
-      return { ok: false, error: "No editor configured. Set one in Settings -> UI -> Editor command." };
-    }
-
-    const launch = buildEditorLaunchCommand(editorCommand, targetPath);
-    if (!launch) {
-      return { ok: false, error: "Invalid editor command. Use a binary name (for example: code)." };
-    }
-
-    try {
-      const child = spawnPlatform(launch.command, launch.args, {
-        cwd: pickCwdForEditorTarget(targetPath),
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true
-      });
-
-      return await new Promise((resolve) => {
-        let settled = false;
-        const finish = (payload: any) => {
-          if (settled) return;
-          settled = true;
-          resolve(payload);
-        };
-
-        child.once("error", (err: any) => {
-          finish({ ok: false, error: String(err && err.message ? err.message : err) });
-        });
-
-        try {
-          child.unref();
-        } catch {
-          // ignore
-        }
-
-        setTimeout(() => finish({ ok: true }), 80);
-      });
-    } catch (err: any) {
-      return { ok: false, error: String(err && err.message ? err.message : err) };
-    }
-  });
-
   ipcMain.handle("agents:checkBinaries", async (evt) => {
     assertTrustedIpcSender(evt);
     try {
@@ -1442,9 +1373,7 @@ export async function startApp(): Promise<void> {
     const augmented = await Promise.all(
       projects.map(async (p: any) => {
         const projectPath = p && typeof p.path === "string" ? p.path : "";
-        const info = projectPath
-          ? await getProjectGitInfoCached(projectPath)
-          : { isGitRepo: false, branch: "", sha: "", detached: false, dirty: false, error: "Missing path" };
+        const info = projectPath ? await getGitInfo(projectPath) : { isGitRepo: false, branch: "", sha: "", detached: false, dirty: false, error: "Missing path" };
         return {
           ...p,
           gitBranch: info.branch,
@@ -1474,7 +1403,35 @@ export async function startApp(): Promise<void> {
     const project = store.addProject({ id: newId(), name, path: dirPath, defaultBranch, checkoutMode: "inplace" });
     return project;
   });
-  ipcMain.handle("projects:addTemporary", async (evt, payload) => {
+  ipcMain.handle("projects:gitInfo", async (evt, projectId) => {
+    assertTrustedIpcSender(evt);
+    const id = String(projectId || "").trim();
+    if (!id) return { ok: false, error: "Missing projectId" };
+    const project = store.listProjects().find((p: any) => p && p.id === id) || null;
+    if (!project) return { ok: false, error: "Project not found" };
+    const projectPath = typeof project.path === "string" ? project.path : "";
+    const info = projectPath ? await getGitInfo(projectPath) : { isGitRepo: false, branch: "", sha: "", detached: false, dirty: false, error: "Missing path" };
+    return { ok: true, info };
+  });
+  ipcMain.handle("projects:switchBranch", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const id = String(p.projectId || "").trim();
+    const branch = String(p.branch || "").trim();
+    if (!id) return { ok: false, error: "Missing projectId" };
+    if (!branch) return { ok: false, error: "Missing branch" };
+    const project = store.listProjects().find((x: any) => x && x.id === id) || null;
+    if (!project) return { ok: false, error: "Project not found" };
+    const projectPath = typeof project.path === "string" ? project.path : "";
+    if (!projectPath) return { ok: false, error: "Missing project path" };
+    try {
+      await switchBranch(projectPath, branch);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  });
+  ipcMain.handle("projects:remove", async (evt, id) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     const rawBaseDir = typeof p.baseDir === "string" ? p.baseDir.trim() : "";
@@ -2388,6 +2345,106 @@ export async function startApp(): Promise<void> {
     }
     } finally {
       jobsManager.setIntegratingToDefault(jobId, false);
+    }
+  });
+
+  function isPathWithinRoot(root: string, target: string): boolean {
+    const r = path.resolve(root);
+    const t = path.resolve(target);
+    const rr = r.endsWith(path.sep) ? r : `${r}${path.sep}`;
+    return t === r || t.startsWith(rr);
+  }
+
+  ipcMain.handle("checkouts:list", async (evt, projectId) => {
+    assertTrustedIpcSender(evt);
+    const id = String(projectId || "").trim();
+    if (!id) return { ok: false, error: "Missing projectId" };
+
+    const project = store.listProjects().find((p: any) => p && p.id === id) || null;
+    if (!project) return { ok: false, error: "Project not found" };
+
+    const root = path.resolve(checkoutsDir);
+    const entries: any[] = [];
+    const kinds: Array<{ kind: "worktree" | "clone"; dirName: string }> = [
+      { kind: "worktree", dirName: "worktrees" },
+      { kind: "clone", dirName: "clones" }
+    ];
+
+    for (const k of kinds) {
+      const dir = path.join(root, k.dirName, id);
+      try {
+        if (!fs.existsSync(dir)) continue;
+        const children = fs.readdirSync(dir, { withFileTypes: true });
+        for (const de of children) {
+          if (!de.isDirectory()) continue;
+          const jobId = de.name;
+          const p = path.join(dir, jobId);
+          let st: any = null;
+          try {
+            st = fs.statSync(p);
+          } catch {
+            st = null;
+          }
+          entries.push({
+            kind: k.kind,
+            projectId: id,
+            jobId,
+            path: p,
+            mtimeMs: st && typeof st.mtimeMs === "number" ? st.mtimeMs : 0
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    entries.sort((a, b) => (Number(b.mtimeMs) || 0) - (Number(a.mtimeMs) || 0));
+    return { ok: true, entries };
+  });
+
+  ipcMain.handle("checkouts:remove", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const projectId = String(p.projectId || "").trim();
+    const kind = String(p.kind || "").trim();
+    const jobId = String(p.jobId || "").trim();
+    if (!projectId) return { ok: false, error: "Missing projectId" };
+    if (!jobId) return { ok: false, error: "Missing jobId" };
+    if (kind !== "worktree" && kind !== "clone") return { ok: false, error: "Invalid kind" };
+
+    const project = store.listProjects().find((x: any) => x && x.id === projectId) || null;
+    if (!project) return { ok: false, error: "Project not found" };
+    const projectPath = typeof project.path === "string" ? project.path : "";
+    if (!projectPath) return { ok: false, error: "Missing project path" };
+
+    const root = path.resolve(checkoutsDir);
+    const sub = kind === "worktree" ? "worktrees" : "clones";
+    const target = path.resolve(root, sub, projectId, jobId);
+    if (!isPathWithinRoot(root, target)) return { ok: false, error: "Invalid checkout path" };
+
+    try {
+      if (kind === "clone") {
+        fs.rmSync(target, { recursive: true, force: true });
+        return { ok: true };
+      }
+
+      // worktree: remove via git to keep metadata consistent
+      try {
+        if (fs.existsSync(target)) await removeWorktree({ repoDir: projectPath, worktreeDir: target });
+      } catch (err: any) {
+        if (fs.existsSync(target)) throw err;
+      }
+
+      // Best-effort: ensure the dir is gone.
+      try {
+        fs.rmSync(target, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
     }
   });
 

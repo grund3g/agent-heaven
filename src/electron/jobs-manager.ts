@@ -13,15 +13,7 @@ import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
 import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
-import {
-  addWorktree,
-  cloneRepo,
-  createBranchInRepo,
-  detectDefaultBranch,
-  getGitCommonDir,
-  getGitInfo,
-  listCommitsInRange
-} from "./git";
+import { addWorktree, cloneRepo, createBranchInRepo, detectDefaultBranch } from "./git";
 
 type SendJobEvent = (payload: any) => void;
 
@@ -147,307 +139,16 @@ export class JobsManager {
 
   private normalizeCheckoutMode(value: unknown): "inplace" | "worktree" | "clone" {
     const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-    if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
     if (raw === "worktree" || raw === "worktrees") return "worktree";
     if (raw === "clone" || raw === "checkout" || raw === "dedicated") return "clone";
     return "inplace";
   }
 
-  private normalizeCheckoutModeOverride(value: unknown): "" | "inplace" | "worktree" | "clone" {
-    return normalizeGitCheckoutMode(value);
-  }
-
-  private normalizeMissingCheckoutAction(value: unknown): "ask" | "fallback_to_project" | "recreate_worktree" {
-    const raw = String(value || "")
-      .trim()
-      .toLowerCase();
-    if (raw === "fallback_to_project" || raw === "fallback" || raw === "inplace") return "fallback_to_project";
-    if (raw === "recreate_worktree" || raw === "recreate" || raw === "worktree") return "recreate_worktree";
-    return "ask";
-  }
-
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
-    if (!text) return false;
-
-    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
-    const writePatterns = [
-      /\bfix\b/,
-      /\bimplement\b/,
-      /\badd\b/,
-      /\bupdate\b/,
-      /\bchange\b/,
-      /\bedit\b/,
-      /\brefactor\b/,
-      /\bpatch\b/,
-      /\bwrite\b/,
-      /\bcreate\b/,
-      /\bremove\b/,
-      /\brename\b/,
-      /\bmigrate\b/,
-      /\bcommit\b/,
-      /\bbugfix\b/,
-      /\bcode\s+change/,
-      /\bcode\s+changes/,
-      /\bmake\s+changes?\b/,
-      /\bbehebe\b/,
-      /\bfixe\b/,
-      /\bimplementier/,
-      /\bfu[eü]g(?:e|en)?\b/,
-      /\b[aä]nder(?:e|n|ung)/,
-      /\baktualisier/,
-      /\berstell(?:e|en)?\b/,
-      /\bschreib(?:e|en)?\b/,
-      /\brefaktorisier/,
-      /\bl[oö]sch(?:e|en)?\b/,
-      /\bumbau(?:en)?\b/,
-      /\bmigrier(?:e|en)?\b/
-    ];
-    if (writePatterns.some((re) => re.test(text))) return false;
-
-    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
-    const readOnlyPatterns = [
-      /\banalys(?:e|is|ier)/,
-      /\banaly[sz]e\b/,
-      /\bexplain\b/,
-      /\berkl[aä]r/,
-      /\breview\b/,
-      /\binspect\b/,
-      /\binvestigat/,
-      /\buntersuch/,
-      /\bcheck\b/,
-      /\bpr[uü]f(?:e|en)?\b/,
-      /\bwhy\b/,
-      /\bwarum\b/,
-      /\bwieso\b/,
-      /\bplan\b/,
-      /\bbrainstorm\b/,
-      /\bidee(?:n)?\b/,
-      /\bsummariz/,
-      /\bzusammenfass/,
-      /\bstatus\b/,
-      /\bcompare\b/,
-      /\bvergleich/
-    ];
-    if (readOnlyPatterns.some((re) => re.test(text))) return true;
-
-    // Questions without edit intent are typically informational.
-    if (text.endsWith("?")) return true;
-    return false;
-  }
-
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
-    if (!text) return false;
-
-    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
-    const writePatterns = [
-      /\bfix\b/,
-      /\bimplement\b/,
-      /\badd\b/,
-      /\bupdate\b/,
-      /\bchange\b/,
-      /\bedit\b/,
-      /\brefactor\b/,
-      /\bpatch\b/,
-      /\bwrite\b/,
-      /\bcreate\b/,
-      /\bremove\b/,
-      /\brename\b/,
-      /\bmigrate\b/,
-      /\bcommit\b/,
-      /\bbugfix\b/,
-      /\bcode\s+change/,
-      /\bcode\s+changes/,
-      /\bmake\s+changes?\b/,
-      /\bbehebe\b/,
-      /\bfixe\b/,
-      /\bimplementier/,
-      /\bfu[eü]g(?:e|en)?\b/,
-      /\b[aä]nder(?:e|n|ung)/,
-      /\baktualisier/,
-      /\berstell(?:e|en)?\b/,
-      /\bschreib(?:e|en)?\b/,
-      /\brefaktorisier/,
-      /\bl[oö]sch(?:e|en)?\b/,
-      /\bumbau(?:en)?\b/,
-      /\bmigrier(?:e|en)?\b/
-    ];
-    if (writePatterns.some((re) => re.test(text))) return false;
-
-    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
-    const readOnlyPatterns = [
-      /\banalys(?:e|is|ier)/,
-      /\banaly[sz]e\b/,
-      /\bexplain\b/,
-      /\berkl[aä]r/,
-      /\breview\b/,
-      /\binspect\b/,
-      /\binvestigat/,
-      /\buntersuch/,
-      /\bcheck\b/,
-      /\bpr[uü]f(?:e|en)?\b/,
-      /\bwhy\b/,
-      /\bwarum\b/,
-      /\bwieso\b/,
-      /\bplan\b/,
-      /\bbrainstorm\b/,
-      /\bidee(?:n)?\b/,
-      /\bsummariz/,
-      /\bzusammenfass/,
-      /\bstatus\b/,
-      /\bcompare\b/,
-      /\bvergleich/
-    ];
-    if (readOnlyPatterns.some((re) => re.test(text))) return true;
-
-    // Questions without edit intent are typically informational.
-    if (text.endsWith("?")) return true;
-    return false;
-  }
-
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
-    if (!text) return false;
-
-    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
-    const writePatterns = [
-      /\bfix\b/,
-      /\bimplement\b/,
-      /\badd\b/,
-      /\bupdate\b/,
-      /\bchange\b/,
-      /\bedit\b/,
-      /\brefactor\b/,
-      /\bpatch\b/,
-      /\bwrite\b/,
-      /\bcreate\b/,
-      /\bremove\b/,
-      /\brename\b/,
-      /\bmigrate\b/,
-      /\bcommit\b/,
-      /\bbugfix\b/,
-      /\bcode\s+change/,
-      /\bcode\s+changes/,
-      /\bmake\s+changes?\b/,
-      /\bbehebe\b/,
-      /\bfixe\b/,
-      /\bimplementier/,
-      /\bfu[eü]g(?:e|en)?\b/,
-      /\b[aä]nder(?:e|n|ung)/,
-      /\baktualisier/,
-      /\berstell(?:e|en)?\b/,
-      /\bschreib(?:e|en)?\b/,
-      /\brefaktorisier/,
-      /\bl[oö]sch(?:e|en)?\b/,
-      /\bumbau(?:en)?\b/,
-      /\bmigrier(?:e|en)?\b/
-    ];
-    if (writePatterns.some((re) => re.test(text))) return false;
-
-    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
-    const readOnlyPatterns = [
-      /\banalys(?:e|is|ier)/,
-      /\banaly[sz]e\b/,
-      /\bexplain\b/,
-      /\berkl[aä]r/,
-      /\breview\b/,
-      /\binspect\b/,
-      /\binvestigat/,
-      /\buntersuch/,
-      /\bcheck\b/,
-      /\bpr[uü]f(?:e|en)?\b/,
-      /\bwhy\b/,
-      /\bwarum\b/,
-      /\bwieso\b/,
-      /\bplan\b/,
-      /\bbrainstorm\b/,
-      /\bidee(?:n)?\b/,
-      /\bsummariz/,
-      /\bzusammenfass/,
-      /\bstatus\b/,
-      /\bcompare\b/,
-      /\bvergleich/
-    ];
-    if (readOnlyPatterns.some((re) => re.test(text))) return true;
-
-    // Questions without edit intent are typically informational.
-    if (text.endsWith("?")) return true;
-    return false;
-  }
-
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
-    if (!text) return false;
-
-    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
-    const writePatterns = [
-      /\bfix\b/,
-      /\bimplement\b/,
-      /\badd\b/,
-      /\bupdate\b/,
-      /\bchange\b/,
-      /\bedit\b/,
-      /\brefactor\b/,
-      /\bpatch\b/,
-      /\bwrite\b/,
-      /\bcreate\b/,
-      /\bremove\b/,
-      /\brename\b/,
-      /\bmigrate\b/,
-      /\bcommit\b/,
-      /\bbugfix\b/,
-      /\bcode\s+change/,
-      /\bcode\s+changes/,
-      /\bmake\s+changes?\b/,
-      /\bbehebe\b/,
-      /\bfixe\b/,
-      /\bimplementier/,
-      /\bfu[eü]g(?:e|en)?\b/,
-      /\b[aä]nder(?:e|n|ung)/,
-      /\baktualisier/,
-      /\berstell(?:e|en)?\b/,
-      /\bschreib(?:e|en)?\b/,
-      /\brefaktorisier/,
-      /\bl[oö]sch(?:e|en)?\b/,
-      /\bumbau(?:en)?\b/,
-      /\bmigrier(?:e|en)?\b/
-    ];
-    if (writePatterns.some((re) => re.test(text))) return false;
-
-    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
-    const readOnlyPatterns = [
-      /\banalys(?:e|is|ier)/,
-      /\banaly[sz]e\b/,
-      /\bexplain\b/,
-      /\berkl[aä]r/,
-      /\breview\b/,
-      /\binspect\b/,
-      /\binvestigat/,
-      /\buntersuch/,
-      /\bcheck\b/,
-      /\bpr[uü]f(?:e|en)?\b/,
-      /\bwhy\b/,
-      /\bwarum\b/,
-      /\bwieso\b/,
-      /\bplan\b/,
-      /\bbrainstorm\b/,
-      /\bidee(?:n)?\b/,
-      /\bsummariz/,
-      /\bzusammenfass/,
-      /\bstatus\b/,
-      /\bcompare\b/,
-      /\bvergleich/
-    ];
-    if (readOnlyPatterns.some((re) => re.test(text))) return true;
-
-    // Questions without edit intent are typically informational.
-    if (text.endsWith("?")) return true;
-    return false;
-  }
-
   private normalizeBranchName(value: unknown): string {
-    return normalizeGitBranchName(value);
+    const s = typeof value === "string" ? value.trim() : "";
+    if (!s) return "";
+    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+    return stripped.slice(0, 200);
   }
 
   private ensureDir(dirPath: string) {
@@ -460,18 +161,14 @@ export class JobsManager {
     }
   }
 
-  private async prepareCheckout(
-    project: any,
-    jobId: string,
-    promptText?: string,
-    overrideMode?: "" | "inplace" | "worktree" | "clone"
-  ): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
-    const configured = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
-    const mode = overrideMode ? this.normalizeCheckoutMode(overrideMode) : configured;
+  private async prepareCheckout(project: any, jobId: string): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
+    const mode = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
     const projectPath = project && typeof project.path === "string" ? project.path : "";
     if (!projectPath) throw new Error("Project path is missing");
 
     if (mode === "inplace") return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
+
+    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
 
     const projectId = project && typeof project.id === "string" ? project.id : "project";
     const branchName = `ah/job/${jobId}`;
@@ -485,12 +182,6 @@ export class JobsManager {
         baseBranch = "";
       }
     }
-
-    if (mode === "worktree" && this.shouldDeferWorktreeForPrompt(promptText)) {
-      return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
-    }
-
-    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
 
     if (mode === "worktree") {
       const baseRef = baseBranch || "HEAD";
@@ -2473,69 +2164,13 @@ export class JobsManager {
     if (imgErr) return { ok: false, error: imgErr };
 
     const jobId = this.createId();
-    const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
-    const checkoutModePreference = this.normalizeCheckoutMode(
-      checkoutModeOverride || (project && typeof project === "object" ? (project as any).checkoutMode : "")
-    );
 
     let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
     try {
-      const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
-      run = await this.prepareCheckout(project, jobId, prompt, checkoutModeOverride);
+      run = await this.prepareCheckout(project, jobId);
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
-
-    let enrichedPrompt = prompt;
-    let processBindings: any[] = [];
-    let processMessages: any[] = [];
-    if (this.integrationRuntime) {
-      try {
-        const enriched = await this.integrationRuntime.preparePrompt({
-          jobId,
-          projectId: String(project && project.id ? project.id : ""),
-          projectPath: run.projectPath || project.path,
-          prompt,
-          settings
-        });
-        if (enriched && typeof enriched === "object") {
-          const promptText = typeof (enriched as any).prompt === "string" ? (enriched as any).prompt : "";
-          if (promptText.trim()) enrichedPrompt = promptText;
-          processBindings = this.mergeProcessBindings([], Array.isArray((enriched as any).bindings) ? (enriched as any).bindings : []);
-          processMessages = Array.isArray((enriched as any).messages) ? (enriched as any).messages : [];
-        }
-      } catch (err: any) {
-        processMessages.push({
-          connectorId: "runtime",
-          level: "error",
-          text: `Prompt enrichment failed: ${String(err && err.message ? err.message : err)}`
-        });
-      }
-    }
-    if (enrichedPrompt.length > 220_000) {
-      return { ok: false, error: "Prompt + integration context is too large" };
-    }
-
-    // Write MCP config so the agent can use Agent Heaven's provider tools
-    if (this.mcpServerManager && this.mcpServerManager.port > 0) {
-      try {
-        const mcpFiles = writeMcpConfig({
-          projectPath: run.projectPath || project.path,
-          agent,
-          port: this.mcpServerManager.port,
-          token: this.mcpServerManager.token
-        });
-        if (mcpFiles.length > 0) this.mcpConfigFilesByJob.set(jobId, mcpFiles);
-      } catch (err: any) {
-        processMessages.push({
-          connectorId: "mcp-server",
-          level: "warning",
-          text: `Failed to write MCP config: ${String(err && err.message ? err.message : err)}`
-        });
-      }
-    }
-
-    const runPrompt = this.wrapPromptWithStatusHint(enrichedPrompt);
 
     const modelOverride = (params && params.model ? String(params.model) : "").trim();
     let model = modelOverride;
@@ -2566,8 +2201,6 @@ export class JobsManager {
       finishedAt: "",
       projectId: project.id,
       projectPath: run.projectPath || project.path,
-      checkoutModePreference,
-      checkoutModeEffective: run.checkoutMode || "inplace",
       agent,
       model,
       threadId,
@@ -2623,7 +2256,7 @@ export class JobsManager {
         const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
         child = this.runCodexExec({
           codexPath,
-          settings: runCodexSettings,
+          settings: codexSettings,
           projectPath: run.projectPath || project.path,
           model,
           prompt: runPrompt,

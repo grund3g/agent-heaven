@@ -46,10 +46,6 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     await invokeOk("shell:openPath", filePath);
     return true;
   },
-  editorOpenPath: async (filePath) => {
-    await invokeOk("editor:openPath", filePath);
-    return true;
-  },
 
   agentsCheckBinaries: async () => {
     const res = await invokeOk("agents:checkBinaries");
@@ -93,10 +89,6 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     return ipcRenderer.invoke("projects:remove", { id, deleteFolder: !!o.deleteFolder });
   },
   projectsUpdate: (id, patch) => ipcRenderer.invoke("projects:update", { id, patch }),
-  projectsSuggestPaths: async (projectId, query, limit) => {
-    const res = await invokeOk("projects:suggestPaths", { projectId, query, limit });
-    return Array.isArray(res.items) ? res.items : [];
-  },
   projectsGitInfo: async (projectId) => {
     const res = await invokeOk("projects:gitInfo", projectId);
     return res.info;
@@ -113,46 +105,6 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   checkoutsRemove: async (projectId, kind, jobId) => {
     await invokeOk("checkouts:remove", { projectId, kind, jobId });
     return true;
-  },
-  checkoutsGetDiff: async (jobId, opts) => {
-    const p = opts && typeof opts === "object" ? opts : {};
-    const res = await invokeOk("checkouts:getDiff", {
-      jobId,
-      maxChars: p.maxChars,
-      maxUntrackedFiles: p.maxUntrackedFiles
-    });
-    return res;
-  },
-  checkoutsCommit: async (jobId, opts) => {
-    const p = opts && typeof opts === "object" ? opts : {};
-    const res = await invokeOk("checkouts:commit", {
-      jobId,
-      commitMessage: p.commitMessage,
-      push: !!p.push
-    });
-    return res;
-  },
-  checkoutsCommit: async (jobId, opts) => {
-    const p = opts && typeof opts === "object" ? opts : {};
-    const res = await invokeOk("checkouts:commit", {
-      jobId,
-      commitMessage: p.commitMessage,
-      push: !!p.push
-    });
-    return res;
-  },
-  checkoutsCommit: async (jobId, opts) => {
-    const p = opts && typeof opts === "object" ? opts : {};
-    const res = await invokeOk("checkouts:commit", {
-      jobId,
-      commitMessage: p.commitMessage,
-      push: !!p.push
-    });
-    return res;
-  },
-  checkoutsSuggestCommitMessage: async (jobId) => {
-    const res = await invokeOk("checkouts:suggestCommitMessage", { jobId });
-    return res && typeof res.suggestion === "string" ? res.suggestion : "";
   },
 
   jobsList: () => ipcRenderer.invoke("jobs:list"),

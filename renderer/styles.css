@@ -657,18 +657,6 @@ body::before {
   flex: 0 0 auto;
 }
 
-.project__tag {
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--accent2-rgb), 0.5);
-  background: rgba(var(--accent2-rgb), 0.12);
-  font-size: 10px;
-  font-family: var(--mono);
-  color: var(--ink);
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
 .project__branch {
   padding: 2px 7px;
   border-radius: 999px;
@@ -2072,13 +2060,6 @@ body::before {
   grid-template-rows: auto auto 1fr auto;
 }
 
-.dialog__inner--integrate {
-  width: min(760px, calc(100vw - 24px));
-  height: auto;
-  min-height: 0;
-  grid-template-rows: auto auto 1fr auto;
-}
-
 .dialog__inner--shortcuts {
   width: min(920px, calc(100vw - 24px));
   height: min(780px, calc(100vh - 24px));
@@ -2348,148 +2329,9 @@ body::before {
   overflow: auto;
 }
 
-.dialog__body--integrate {
-  display: block;
-  overflow: auto;
-}
-
 .dialog__body--checkouts {
   display: block;
   overflow: auto;
-}
-
-/* ---------------------------
-   Integrate dialog
-   --------------------------- */
-
-.integrate {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.integrate__top {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  align-items: start;
-}
-
-.integrate__texts {
-  min-width: 0;
-}
-
-.integrate__icon {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-  border-radius: 999px;
-  flex: 0 0 auto;
-}
-
-.integrate__icon--idle {
-  border: 1px dashed rgba(var(--accent2-rgb), 0.42);
-  border-radius: 6px;
-  background:
-    linear-gradient(135deg, rgba(var(--accent2-rgb), 0.14), rgba(var(--accent-rgb), 0.12)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(var(--accent2-rgb), 0.08) 0,
-      rgba(var(--accent2-rgb), 0.08) 3px,
-      transparent 3px,
-      transparent 6px
-    );
-}
-
-.integrate__icon--spinner {
-  border: 2px solid var(--stroke);
-  border-top-color: rgba(var(--accent2-rgb), 0.92);
-  animation: integrateSpin 850ms linear infinite;
-}
-
-.integrate__icon--success {
-  background: rgba(var(--accent2-rgb), 0.14);
-  border: 1px solid rgba(var(--accent2-rgb), 0.30);
-  position: relative;
-}
-
-.integrate__icon--success::after {
-  content: "";
-  position: absolute;
-  left: 6px;
-  top: 3px;
-  width: 5px;
-  height: 9px;
-  border-right: 2px solid rgba(var(--accent2-rgb), 0.92);
-  border-bottom: 2px solid rgba(var(--accent2-rgb), 0.92);
-  transform: rotate(45deg);
-}
-
-.integrate__icon--error {
-  background: rgba(var(--danger-rgb), 0.12);
-  border: 1px solid rgba(var(--danger-rgb), 0.30);
-  position: relative;
-}
-
-.integrate__icon--error::before,
-.integrate__icon--error::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 10px;
-  height: 2px;
-  background: rgba(var(--danger-rgb), 0.85);
-  transform-origin: center;
-}
-
-.integrate__icon--error::before {
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.integrate__icon--error::after {
-  transform: translate(-50%, -50%) rotate(-45deg);
-}
-
-@keyframes integrateSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.integrate__status {
-  font-family: var(--serif);
-  font-weight: 800;
-  font-size: 14px;
-  line-height: 1.2;
-  color: var(--ink);
-}
-
-.integrate__message {
-  margin-top: 4px;
-}
-
-.integrate__result {
-  border-radius: 14px;
-  border: 1px solid var(--stroke);
-  background: var(--surface2);
-  padding: 10px;
-}
-
-.integrate__resultTitle {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--muted2);
-  margin-bottom: 8px;
-}
-
-.integrate__resultText {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink-mid);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .shortcuts {
@@ -3149,69 +2991,6 @@ body::before {
 
 .dialog__actions--right {
   justify-content: flex-end;
-}
-
-.dialog__footer--job .dialog__actions .iconbtn {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-}
-
-.dialog__footer--job #jobMoreBtn span {
-  font-size: 18px;
-  line-height: 1;
-}
-
-#sendFollowupBtn,
-#cancelJobBtn {
-  height: 38px; /* match footer icon buttons */
-  padding-top: 0;
-  padding-bottom: 0;
-  display: inline-flex;
-  align-items: center;
-}
-
-.actionslist {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.actionslist__empty {
-  font-size: 12px;
-  color: var(--muted2);
-}
-
-.actionslist__empty code.md-inline {
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 1px 4px;
-  border-radius: 6px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--surface4);
-  color: var(--ink-mono);
-}
-
-.actionrow {
-  display: grid;
-  grid-template-columns: 180px 1fr auto;
-  gap: 10px;
-  align-items: start;
-}
-
-.actionrow .textarea {
-  font-family: var(--mono);
-  font-size: 12px;
-  resize: vertical;
-}
-
-@media (max-width: 820px) {
-  .actionrow {
-    grid-template-columns: 1fr;
-  }
-  .actionrow .iconbtn {
-    justify-self: start;
-  }
 }
 
 .checkoutlist {

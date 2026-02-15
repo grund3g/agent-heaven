@@ -81,51 +81,32 @@ const api = window.agentHeaven;
   projectShortNameInput: document.getElementById("projectShortNameInput"),
   projectDefaultBranchInput: document.getElementById("projectDefaultBranchInput"),
   projectCheckoutModeSelect: document.getElementById("projectCheckoutModeSelect"),
-  projectDialogOpenFinderBtn: document.getElementById("projectDialogOpenFinderBtn"),
   projectDialogSave: document.getElementById("projectDialogSave"),
-  projectDialogRemoveBtn: document.getElementById("projectDialogRemoveBtn"),
 
   branchDialog: document.getElementById("branchDialog"),
   branchDialogClose: document.getElementById("branchDialogClose"),
   branchDialogMeta: document.getElementById("branchDialogMeta"),
-	  branchDialogText: document.getElementById("branchDialogText"),
-	  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
-	  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
-	  branchDialogRunNoAskBtn: document.getElementById("branchDialogRunNoAskBtn"),
-	  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
+  branchDialogText: document.getElementById("branchDialogText"),
+  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
+  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
+  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
 
-	  integrateDialog: document.getElementById("integrateDialog"),
-	  integrateDialogTitle: document.getElementById("integrateDialogTitle"),
-	  integrateDialogMeta: document.getElementById("integrateDialogMeta"),
-	  integrateDialogClose: document.getElementById("integrateDialogClose"),
-	  integrateDialogIcon: document.getElementById("integrateDialogIcon"),
-	  integrateDialogStatus: document.getElementById("integrateDialogStatus"),
-	  integrateDialogMessage: document.getElementById("integrateDialogMessage"),
-	  integrateDialogResultWrap: document.getElementById("integrateDialogResultWrap"),
-	  integrateDialogResult: document.getElementById("integrateDialogResult"),
-	  integrateDialogRevealBtn: document.getElementById("integrateDialogRevealBtn"),
-	  integrateDialogDetailsBtn: document.getElementById("integrateDialogDetailsBtn"),
-	  integrateDialogCancelBtn: document.getElementById("integrateDialogCancelBtn"),
-	  integrateDialogStartBtn: document.getElementById("integrateDialogStartBtn"),
-	  integrateDialogArchiveBtn: document.getElementById("integrateDialogArchiveBtn"),
-
-	  checkoutsDialog: document.getElementById("checkoutsDialog"),
-	  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
-	  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
-	  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
+  checkoutsDialog: document.getElementById("checkoutsDialog"),
+  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
+  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
+  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
   checkoutsDialogBody: document.getElementById("checkoutsDialogBody"),
   checkoutsDialogRefresh: document.getElementById("checkoutsDialogRefresh"),
 
   projectDialogCheckoutsBtn: document.getElementById("projectDialogCheckoutsBtn"),
 
-		  settingsDialog: document.getElementById("settingsDialog"),
-		  settingsDialogClose: document.getElementById("settingsDialogClose"),
-			  settingsCodexPath: document.getElementById("settingsCodexPath"),
-			  settingsCodexModel: document.getElementById("settingsCodexModel"),
-		  settingsCodexTransport: document.getElementById("settingsCodexTransport"),
-			  settingsUiModel: document.getElementById("settingsUiModel"),
-				  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
-				  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
+	  settingsDialog: document.getElementById("settingsDialog"),
+	  settingsDialogClose: document.getElementById("settingsDialogClose"),
+		  settingsCodexPath: document.getElementById("settingsCodexPath"),
+		  settingsCodexModel: document.getElementById("settingsCodexModel"),
+		  settingsUiModel: document.getElementById("settingsUiModel"),
+			  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
+			  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
 		  settingsTheme: document.getElementById("settingsTheme"),
 		  settingsColorScheme: document.getElementById("settingsColorScheme"),
 		  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
@@ -255,8 +236,12 @@ const state = {
   statusRenderTimer: null,
   durationTimer: null,
   projectRefreshTimer: null,
-  projectRefreshInFlight: false,
-  composerCheckoutModeProjectId: "",
+
+  editingProjectId: "",
+  branchDialogResolver: null,
+  checkoutsProjectId: "",
+  checkoutsEntries: [],
+  checkoutsLoading: false,
 
   editingProjectId: "",
   branchDialogResolver: null,
@@ -5417,14 +5402,6 @@ async function openProjectDialog(projectId) {
   if (els.projectShortNameInput) els.projectShortNameInput.value = normalizeShortName(project.shortName || "");
   if (els.projectDefaultBranchInput) els.projectDefaultBranchInput.value = normalizeBranchName(project.defaultBranch || "");
   if (els.projectCheckoutModeSelect) els.projectCheckoutModeSelect.value = normalizeCheckoutMode(project.checkoutMode);
-  if (els.projectDialogOpenFinderBtn) {
-    const fullPath = String(project.path || "").trim();
-    const isTemporary = !!project.isTemporary;
-    const canOpenPath = isTemporary && !!fullPath && api && typeof api.shellOpenPath === "function";
-    els.projectDialogOpenFinderBtn.hidden = !isTemporary;
-    els.projectDialogOpenFinderBtn.disabled = !canOpenPath;
-    els.projectDialogOpenFinderBtn.title = fullPath ? fullPath : "";
-  }
 
   renderProjectDialogMeta(project);
 
@@ -5550,7 +5527,7 @@ function renderCheckoutsDialog() {
       const title = p ? p : "";
 
       const job = jobId ? state.jobs.get(jobId) : null;
-      const inUse = !!(job && jobStatusForUi(job) === "running");
+      const inUse = !!(job && job.status === "running");
 
       return `
         <div class="checkoutrow" role="row">
@@ -5565,6 +5542,149 @@ function renderCheckoutsDialog() {
                 Remove
               </button>
             </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  els.checkoutsDialogBody.innerHTML = `${head}${rows}`;
+}
+
+async function loadCheckouts(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id) return;
+  if (!api || typeof api.checkoutsList !== "function") return;
+
+  state.checkoutsLoading = true;
+  renderCheckoutsDialog();
+  try {
+    const entries = await api.checkoutsList(id);
+    state.checkoutsEntries = Array.isArray(entries) ? entries : [];
+  } catch {
+    state.checkoutsEntries = [];
+  } finally {
+    state.checkoutsLoading = false;
+    renderCheckoutsDialog();
+  }
+}
+
+async function openCheckoutsDialog(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id || !els.checkoutsDialog) return false;
+
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return false;
+
+  state.checkoutsProjectId = id;
+  if (els.checkoutsDialogMeta) {
+    const label = project && project.name ? project.name : id;
+    const pDisp = formatProjectPathForDisplay(project.path);
+    const bits = [];
+    bits.push(`project=${label}`);
+    if (pDisp) bits.push(`path=${pDisp}`);
+    els.checkoutsDialogMeta.textContent = bits.join("  ");
+    els.checkoutsDialogMeta.title = project.path ? `path=${project.path}` : "";
+  }
+
+  state.checkoutsEntries = [];
+  state.checkoutsLoading = true;
+  renderCheckoutsDialog();
+
+  try {
+    els.checkoutsDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  await loadCheckouts(id);
+  return true;
+}
+
+function resolveBranchDialog(action) {
+  const r = state.branchDialogResolver;
+  state.branchDialogResolver = null;
+  try {
+    if (els.branchDialog && els.branchDialog.open) els.branchDialog.close();
+  } catch {
+    // ignore
+  }
+  if (typeof r === "function") r(action);
+}
+
+function promptBranchMismatch({ projectName, projectPath, currentBranch, defaultBranch, dirty }) {
+  if (!els.branchDialog) return Promise.resolve("run");
+  const name = String(projectName || "Project");
+  const cur = String(currentBranch || "").trim();
+  const def = String(defaultBranch || "").trim();
+  const pathDisp = formatProjectPathForDisplay(projectPath);
+  if (els.branchDialogMeta) {
+    const bits = [];
+    if (name) bits.push(`project=${name}`);
+    if (pathDisp) bits.push(`path=${pathDisp}`);
+    if (dirty) bits.push("dirty=true");
+    els.branchDialogMeta.textContent = bits.join("  ");
+    els.branchDialogMeta.title = projectPath ? `path=${projectPath}` : "";
+  }
+  if (els.branchDialogText) {
+    els.branchDialogText.textContent =
+      `You are currently on "${cur || "?"}", but this project's default branch is "${def || "?"}".\n` +
+      `Du bist gerade nicht im Default-Branch.\n\n` +
+      `Checkout the default branch first (safer), run anyway on the current branch, or cancel.\n` +
+      `Default-Branch auschecken (sicherer), trotzdem starten, oder abbrechen.`;
+  }
+
+  return new Promise((resolve) => {
+    state.branchDialogResolver = resolve;
+    try {
+      els.branchDialog.showModal();
+    } catch {
+      resolve("run");
+    }
+  });
+}
+
+function renderProjects() {
+  els.projectsList.innerHTML = state.projects
+    .map(
+      (p) => {
+        const color = normalizeHexColor(p.color) || "#64d8a3";
+        const shortName = normalizeShortName(p.shortName);
+        const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
+        const dirty = !!p.gitDirty;
+        const branchHtml = branch
+          ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
+          : "";
+        const fullPath = String(p.path || "");
+        const displayPath = formatProjectPathForDisplay(fullPath);
+        return `
+	        <div class="project" style="--proj-color: ${escapeHtml(color)}">
+	          <input
+	            class="project__swatch"
+	            type="color"
+	            value="${escapeHtml(color)}"
+	            data-project-color="${escapeHtml(p.id)}"
+	            title="Project color"
+	            aria-label="Project color"
+	          />
+	          <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
+	            <div class="project__name">
+	              <span class="project__nametext">${escapeHtml(p.name)}</span>
+	              ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
+                ${branchHtml}
+	            </div>
+	            <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
+	          </div>
+	          <div class="project__actions">
+	            <button
+	              class="iconbtn iconbtn--danger project__remove"
+	              data-project-remove="${escapeHtml(p.id)}"
+	              title="Remove project"
+              aria-label="Remove project"
+              type="button"
+            >
+              &times;
+            </button>
           </div>
         </div>
       `;
@@ -8085,7 +8205,7 @@ function renderJobDialogMeta(job) {
     const dur = jobElapsedText(job);
     if (dur) pushChip("elapsed", dur);
   }
-  if (job) pushChip("agent", normalizeAgentKey(job.agent));
+  if (job) bits.push(`agent=${normalizeAgentKey(job.agent)}`);
 
   // Project + checkout path
   {
@@ -8096,22 +8216,26 @@ function renderJobDialogMeta(job) {
     const projShort = project ? normalizeShortName(project.shortName || "") : "";
     const projName = project && project.name ? String(project.name) : "";
     const projLabel = projShort || projName;
-    if (projLabel) pushChip("project", projLabel);
+    if (projLabel) bits.push(`project=${projLabel}`);
 
     const cwdDisp = formatProjectPathForDisplay(cwdPath);
-    if (cwdDisp) pushChip("cwd", cwdDisp, { title: cwdPath, long: true });
+    if (cwdDisp) bits.push(`cwd=${cwdDisp}`);
 
     if (basePath && cwdPath && basePath !== cwdPath) {
       const baseDisp = formatProjectPathForDisplay(basePath);
-      if (baseDisp) pushChip("base", baseDisp, { title: basePath, long: true });
+      if (baseDisp) bits.push(`base=${baseDisp}`);
+    }
+
+    if (els.jobDialogMeta) {
+      const titles = [];
+      if (cwdPath) titles.push(`cwd=${cwdPath}`);
+      if (basePath && cwdPath && basePath !== cwdPath) titles.push(`base=${basePath}`);
+      els.jobDialogMeta.title = titles.join("  ");
     }
   }
 
-  if (job.threadId) {
-    const threadRaw = String(job.threadId);
-    pushChip("thread", middleEllipsis(threadRaw, { head: 12, tail: 10 }), { title: threadRaw, long: true });
-  }
-  if (job.model) pushChip("model", job.model);
+  if (job.threadId) bits.push(`thread=${job.threadId}`);
+  if (job.model) bits.push(`model=${job.model}`);
   const ut = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : null;
   if (ut && toIntOrZero(ut.turns) > 0) {
     const turns = toIntOrZero(ut.turns);
@@ -8634,48 +8758,14 @@ function appendJobMessage(jobId, message) {
   upsertJob(job);
 }
 
-async function addSkipDefaultBranchConfirmBranch(projectId, branch) {
-  const id = String(projectId || "").trim();
-  const b = normalizeBranchName(branch);
-  if (!id || !b) return false;
-  if (!api || typeof api.projectsUpdate !== "function") return false;
-
-  const project = state.projects.find((p) => p && p.id === id) || null;
-  if (!project) return false;
-
-  const existing = Array.isArray(project.skipDefaultBranchConfirmBranches) ? project.skipDefaultBranchConfirmBranches : [];
-  const next = [];
-  const seen = new Set();
-  for (const x of existing) {
-    const nx = normalizeBranchName(x);
-    if (!nx) continue;
-    if (seen.has(nx)) continue;
-    seen.add(nx);
-    next.push(nx);
-    if (next.length >= 100) break;
-  }
-  if (!seen.has(b)) next.push(b);
-  while (next.length > 100) next.shift();
-
-  try {
-    await api.projectsUpdate(id, { skipDefaultBranchConfirmBranches: next });
-    project.skipDefaultBranchConfirmBranches = next;
-    return true;
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err));
-    return false;
-  }
-}
-
-async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverride) {
+async function maybeConfirmDefaultBranchBeforeRun(projectId) {
   const id = String(projectId || "").trim();
   if (!id) return true;
 
   const project = state.projects.find((p) => p && p.id === id) || null;
   if (!project) return true;
 
-  const overrideRaw = typeof checkoutModeOverride === "string" ? checkoutModeOverride.trim() : "";
-  const mode = overrideRaw ? normalizeCheckoutMode(overrideRaw) : normalizeCheckoutMode(project.checkoutMode);
+  const mode = normalizeCheckoutMode(project.checkoutMode);
   const def = normalizeBranchName(project.defaultBranch);
   if (mode !== "inplace") return true;
   if (!def) return true;
@@ -8692,11 +8782,6 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverrid
 
   const cur = typeof info.branch === "string" ? info.branch.trim() : "";
   if (!cur || cur === def) return true;
-  const curNorm = normalizeBranchName(cur);
-  if (curNorm && Array.isArray(project.skipDefaultBranchConfirmBranches)) {
-    const suppress = project.skipDefaultBranchConfirmBranches.some((b) => normalizeBranchName(b) === curNorm);
-    if (suppress) return true;
-  }
 
   const action = await promptBranchMismatch({
     projectName: project.name,
@@ -8719,339 +8804,8 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverrid
     }
   }
 
-  if (action === "run_no_ask") {
-    await addSkipDefaultBranchConfirmBranch(id, curNorm || cur);
-    return true;
-  }
-
   if (action === "run") return true;
   return false; // cancel
-}
-
-function helperCurrentAgentPref() {
-  return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
-}
-
-function helperCurrentModelPref() {
-  return normalizeHelperModelValue(els.helperModelInput && els.helperModelInput.value ? els.helperModelInput.value : "");
-}
-
-function helperRunnerText(agent, model) {
-  const a = normalizeAgentKey(agent || "");
-  const aLabel = a ? agentDisplayName(a) : "";
-  const m = String(model || "").trim();
-  return `${aLabel || "auto"}${m ? ` · ${m}` : ""}`;
-}
-
-function helperSelectedProjectForContext() {
-  const selected = String(els.projectSelect && els.projectSelect.value ? els.projectSelect.value : "").trim();
-  if (selected && selected !== "auto" && selected !== TEMP_PROJECT_OPTION_VALUE) {
-    const hit = state.projects.find((p) => p && p.id === selected) || null;
-    if (hit) return hit;
-  }
-
-  const stored = getStoredProjectId();
-  if (stored) {
-    const hit = state.projects.find((p) => p && p.id === stored) || null;
-    if (hit) return hit;
-  }
-
-  if (state.projects.length === 1) return state.projects[0];
-  return null;
-}
-
-function helperSelectedJobForContext() {
-  const selected = String(state.selectedJobId || "").trim();
-  if (selected) {
-    const hit = state.jobs.get(selected);
-    if (hit && !isDemoJob(hit)) return hit;
-  }
-  return null;
-}
-
-function buildHelperContextPayload() {
-  const project = helperSelectedProjectForContext();
-  const job = helperSelectedJobForContext();
-  const composerAgent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
-  const composerModel = String(els.modelInput && els.modelInput.value ? els.modelInput.value : "").trim();
-  const promptPreview = job && typeof job.promptPreview === "string" ? job.promptPreview.trim() : "";
-  const preview =
-    promptPreview ||
-    (job && Array.isArray(job.prompts) && job.prompts.length > 0 && typeof job.prompts[job.prompts.length - 1].text === "string"
-      ? String(job.prompts[job.prompts.length - 1].text || "").trim()
-      : "");
-
-  return {
-    projectName: project && project.name ? String(project.name) : "",
-    projectPath: project && project.path ? String(project.path) : "",
-    activeView: normalizeView(state.view),
-    composerAgent,
-    composerModel,
-    selectedJobTitle: job ? jobDisplayTitle(job) : "",
-    selectedJobStatus: job ? jobStatusForUi(job) : "",
-    selectedJobAgent: job && job.agent ? normalizeAgentKey(job.agent) : "",
-    selectedJobModel: job && job.model ? String(job.model) : "",
-    selectedJobPrompt: preview
-  };
-}
-
-function helperMessagesForApi() {
-  const arr = Array.isArray(state.helperMessages) ? state.helperMessages : [];
-  return arr
-    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
-    .map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      text: String(m.text || "").trim()
-    }))
-    .filter((m) => m.text)
-    .slice(-18);
-}
-
-function helperPushMessage(role, text, meta = {}) {
-  const r = role === "assistant" ? "assistant" : "user";
-  const t = String(text || "").trim();
-  if (!t) return;
-  const item = {
-    id: safeUuid(),
-    role: r,
-    text: t,
-    ts: new Date().toISOString(),
-    agent: r === "assistant" ? normalizeHelperAgentSelection(meta.agent) : "",
-    model: r === "assistant" ? normalizeHelperModelValue(meta.model) : ""
-  };
-  state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
-  state.helperMessages.push(item);
-  const MAX = 80;
-  if (state.helperMessages.length > MAX) state.helperMessages.splice(0, state.helperMessages.length - MAX);
-  if (helperPersistHistoryFromSettings()) storeHelperHistory(state.helperMessages);
-}
-
-function helperSetMeta(text) {
-  if (!els.helperMeta) return;
-  const fallback = "Quick questions without opening a task.";
-  const msg = String(text || "").trim();
-  els.helperMeta.textContent = msg || fallback;
-}
-
-function renderHelperPanel(opts = {}) {
-  const forceScroll = !!(opts && opts.forceScroll);
-  if (els.helperBubbleBtn) {
-    els.helperBubbleBtn.classList.toggle("helperbubble--open", !!state.helperOpen);
-    els.helperBubbleBtn.setAttribute("aria-pressed", state.helperOpen ? "true" : "false");
-  }
-  if (els.helperPanel) els.helperPanel.hidden = !state.helperOpen;
-  if (!els.helperMessages) return;
-
-  const stick = isNearBottom(els.helperMessages);
-  const items = Array.isArray(state.helperMessages) ? state.helperMessages : [];
-
-  if (items.length === 0 && !state.helperPending) {
-    els.helperMessages.innerHTML = `<div class="helperpanel__empty">Try quick questions, architecture checks, or ask for a clean task seed. You can move the result into the main prompt.</div>`;
-  } else {
-    const rows = [];
-    for (const m of items) {
-      const isAssistant = m.role === "assistant";
-      const roleLabel = isAssistant ? "Helper" : "You";
-      const runner = isAssistant ? helperRunnerText(m.agent, m.model) : "";
-      rows.push(`
-        <article class="helpermsg ${isAssistant ? "helpermsg--assistant" : "helpermsg--user"}">
-          <div class="helpermsg__head">${escapeHtml(roleLabel)}${runner ? `<span class="helpermsg__meta">${escapeHtml(runner)}</span>` : ""}</div>
-          <div class="msg__text">${renderMarkdownInlineSafeHtml(String(m.text || ""))}</div>
-        </article>
-      `);
-    }
-    if (state.helperPending) {
-      rows.push(`
-        <article class="helpermsg helpermsg--assistant">
-          <div class="helpermsg__head">Helper</div>
-          <div class="msg__text">Thinking…</div>
-        </article>
-      `);
-    }
-    els.helperMessages.innerHTML = rows.join("");
-  }
-
-  if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
-  if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
-  if (els.helperToPromptBtn) els.helperToPromptBtn.disabled = state.helperPending || state.helperMessages.length === 0;
-  if (els.helperCreateTaskBtn) els.helperCreateTaskBtn.disabled = state.helperPending || state.helperMessages.length === 0;
-
-  if (forceScroll || stick || state.helperPending) {
-    els.helperMessages.scrollTop = els.helperMessages.scrollHeight;
-  }
-}
-
-function setHelperOpen(open, opts = {}) {
-  state.helperOpen = !!open;
-  renderHelperPanel();
-  if (state.helperOpen && opts && opts.focus && els.helperInput) {
-    try {
-      els.helperInput.focus();
-      els.helperInput.selectionStart = els.helperInput.selectionEnd = els.helperInput.value.length;
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function toggleHelperPanel(opts = {}) {
-  const force = opts && Object.prototype.hasOwnProperty.call(opts, "open") ? !!opts.open : null;
-  const next = force == null ? !state.helperOpen : force;
-  setHelperOpen(next, { focus: next && opts && opts.focus !== false });
-}
-
-async function askHelperFromInput() {
-  if (state.helperPending) return;
-  if (!api || typeof api.helperAsk !== "function") {
-    showToast("Helper chat is not supported in this build.");
-    return;
-  }
-  const text = String(els.helperInput && els.helperInput.value ? els.helperInput.value : "").trim();
-  if (!text) return;
-
-  helperPushMessage("user", text);
-  if (els.helperInput) {
-    els.helperInput.value = "";
-    autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
-  }
-  state.helperPending = true;
-  helperSetMeta("Thinking…");
-  renderHelperPanel({ forceScroll: true });
-
-  const preferAgent = helperCurrentAgentPref();
-  const preferModel = helperCurrentModelPref();
-  const context = buildHelperContextPayload();
-  const history = helperMessagesForApi();
-
-  try {
-    const res = await api.helperAsk({
-      question: text,
-      history,
-      context,
-      preferAgent,
-      preferModel
-    });
-    const answer = String(res && res.answer ? res.answer : "").trim() || "No answer generated.";
-    const agent = normalizeAgentKey(res && res.agent ? res.agent : "");
-    const model = String(res && res.model ? res.model : "").trim();
-    helperPushMessage("assistant", answer, { agent, model });
-    state.helperLastRunner = helperRunnerText(agent, model);
-    helperSetMeta(`Last reply: ${state.helperLastRunner}`);
-  } catch (err) {
-    const msg = String(err && err.message ? err.message : err).trim() || "Helper request failed.";
-    helperPushMessage("assistant", `Error: ${msg}`);
-    helperSetMeta("Helper request failed.");
-  } finally {
-    state.helperPending = false;
-    renderHelperPanel({ forceScroll: true });
-    if (state.helperOpen && els.helperInput) {
-      try {
-        els.helperInput.focus();
-      } catch {
-        // ignore
-      }
-    }
-  }
-}
-
-function helperContextSnippetForComposer() {
-  const arr = helperMessagesForApi();
-  if (arr.length === 0) return "";
-  const picked = arr.slice(-8);
-  const out = ["[Helper context]"];
-  for (const m of picked) {
-    out.push(m.role === "assistant" ? "Assistant:" : "User:");
-    out.push(m.text);
-    out.push("");
-  }
-  const body = out.join("\n").trim();
-  return body.length > 20_000 ? `${body.slice(0, 20_000).trimEnd()}…` : body;
-}
-
-function appendHelperContextToComposer() {
-  const snippet = helperContextSnippetForComposer();
-  if (!snippet) {
-    showToast("No helper context yet.");
-    return false;
-  }
-  if (!els.promptInput) return false;
-
-  const existing = String(els.promptInput.value || "").trimEnd();
-  const next = existing ? `${existing}\n\n${snippet}` : snippet;
-  els.promptInput.value = next;
-  storeComposerDraft(next);
-  setView("board");
-  try {
-    els.promptInput.focus();
-    els.promptInput.selectionStart = els.promptInput.selectionEnd = els.promptInput.value.length;
-  } catch {
-    // ignore
-  }
-  showToast("Helper context added to prompt.");
-  return true;
-}
-
-async function startTicketFromHelperContext() {
-  const ok = appendHelperContextToComposer();
-  if (!ok) return;
-  await startJobFromComposer();
-}
-
-function syncHelperAgentUi() {
-  const agent = helperCurrentAgentPref();
-  if (!els.helperModelInput) return;
-  if (agent === "claude") els.helperModelInput.placeholder = "Model override (optional, e.g. opus)";
-  else if (agent === "codex") els.helperModelInput.placeholder = "Model override (optional, e.g. gpt-5)";
-  else els.helperModelInput.placeholder = "Model override (optional)";
-}
-
-function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
-  const force = !!(opts && opts.force);
-  const defAgent = helperDefaultAgentFromSettings(settings);
-  const defModel = helperDefaultModelFromSettings(settings);
-
-  if (els.helperAgentSelect) {
-    const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
-    if (force || !cur) els.helperAgentSelect.value = defAgent;
-  }
-  if (els.helperModelInput) {
-    const curModel = normalizeHelperModelValue(els.helperModelInput.value);
-    if (force || !curModel) {
-      els.helperModelInput.value = defModel;
-      if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
-    }
-  }
-  syncHelperAgentUi();
-}
-
-function clearHelperHistoryNow(opts = {}) {
-  const showToastMsg = !(opts && opts.toast === false);
-  state.helperMessages = [];
-  state.helperLastRunner = "";
-  clearStoredHelperHistory();
-  helperSetMeta("");
-  renderHelperPanel({ forceScroll: true });
-  if (showToastMsg) showToast("Helper history cleared.");
-}
-
-function initHelperUi() {
-  const mod = isMacPlatform() ? "⌘" : "Ctrl";
-  applyHelperDefaultsToPanel(state.settings, { force: true });
-  if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
-  if (els.helperBubbleBtn) {
-    els.helperBubbleBtn.title = `Helper chat (${mod}+K)`;
-    const kbd = els.helperBubbleBtn.querySelector(".helperbubble__kbd");
-    if (kbd) kbd.textContent = `${mod}K`;
-  }
-  if (els.helperInput) {
-    els.helperInput.placeholder = `Ask quickly… (${mod}+Enter to send)`;
-  }
-  state.helperOpen = false;
-  state.helperPending = false;
-  state.helperMessages = helperPersistHistoryFromSettings() ? getStoredHelperHistory() : [];
-  state.helperLastRunner = "";
-  helperSetMeta("");
-  renderHelperPanel();
 }
 
 async function startJobFromComposer() {
@@ -9098,14 +8852,10 @@ async function startJobFromComposer() {
       projectId = p.id;
     }
 
-    const checkoutMode =
-      els.checkoutModeSelect && !els.checkoutModeSelect.disabled ? normalizeCheckoutMode(els.checkoutModeSelect.value) : "";
-    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId, checkoutMode);
+    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId);
     if (!okBranch) return;
 
-    const payload = { prompt, projectId, agent, model, images };
-    if (checkoutMode) payload.checkoutMode = checkoutMode;
-    await api.jobsStart(payload);
+    await api.jobsStart({ prompt, projectId, agent, model, images });
     els.promptInput.value = "";
     closePromptPathSuggest();
     clearStoredComposerDraft();
@@ -9960,20 +9710,19 @@ function wireUi() {
 	    const p = await api.projectsAddDialog();
 	    if (!p) return;
 
-	    state.projects = await api.projectsList();
-	    renderProjects();
-	    renderBoard();
-	    els.projectSelect.value = p.id;
-	    storeProjectId(p.id);
-	    syncComposerCheckoutModeUi();
+    state.projects = await api.projectsList();
+    renderProjects();
+    renderBoard();
+    els.projectSelect.value = p.id;
+    storeProjectId(p.id);
 
-	    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
-	    try {
-	      await openProjectDialog(p.id);
-	    } catch {
-	      // ignore
-	    }
-	  });
+    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
+    try {
+      await openProjectDialog(p.id);
+    } catch {
+      // ignore
+    }
+  });
 
   els.projectsList.addEventListener("change", async (e) => {
     const inp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
@@ -10029,6 +9778,120 @@ function wireUi() {
   // Project settings dialog
   if (els.projectDialogClose) {
     els.projectDialogClose.addEventListener("click", () => closeProjectDialog());
+  }
+  if (els.projectDialogSave) {
+    els.projectDialogSave.addEventListener("click", () => saveProjectDialog());
+  }
+  if (els.projectDialogCheckoutsBtn) {
+    els.projectDialogCheckoutsBtn.addEventListener("click", async () => {
+      const id = String(state.editingProjectId || "").trim();
+      if (!id) return;
+      await openCheckoutsDialog(id);
+    });
+  }
+  if (els.projectDialog) {
+    els.projectDialog.addEventListener("click", (e) => {
+      if (e.target === els.projectDialog) closeProjectDialog();
+    });
+    els.projectDialog.addEventListener("close", () => {
+      state.editingProjectId = "";
+    });
+  }
+
+  // Checkouts dialog
+  if (els.checkoutsDialogClose) els.checkoutsDialogClose.addEventListener("click", () => closeCheckoutsDialog());
+  if (els.checkoutsDialogClose2) els.checkoutsDialogClose2.addEventListener("click", () => closeCheckoutsDialog());
+  if (els.checkoutsDialogRefresh) {
+    els.checkoutsDialogRefresh.addEventListener("click", async () => {
+      const id = String(state.checkoutsProjectId || "").trim();
+      if (!id) return;
+      await loadCheckouts(id);
+    });
+  }
+  if (els.checkoutsDialog) {
+    els.checkoutsDialog.addEventListener("click", (e) => {
+      if (e.target === els.checkoutsDialog) closeCheckoutsDialog();
+    });
+    els.checkoutsDialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      closeCheckoutsDialog();
+    });
+    els.checkoutsDialog.addEventListener("close", () => {
+      state.checkoutsProjectId = "";
+      state.checkoutsEntries = [];
+      state.checkoutsLoading = false;
+    });
+  }
+  if (els.checkoutsDialogBody) {
+    els.checkoutsDialogBody.addEventListener("click", async (e) => {
+      const openBtn = e.target && e.target.closest ? e.target.closest("[data-checkout-open-job]") : null;
+      if (openBtn) {
+        const kind = openBtn.getAttribute("data-checkout-open-kind") || "";
+        const jobId = openBtn.getAttribute("data-checkout-open-job") || "";
+        const entry = (state.checkoutsEntries || []).find((x) => x && x.kind === kind && x.jobId === jobId) || null;
+        if (entry && entry.path && api && typeof api.shellOpenPath === "function") {
+          try {
+            await api.shellOpenPath(entry.path);
+          } catch (err) {
+            showToast(String(err && err.message ? err.message : err));
+          }
+        }
+        return;
+      }
+
+      const rmBtn = e.target && e.target.closest ? e.target.closest("[data-checkout-remove-job]") : null;
+      if (!rmBtn) return;
+
+      const kind = rmBtn.getAttribute("data-checkout-remove-kind") || "";
+      const jobId = rmBtn.getAttribute("data-checkout-remove-job") || "";
+      const projectId = String(state.checkoutsProjectId || "").trim();
+      if (!projectId || !kind || !jobId) return;
+
+      const job = state.jobs.get(jobId);
+      if (job && job.status === "running") {
+        showToast("This checkout is in use by a running job.");
+        return;
+      }
+
+      const ok = window.confirm(
+        `Remove ${kind} checkout for job ${jobId}?\n\nThis will delete the checkout folder under the app's checkouts directory (including any uncommitted changes inside it).`
+      );
+      if (!ok) return;
+
+      try {
+        await api.checkoutsRemove(projectId, kind, jobId);
+        showToast("Checkout removed.");
+        await loadCheckouts(projectId);
+      } catch (err) {
+        showToast(String(err && err.message ? err.message : err));
+      }
+    });
+  }
+
+  // Default-branch mismatch dialog
+  if (els.branchDialogClose) els.branchDialogClose.addEventListener("click", () => resolveBranchDialog("cancel"));
+  if (els.branchDialogCheckoutBtn) els.branchDialogCheckoutBtn.addEventListener("click", () => resolveBranchDialog("checkout"));
+  if (els.branchDialogRunBtn) els.branchDialogRunBtn.addEventListener("click", () => resolveBranchDialog("run"));
+  if (els.branchDialogCancelBtn) els.branchDialogCancelBtn.addEventListener("click", () => resolveBranchDialog("cancel"));
+  if (els.branchDialog) {
+    els.branchDialog.addEventListener("click", (e) => {
+      if (e.target === els.branchDialog) resolveBranchDialog("cancel");
+    });
+    els.branchDialog.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      resolveBranchDialog("cancel");
+    });
+    els.branchDialog.addEventListener("close", () => {
+      if (state.branchDialogResolver) resolveBranchDialog("cancel");
+    });
+  }
+
+  els.openSettingsBtn.addEventListener("click", () => {
+    openSettingsDialog();
+  });
+
+  if (els.openStatusBtn) {
+    els.openStatusBtn.addEventListener("click", () => openStatusDialog());
   }
   if (els.projectDialogSave) {
     els.projectDialogSave.addEventListener("click", () => saveProjectDialog());
@@ -12846,21 +12709,11 @@ async function init() {
   renderProjects();
   if (!state.projectRefreshTimer) {
     state.projectRefreshTimer = setInterval(async () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      if (state.projectRefreshInFlight) return;
-      state.projectRefreshInFlight = true;
       try {
-        const nextProjects = await api.projectsList();
-        const prevSig = projectListSignature(state.projects);
-        const nextSig = projectListSignature(nextProjects);
-        if (nextSig !== prevSig) {
-          state.projects = nextProjects;
-          renderProjects();
-        }
+        state.projects = await api.projectsList();
+        renderProjects();
       } catch {
         // ignore
-      } finally {
-        state.projectRefreshInFlight = false;
       }
     }, 30_000);
   }
