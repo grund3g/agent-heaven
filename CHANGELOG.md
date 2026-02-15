@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.6.0...agent-heaven-v0.6.1) (2026-02-15)
+
+
+### Bug Fixes
+
+* **tests:** make Windows fake CLIs exit with correct code ([06535b9](https://github.com/grund3g/agent-heaven/commit/06535b97d7422e53dd7149dec55ae8eb1fd4533e))
+
 ## [0.6.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.5.0...agent-heaven-v0.6.0) (2026-02-15)
 
 
