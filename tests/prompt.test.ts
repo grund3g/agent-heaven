@@ -47,6 +47,20 @@ describe("core/prompt", () => {
     expect(guessTitleFromPrompt("I just tried, the card title is useless")).toBe("the card title is useless");
   });
 
+  it("skips low-signal lead-ins like 'kannst du mir kurzfristig, damit ich …' and keeps the actual ask", () => {
+    const p = [
+      'kannst du mir kurfristig, damit ich einen screenshot bzw. ein video für die landing page oder github machen kann,',
+      'eine möglichkeit bauen, einen "demo" modus in der app zu aktivieren wo wir mock jobs, mock projekte, etc. haben (alles englisch)',
+      'damit ich die app durchklicken kann mit screenredcording?'
+    ].join(" ");
+
+    const t = guessTitleFromPrompt(p).toLowerCase();
+    expect(t).toContain("demo");
+    expect(t).not.toMatch(/^kannst du\\b/);
+    expect(t).not.toMatch(/^mir\\b/);
+    expect(t).not.toMatch(/^damit\\b/);
+  });
+
   it("strips stacked prefixes (e.g. 'Kannst du bitte …')", () => {
     expect(guessTitleFromPrompt("Kannst du bitte Fix store migration bug")).toBe("Fix store migration bug");
   });

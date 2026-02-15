@@ -1802,35 +1802,100 @@ function jobTokensCardText(job) {
 		  return "";
 		}
 
-		function looksLikeLowSignalIntro(s) {
-		  const t = oneLine(s).toLowerCase();
-		  if (!t) return false;
-		  if (/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b/.test(t)) return true;
-		  if (/^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b/.test(t))
-		    return true;
-		  return false;
-		}
+			function looksLikeLowSignalIntro(s) {
+			  const t = oneLine(s).toLowerCase();
+			  if (!t) return false;
+			  if (/^(can|could|would|will|may)\\s+you\\b/.test(t)) return true;
+			  if (/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b/.test(t)) return true;
+			  if (/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b/.test(t)) return true;
+			  if (/^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b/.test(t))
+			    return true;
+			  if (/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend)\\b/.test(t)) return true;
+			  if (/^(bitte\\s+)?(kurz?fristig|schnell|dringend|asap|quick(ly)?|soon)\\b$/.test(t)) return true;
+			  return false;
+			}
 
-		function stripLowSignalLeadIn(s) {
-		  let t = String(s || "");
-		  t = t.replace(/^(title|titel|summary|zusammenfassung)\\s*[:\\-]\\s*/i, "");
+			function looksLikeLowSignalOutro(s) {
+			  const t = oneLine(s).toLowerCase();
+			  if (!t) return false;
+			  if (
+			    /^(any(\\s+(other|more))?\\s+ideas|any\\s+ideas|any\\s+thoughts|anything\\s+else|what\\s+else|what\\s+can\\s+we\\s+do)\\b/.test(t)
+			  )
+			    return true;
+			  if (/^(what\\s+do\\s+we\\s+need|what\\s+should\\s+we\\s+do|what\\s+could\\s+we\\s+do)\\b/.test(t)) return true;
+			  if (/^(was\\s+kann\\s+man|was\\s+k\\u00f6nnte\\s+man|was\\s+meinst\\s+du|irgendwelche\\s+ideen)\\b/.test(t))
+			    return true;
+			  if (/^was\\s+br\\u00e4uchten\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+braeuchten\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+brauchen\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+wir\\s+machen\\s+k\\u00f6nnten(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+wir\\s+machen\\s+koennten(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+k\\u00f6nnten\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+koennten\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+k\\u00f6nnen\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+koennen\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^(danke|thanks|thx)\\b/.test(t)) return true;
+			  return false;
+			}
 
-		  t = t.replace(/^(please|pls|plz|bitte)\\b[\\s,:-]*/i, "");
-		  t = t.replace(/^(can|could|would|will|may)\\s+you\\b[\\s,:-]*/i, "");
-		  t = t.replace(/^(can|could)\\s+we\\b[\\s,:-]*/i, "");
-		  t = t.replace(/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b[\\s,:-]*/i, "");
-		  t = t.replace(/^(kann\\s+man)\\b[\\s,:-]*/i, "");
-		  t = t.replace(/^(das\\s+bitte)\\b[\\s,:-]*/i, "");
+			function looksLikeLowSignalLeadInChunk(s) {
+			  const t = oneLine(s).toLowerCase();
+			  if (!t) return true;
+			  if (/^(damit|so\\s+that|so\\s+i\\s+can|so\\s+we\\s+can|to\\s+(be\\s+)?able\\s+to)\\b/.test(t)) return true;
+			  if (/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap|quick(ly)?|soon)\\b/.test(t)) return true;
+			  if (/^(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap|quick(ly)?|soon)\\b$/.test(t)) return true;
+			  if (/^(eine|einen|ein|a|an)\\s+(m\\u00f6glichkeit|option|way|possibility)\\b/.test(t)) return true;
+			  return false;
+			}
 
-		  t = t.replace(/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b[\\s,:-]*/i, "");
-		  t = t.replace(
-		    /^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b[\\s,:-]*/i,
-		    ""
-		  );
+			function titlePartSignalScore(s) {
+			  const low = oneLine(s).toLowerCase();
+			  if (!low) return -1e9;
 
-		  t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\\b[\\s,:-]*/i, "");
-		  return t;
-		}
+			  let score = 0;
+			  if (looksLikeLowSignalIntro(low)) score -= 8;
+			  if (looksLikeLowSignalLeadInChunk(low)) score -= 8;
+			  if (looksLikeLowSignalOutro(low)) score -= 8;
+
+			  if (/\\b(fix|add|implement|refactor|create|build|enable|allow|investigate|debug)\\b/.test(low)) score += 5;
+			  if (/\\b(fixen|hinzuf\\u00fcg|hinzufueg|implementier|refaktor|erstell|bau|aktivier|erlaub)\\w*\\b/.test(low)) score += 5;
+			  if (/\\b(demo|mock|job|jobs|project|projects|session|history|theme|hotkey|shortcut)\\b/.test(low)) score += 4;
+
+			  score += Math.min(160, low.length) / 40;
+			  return score;
+			}
+
+			function stripLowSignalLeadIn(s) {
+			  let t = String(s || "");
+			  for (let i = 0; i < 4; i += 1) {
+			    const prev = t;
+
+			    t = t.replace(/^(title|titel|summary|zusammenfassung)\\s*[:\\-]\\s*/i, "");
+
+			    t = t.replace(/^(and|und|also|so|ok|okay)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(hi|hey|hello|hallo)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(please|pls|plz|bitte)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(can|could|would|will|may)\\s+you\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(can|could)\\s+we\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(kann\\s+man)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(das\\s+bitte)\\b[\\s,:-]*/i, "");
+
+			    t = t.replace(/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(bitte\\s+)?(kurz?fristig|schnell|dringend|asap|quick(ly)?|soon)\\b[\\s,:-]*/i, "");
+
+			    t = t.replace(/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b[\\s,:-]*/i, "");
+			    t = t.replace(
+			      /^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b[\\s,:-]*/i,
+			      ""
+			    );
+
+			    t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\\b[\\s,:-]*/i, "");
+
+			    if (t === prev) break;
+			  }
+			  return t;
+			}
 
 		function compactTitleFromPromptSummary(summary) {
 		  const s = oneLine(summary);
@@ -1840,21 +1905,32 @@ function jobTokensCardText(job) {
 	  if (topic) {
 	    if (isFixLikePrompt(s)) return `Fix: ${topic}`;
 	    return topic;
-		  }
+			  }
 
-		  let t = stripLowSignalLeadIn(s);
-		  const commaIdx = t.indexOf(",");
-		  if (commaIdx > 12) {
-		    const head = t.slice(0, commaIdx).trim();
-		    const tail = t.slice(commaIdx + 1).trim();
-		    if (tail && looksLikeLowSignalIntro(head)) t = tail;
-		    else if (head.length >= 8) t = head;
-		  }
+			  let t = stripLowSignalLeadIn(s);
+			  for (let i = 0; i < 4; i += 1) {
+			    const commaIdx = t.indexOf(",");
+			    if (commaIdx <= 12) break;
+			    const head = t.slice(0, commaIdx).trim();
+			    const tail = t.slice(commaIdx + 1).trim();
+			    if (!tail) break;
 
-		  t = t.replace(/[!?]+$/, "");
-		  t = oneLine(t);
-		  return t || s;
-		}
+			    const headScore = titlePartSignalScore(head);
+			    const tailScore = titlePartSignalScore(tail);
+
+			    if (head.length < 8 || looksLikeLowSignalIntro(head) || looksLikeLowSignalLeadInChunk(head) || headScore + 1.2 < tailScore) {
+			      t = tail;
+			      continue;
+			    }
+
+			    t = head;
+			    break;
+			  }
+
+			  t = t.replace(/[!?]+$/, "");
+			  t = oneLine(t);
+			  return t || s;
+			}
 
 	function isBoilerplatePromptLine(s) {
 	  const t = String(s || "").trim();
