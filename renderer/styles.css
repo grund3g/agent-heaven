@@ -1336,6 +1336,12 @@ body::before {
   margin-top: 0;
 }
 
+#followupInput {
+  /* The follow-up composer auto-expands as you type; disable manual resizing. */
+  resize: none;
+  overflow-y: hidden;
+}
+
 .dropwrap {
   position: relative;
   margin-top: 10px;

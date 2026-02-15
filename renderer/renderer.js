@@ -234,6 +234,65 @@ const DEMO = {
 
 const TOUR_ROOT_ID = "ahTour";
 const DEFAULT_FOLLOWUP_PLACEHOLDER = "Follow-up… (⌘+Enter)";
+const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
+
+let followupAutosizeRaf = 0;
+
+function scheduleAutosizeFollowupInput() {
+  if (!els.followupInput) return;
+  if (followupAutosizeRaf) {
+    try {
+      window.cancelAnimationFrame(followupAutosizeRaf);
+    } catch {
+      // ignore
+    }
+  }
+  followupAutosizeRaf = window.requestAnimationFrame(() => {
+    followupAutosizeRaf = 0;
+    autosizeTextarea(els.followupInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+  });
+}
+
+function autosizeTextarea(el, { maxRows = 10 } = {}) {
+  if (!el) return;
+  if (typeof el.scrollHeight !== "number") return;
+
+  // When the element is not visible yet (e.g. <dialog> closed), layout metrics are unreliable.
+  // We'll re-run on the next input/open once it's on-screen.
+  if (el.scrollHeight === 0) return;
+
+  const cs = window.getComputedStyle(el);
+  const boxSizing = String(cs.boxSizing || "");
+
+  const pt = parseFloat(cs.paddingTop) || 0;
+  const pb = parseFloat(cs.paddingBottom) || 0;
+  const bt = parseFloat(cs.borderTopWidth) || 0;
+  const bb = parseFloat(cs.borderBottomWidth) || 0;
+
+  const fontSize = parseFloat(cs.fontSize) || 13;
+  const lineHeightRaw = String(cs.lineHeight || "");
+  const lineHeight =
+    lineHeightRaw === "normal" ? fontSize * 1.35 : parseFloat(lineHeightRaw) || fontSize * 1.35;
+
+  const rowsAttr = parseInt(String(el.getAttribute("rows") || ""), 10);
+  const minRows = Number.isFinite(rowsAttr) && rowsAttr > 0 ? rowsAttr : 1;
+
+  const padY = pt + pb;
+  const borderY = bt + bb;
+
+  const minContent = lineHeight * minRows + padY;
+  const maxContent = lineHeight * maxRows + padY;
+  const minHeight = boxSizing === "border-box" ? minContent + borderY : minContent;
+  const maxHeight = boxSizing === "border-box" ? maxContent + borderY : maxContent;
+
+  // Reset so the textarea can shrink when deleting.
+  el.style.height = "auto";
+  const want = boxSizing === "border-box" ? el.scrollHeight + borderY : el.scrollHeight;
+  const next = Math.max(minHeight, Math.min(maxHeight, want));
+
+  el.style.height = `${next}px`;
+  el.style.overflowY = want > maxHeight ? "auto" : "hidden";
+}
 
 const termUi = {
   jobId: "",
@@ -1369,6 +1428,7 @@ function setFollowupImages(images) {
     removeAttr: "remove-followup",
     removeLabel: "Remove attached image"
   });
+  scheduleAutosizeFollowupInput();
 }
 
 function attachmentChipsHtml(images) {
@@ -5478,6 +5538,7 @@ async function openJobDialog(jobId) {
   els.followupInput.value = "";
   setFollowupImages([]);
   els.jobDialog.showModal();
+  scheduleAutosizeFollowupInput();
 
   // Lazy-load full logs/messages/prompts to keep the board fast when many jobs exist.
   if (!jobDetailsLoaded(job)) {
@@ -5983,6 +6044,7 @@ function appendQuickPromptText(text) {
   }
 
   if (el === els.promptInput) storeComposerDraft(el.value || "");
+  if (el === els.followupInput) scheduleAutosizeFollowupInput();
 
   try {
     el.focus();
@@ -6005,12 +6067,14 @@ async function sendFollowup() {
   const cmdLow = cmd.toLowerCase();
   if (job.status === "running" && (cmdLow === "stop" || cmdLow === "/stop")) {
     els.followupInput.value = "";
+    scheduleAutosizeFollowupInput();
     setFollowupImages([]);
     await cancelJob(jobId, { closeDialog: true });
     return;
   }
   if (job.status !== "running" && (cmdLow === "rerun" || cmdLow === "/rerun")) {
     els.followupInput.value = "";
+    scheduleAutosizeFollowupInput();
     setFollowupImages([]);
     await openRerunDialog(jobId);
     return;
@@ -6033,6 +6097,7 @@ async function sendFollowup() {
     setHint("");
     setView("board");
     els.followupInput.value = "";
+    scheduleAutosizeFollowupInput();
     await api.jobsSend(jobId, text, images);
     setFollowupImages([]);
     if (running) showToast("Queued follow-up.");
@@ -7347,6 +7412,7 @@ function wireUi() {
     }
   });
   els.followupInput.addEventListener("input", () => {
+    scheduleAutosizeFollowupInput();
     const jobId = state.selectedJobId;
     if (!jobId) return;
     const job = state.jobs.get(jobId);
