@@ -1593,6 +1593,29 @@ body::before {
   min-width: 0;
 }
 
+.followup__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.followup__row .dropwrap {
+  min-width: 0;
+}
+
+.followup__row .btn {
+  white-space: nowrap;
+  align-self: end;
+}
+
+@media (max-width: 640px) {
+  .followup__row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dialog {
   border: none;
   padding: 0;
@@ -2281,6 +2304,41 @@ body::before {
   align-items: start;
 }
 
+.dialog__footer--job {
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "follow actions"
+    "attach attach";
+  /* Keep actions aligned with the follow-up textarea (not with the attachments row). */
+  align-items: end;
+}
+
+.dialog__footer--job .followup {
+  grid-area: follow;
+}
+
+.dialog__footer--job .dialog__actions {
+  grid-area: actions;
+  align-self: end;
+}
+
+.dialog__footer--job #followupAttachments {
+  grid-area: attach;
+}
+
+@media (max-width: 640px) {
+  .dialog__footer--job {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "follow"
+      "actions"
+      "attach";
+  }
+  .dialog__footer--job .dialog__actions {
+    justify-content: flex-start;
+  }
+}
+
 .dialog__actions {
   display: flex;
   gap: 10px;
@@ -2296,63 +2354,29 @@ body::before {
   justify-content: flex-end;
 }
 
-.jobactions {
-  display: inline-flex;
-  align-items: stretch;
+.dialog__footer--job .dialog__actions .iconbtn {
+  width: 38px;
+  height: 38px;
   border-radius: 12px;
-  border: 1px solid var(--stroke);
-  background: var(--surface3);
-  overflow: hidden;
 }
 
-.jobactions:focus-within {
-  border-color: rgba(var(--accent2-rgb), 0.45);
-  box-shadow: 0 0 0 2px rgba(var(--accent2-rgb), 0.16);
+.dialog__footer--job #jobMoreBtn span {
+  font-size: 18px;
+  line-height: 1;
 }
 
-.jobactions .select {
-  width: 220px;
-  max-width: min(320px, 44vw);
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  background-color: transparent;
+#sendFollowupBtn {
+  height: 38px; /* match footer icon buttons */
+  padding-top: 0;
+  padding-bottom: 0;
+  display: inline-flex;
+  align-items: center;
 }
 
-.jobactions .select:focus-visible {
-  outline: none;
-}
-
-.jobactions .btn {
-  border: 0;
-  border-radius: 0;
-  border-left: 1px solid var(--stroke-faint);
-  background: transparent;
-  white-space: nowrap;
-}
-
-.jobactions .btn:hover {
-  background: var(--hover-bg);
-}
-
-.jobactions .btn:focus-visible {
-  outline: none;
-}
-
-.jobactions .btn[disabled] {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-@media (max-width: 640px) {
-  .jobactions {
-    width: 100%;
-  }
-  .jobactions .select {
-    width: 100%;
-    max-width: 100%;
-  }
+/* Optical alignment: match the textarea's bottom edge more closely. */
+.dialog__footer--job .dialog__actions > button,
+.dialog__footer--job #sendFollowupBtn {
+  margin-bottom: 2px;
 }
 
 .actionslist {

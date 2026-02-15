@@ -44,16 +44,10 @@ const api = window.agentHeaven;
   followupBadge: document.getElementById("followupBadge"),
   followupAttachments: document.getElementById("followupAttachments"),
   sendFollowupBtn: document.getElementById("sendFollowupBtn"),
-  rerunJobBtn: document.getElementById("rerunJobBtn"),
   cancelJobBtn: document.getElementById("cancelJobBtn"),
-  jobRestoreBtn: document.getElementById("jobRestoreBtn"),
-  jobArchiveBtn: document.getElementById("jobArchiveBtn"),
-  jobTrashBtn: document.getElementById("jobTrashBtn"),
-  jobDeleteBtn: document.getElementById("jobDeleteBtn"),
-
-  jobActionsWrap: document.getElementById("jobActionsWrap"),
-  jobActionsSelect: document.getElementById("jobActionsSelect"),
-  jobActionsRunBtn: document.getElementById("jobActionsRunBtn"),
+  jobMoreBtn: document.getElementById("jobMoreBtn"),
+  jobMoreMenu: document.getElementById("jobMoreMenu"),
+  jobActionsMenu: document.getElementById("jobActionsMenu"),
 
   rerunDialog: document.getElementById("rerunDialog"),
   rerunDialogClose: document.getElementById("rerunDialogClose"),
@@ -4684,54 +4678,77 @@ function jobActionsFromSettings() {
   return normalizeActions(s.actions);
 }
 
-function syncJobActionsUi(job) {
-  if (!els.jobActionsWrap || !els.jobActionsSelect || !els.jobActionsRunBtn) return;
+function hideJobActionsMenu() {
+  if (!els.jobActionsMenu) return;
+  if (els.jobActionsMenu.hidden) return;
+  els.jobActionsMenu.hidden = true;
+}
 
-  if (isDemoJob(job)) {
-    els.jobActionsSelect.disabled = true;
-    els.jobActionsRunBtn.disabled = true;
-    els.jobActionsWrap.hidden = true;
-    return;
-  }
-
-  els.jobActionsWrap.hidden = false;
+function renderJobActionsMenu() {
+  if (!els.jobActionsMenu) return;
 
   const actions = jobActionsFromSettings();
-  const prev = String(els.jobActionsSelect.value || "");
+  const out = [];
 
-  if (actions.length === 0) {
-    els.jobActionsSelect.innerHTML = `<option value="">No actions (Actions)</option>`;
-    els.jobActionsSelect.value = "";
-    els.jobActionsSelect.disabled = true;
-    els.jobActionsRunBtn.disabled = true;
-    return;
-  }
-
-  const opts = [`<option value="">Actions…</option>`];
   for (const a of actions) {
     const id = escapeHtml(a.id);
     const label = escapeHtml(a.name);
-    opts.push(`<option value="${id}">${label}</option>`);
+    const title = escapeHtml(String(a.command || "").trim());
+    out.push(`<button type="button" class="ctxmenu__item" data-jobaction-id="${id}" title="${title}">${label}</button>`);
   }
-  els.jobActionsSelect.innerHTML = opts.join("");
-  els.jobActionsSelect.disabled = false;
-  if (prev && actions.some((a) => a.id === prev)) els.jobActionsSelect.value = prev;
-  else els.jobActionsSelect.value = "";
 
-  els.jobActionsRunBtn.disabled = !String(els.jobActionsSelect.value || "");
+  if (actions.length > 0) out.push(`<div class="ctxmenu__sep" role="separator"></div>`);
+  out.push(`<button type="button" class="ctxmenu__item" data-jobaction-manage>Manage actions…</button>`);
+
+  els.jobActionsMenu.innerHTML = out.join("");
 }
 
-async function runSelectedJobAction() {
+function openJobActionsMenu(anchorEl) {
+  if (!els.jobActionsMenu) return;
+
+  renderJobActionsMenu();
+
+  const menu = els.jobActionsMenu;
+  menu.hidden = false;
+
+  // Start at a safe origin so we can measure reliably.
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+
+  const ar = anchorEl && typeof anchorEl.getBoundingClientRect === "function" ? anchorEl.getBoundingClientRect() : null;
+  const rect = menu.getBoundingClientRect();
+  const pad = 8;
+
+  const maxX = Math.max(pad, window.innerWidth - rect.width - pad);
+  const maxY = Math.max(pad, window.innerHeight - rect.height - pad);
+
+  const aLeft = ar ? ar.left : window.innerWidth / 2;
+  const aRight = ar ? ar.right : window.innerWidth / 2;
+  const aTop = ar ? ar.top : window.innerHeight / 2;
+
+  const spaceRight = window.innerWidth - aRight;
+  const openRight = spaceRight >= rect.width + 12;
+
+  const idealX = openRight ? aRight + 8 : aLeft - rect.width - 8;
+  const x = clampNumber(idealX, pad, maxX, pad);
+
+  // Align with the clicked row; clamp to viewport.
+  const y = clampNumber(aTop - 6, pad, maxY, pad);
+
+  menu.style.left = `${Math.round(x)}px`;
+  menu.style.top = `${Math.round(y)}px`;
+}
+
+async function runJobActionById(actionId) {
   const jobId = state.selectedJobId;
   if (!jobId) return;
   const job = state.jobs.get(jobId);
   if (!job || isDemoJob(job)) return;
-  if (!els.jobActionsSelect) return;
 
-  const actionId = String(els.jobActionsSelect.value || "").trim();
-  if (!actionId) return;
+  const id = String(actionId || "").trim();
+  if (!id) return;
 
-  const action = jobActionsFromSettings().find((a) => a.id === actionId) || null;
+  const action = jobActionsFromSettings().find((a) => a.id === id) || null;
   if (!action) {
     showToast("Unknown action.");
     return;
@@ -4781,6 +4798,102 @@ async function runSelectedJobAction() {
   } catch (err) {
     showToast(String(err && err.message ? err.message : err) || "Failed to run action.");
   }
+}
+
+function hideJobMoreMenu() {
+  if (!els.jobMoreMenu || !els.jobMoreBtn) return;
+  if (els.jobMoreMenu.hidden) return;
+  els.jobMoreMenu.hidden = true;
+  els.jobMoreBtn.setAttribute("aria-expanded", "false");
+  hideJobActionsMenu();
+}
+
+function openJobMoreMenu() {
+  if (!els.jobMoreMenu || !els.jobMoreBtn) return;
+  const btn = els.jobMoreBtn;
+  const menu = els.jobMoreMenu;
+
+  const jobId = state.selectedJobId;
+  const job = jobId ? state.jobs.get(jobId) : null;
+  if (!job || isDemoJob(job)) return;
+
+  updateJobMoreMenuActions(job);
+  if (btn.hidden || btn.disabled) return;
+
+  // Toggle behavior.
+  if (!menu.hidden) {
+    hideJobMoreMenu();
+    return;
+  }
+
+  menu.hidden = false;
+  btn.setAttribute("aria-expanded", "true");
+
+  // Start at a safe origin so we can measure reliably.
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+
+  const br = btn.getBoundingClientRect();
+  const rect = menu.getBoundingClientRect();
+  const pad = 8;
+
+  const maxX = Math.max(pad, window.innerWidth - rect.width - pad);
+  const maxY = Math.max(pad, window.innerHeight - rect.height - pad);
+
+  // Prefer aligning the right edge to the button (clean in the dialog footer).
+  const idealX = br.right - rect.width;
+  const x = clampNumber(idealX, pad, maxX, pad);
+
+  const spaceBelow = window.innerHeight - br.bottom;
+  const spaceAbove = br.top;
+  const belowY = br.bottom + 8;
+  const aboveY = br.top - rect.height - 8;
+  const idealY = spaceBelow < rect.height + 12 && spaceAbove > spaceBelow ? aboveY : belowY;
+  const y = clampNumber(idealY, pad, maxY, pad);
+
+  menu.style.left = `${Math.round(x)}px`;
+  menu.style.top = `${Math.round(y)}px`;
+}
+
+function updateJobMoreMenuActions(job) {
+  if (!els.jobMoreMenu || !els.jobMoreBtn) return;
+  const menu = els.jobMoreMenu;
+  const btn = els.jobMoreBtn;
+
+  const b = jobBox(job);
+  const running = job && job.status === "running";
+
+  const canFile = !running && b === "board";
+  const canTrash = !running && b !== "trash";
+  const canDelete = b === "trash" && !running;
+  const canRestore = b === "archive" || b === "trash";
+  const canRerun = !running;
+
+  const byAction = (name) => menu.querySelector(`[data-jobmore-action="${name}"]`);
+  const setActionHidden = (name, hidden) => {
+    const el = byAction(name);
+    if (el) el.hidden = !!hidden;
+  };
+
+  setActionHidden("actions", false);
+  setActionHidden("rerun", !canRerun);
+  setActionHidden("restore", !canRestore);
+  setActionHidden("archive", !canFile);
+  setActionHidden("trash", !canTrash);
+  setActionHidden("delete", !canDelete);
+
+  const sep = menu.querySelector('[data-jobmore-sep="danger"]');
+  if (sep) sep.hidden = !canDelete;
+
+  const anyVisible = ["actions", "rerun", "restore", "archive", "trash", "delete"].some((a) => {
+    const el = byAction(a);
+    return !!el && !el.hidden;
+  });
+
+  // Hide the overflow button if it would be empty (common while a job is running).
+  btn.hidden = !anyVisible;
+  btn.disabled = !anyVisible;
+  if (!anyVisible) hideJobMoreMenu();
 }
 
 function renderSettingsActions(actions) {
@@ -5000,12 +5113,9 @@ async function generateActionFromPrompt() {
 function updateJobDialogActions(job) {
   if (isDemoJob(job)) {
     // Demo cards are UI-only; disable actions that would hit the main process.
-    setHidden(els.rerunJobBtn, true);
     setHidden(els.cancelJobBtn, true);
-    setHidden(els.jobArchiveBtn, true);
-    setHidden(els.jobTrashBtn, true);
-    setHidden(els.jobDeleteBtn, true);
-    setHidden(els.jobRestoreBtn, true);
+    setHidden(els.jobMoreBtn, true);
+    hideJobMoreMenu();
 
     if (els.jobDialogPopout) els.jobDialogPopout.hidden = true;
     if (els.jobDialogMove) els.jobDialogMove.hidden = true;
@@ -5019,7 +5129,7 @@ function updateJobDialogActions(job) {
       els.sendFollowupBtn.textContent = "Send";
       els.sendFollowupBtn.title = "Demo card";
     }
-    syncJobActionsUi(job);
+    hideJobActionsMenu();
     return;
   }
 
@@ -5035,9 +5145,6 @@ function updateJobDialogActions(job) {
   const b = jobBox(job);
   const running = job && job.status === "running";
   const hasThreadId = job && typeof job.threadId === "string" && job.threadId.trim().length > 0;
-
-  // Rerun only makes sense when the current run is not actively running.
-  setHidden(els.rerunJobBtn, running);
 
   // Stop only makes sense while running.
   setHidden(els.cancelJobBtn, !running);
@@ -5074,19 +5181,8 @@ function updateJobDialogActions(job) {
     else els.sendFollowupBtn.textContent = "Send";
   }
 
-  // Board actions.
-  const canFile = !running && b === "board";
-  setHidden(els.jobArchiveBtn, !canFile);
-
-  // Trash actions.
-  const canTrash = !running && b !== "trash";
-  setHidden(els.jobTrashBtn, !canTrash);
-  setHidden(els.jobDeleteBtn, !(b === "trash" && !running));
-
-  // Restore is available from archive or trash.
-  setHidden(els.jobRestoreBtn, !(b === "archive" || b === "trash"));
-
-  syncJobActionsUi(job);
+  updateJobMoreMenuActions(job);
+  hideJobActionsMenu();
 }
 
 function updateCardContextMenuActions(job) {
@@ -6749,14 +6845,76 @@ function wireUi() {
     });
   }
 
-	  // Job file/delete actions.
-	  if (els.jobArchiveBtn) els.jobArchiveBtn.addEventListener("click", () => archiveSelectedJob());
-	  if (els.jobTrashBtn) els.jobTrashBtn.addEventListener("click", () => trashSelectedJob());
-	  if (els.jobRestoreBtn) els.jobRestoreBtn.addEventListener("click", () => restoreSelectedJob());
-	  if (els.jobDeleteBtn) els.jobDeleteBtn.addEventListener("click", () => deleteSelectedJob());
-	  if (els.jobDialogPopout) {
-	    els.jobDialogPopout.hidden = isJobMode();
-	    els.jobDialogPopout.addEventListener("click", async () => {
+		  // Job overflow menu (in the job dialog footer).
+		  if (els.jobMoreBtn) {
+		    els.jobMoreBtn.addEventListener("click", (e) => {
+		      e.preventDefault();
+		      openJobMoreMenu();
+		    });
+		  }
+		  if (els.jobMoreMenu) {
+		    els.jobMoreMenu.addEventListener("click", async (e) => {
+		      const btn = e.target && e.target.closest ? e.target.closest("[data-jobmore-action]") : null;
+		      if (!btn) return;
+		      e.preventDefault();
+		      const action = btn.getAttribute("data-jobmore-action") || "";
+		      if (action === "actions") {
+		        openJobActionsMenu(btn);
+		        return;
+		      }
+		
+		      hideJobMoreMenu();
+		
+		      if (action === "rerun") {
+		        await openRerunDialog(state.selectedJobId);
+		        return;
+		      }
+		      if (action === "restore") {
+		        await restoreSelectedJob();
+		        return;
+		      }
+		      if (action === "archive") {
+		        await archiveSelectedJob();
+		        return;
+		      }
+		      if (action === "trash") {
+		        await trashSelectedJob();
+		        return;
+		      }
+		      if (action === "delete") {
+		        await deleteSelectedJob();
+		        return;
+		      }
+		    });
+		
+		    // Click-out closes the menu.
+		    document.addEventListener(
+		      "click",
+		      (e) => {
+		        if (!els.jobMoreMenu || els.jobMoreMenu.hidden) return;
+		        if (els.jobMoreMenu.contains(e.target)) return;
+		        if (els.jobActionsMenu && els.jobActionsMenu.contains(e.target)) return;
+		        if (els.jobMoreBtn && els.jobMoreBtn.contains(e.target)) return;
+		        hideJobMoreMenu();
+		      },
+		      true
+		    );
+		
+		    // Escape closes the menu.
+		    document.addEventListener("keydown", (e) => {
+		      const moreOpen = !!(els.jobMoreMenu && !els.jobMoreMenu.hidden);
+		      const actionsOpen = !!(els.jobActionsMenu && !els.jobActionsMenu.hidden);
+		      if (!moreOpen && !actionsOpen) return;
+		      if (e.key === "Escape") hideJobMoreMenu();
+		    });
+		
+		    // Scrolling/resizing should not leave a floating menu in the wrong place.
+		    document.addEventListener("scroll", () => hideJobMoreMenu(), true);
+		    window.addEventListener("resize", () => hideJobMoreMenu());
+		  }
+		  if (els.jobDialogPopout) {
+		    els.jobDialogPopout.hidden = isJobMode();
+		    els.jobDialogPopout.addEventListener("click", async () => {
 	      if (isJobMode()) return;
 	      if (!api.windowOpenJob) {
 	        showToast("Job popout windows are not supported in this build.");
@@ -7283,6 +7441,8 @@ function wireUi() {
 
   // Drop heavy arrays when the dialog closes to keep the board snappy with many jobs.
   els.jobDialog.addEventListener("close", () => {
+    hideJobMoreMenu();
+
     const jobId = state.selectedJobId;
     if (!jobId) return;
     const job = state.jobs.get(jobId);
@@ -7533,18 +7693,23 @@ function wireUi() {
     if (els.jobDialog && els.jobDialog.open) updateJobDialogActions(job);
   });
 
-  if (els.jobActionsSelect) {
-    els.jobActionsSelect.addEventListener("change", () => {
-      if (!els.jobActionsRunBtn) return;
-      els.jobActionsRunBtn.disabled = !!els.jobActionsSelect.disabled || !String(els.jobActionsSelect.value || "");
-    });
-  }
-  if (els.jobActionsRunBtn) {
-    els.jobActionsRunBtn.addEventListener("click", () => runSelectedJobAction());
-  }
+  if (els.jobActionsMenu) {
+    els.jobActionsMenu.addEventListener("click", (e) => {
+      const manage = e.target && e.target.closest ? e.target.closest("[data-jobaction-manage]") : null;
+      if (manage) {
+        e.preventDefault();
+        hideJobMoreMenu();
+        openActionsDialog();
+        return;
+      }
 
-  if (els.rerunJobBtn) {
-    els.rerunJobBtn.addEventListener("click", () => openRerunDialog(state.selectedJobId));
+      const act = e.target && e.target.closest ? e.target.closest("[data-jobaction-id]") : null;
+      if (!act) return;
+      e.preventDefault();
+      const id = act.getAttribute("data-jobaction-id") || "";
+      hideJobMoreMenu();
+      runJobActionById(id);
+    });
   }
   els.cancelJobBtn.addEventListener("click", () => cancelSelectedJob());
 
