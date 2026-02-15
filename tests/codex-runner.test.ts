@@ -20,7 +20,9 @@ describe("codex-runner", () => {
 
   it("streams jsonl events + plain logs (exec + resume)", async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-codex-"));
-    const binPath = path.join(tmpDir, "fake-codex");
+    const isWin = process.platform === "win32";
+    const binPath = path.join(tmpDir, isWin ? "fake-codex.cmd" : "fake-codex");
+    const jsPath = path.join(tmpDir, "fake-codex.js");
 
     const script = [
       "#!/usr/bin/env node",
@@ -36,8 +38,15 @@ describe("codex-runner", () => {
       "});"
     ].join("\n");
 
-    fs.writeFileSync(binPath, script, { encoding: "utf8" });
-    fs.chmodSync(binPath, 0o755);
+    if (isWin) {
+      // Windows can't execute shebang scripts directly; use a .cmd shim that calls Node.
+      fs.writeFileSync(jsPath, script, { encoding: "utf8" });
+      const cmd = [`@echo off`, `setlocal`, `"${process.execPath}" "${jsPath}" %*`].join("\r\n") + "\r\n";
+      fs.writeFileSync(binPath, cmd, { encoding: "utf8" });
+    } else {
+      fs.writeFileSync(binPath, script, { encoding: "utf8" });
+      fs.chmodSync(binPath, 0o755);
+    }
 
     const events: any[] = [];
     const child = runCodexExec({
