@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.6.1...agent-heaven-v0.6.2) (2026-02-15)
+
+
+### Bug Fixes
+
+* **win:** spawn .cmd CLIs via cmd.exe ([04ac35b](https://github.com/grund3g/agent-heaven/commit/04ac35b12471170379c71464af17c1786571b46b))
+
 ## [0.6.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.6.0...agent-heaven-v0.6.1) (2026-02-15)
 
 
