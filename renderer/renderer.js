@@ -66,6 +66,7 @@ const api = window.agentHeaven;
   projectDefaultBranchInput: document.getElementById("projectDefaultBranchInput"),
   projectCheckoutModeSelect: document.getElementById("projectCheckoutModeSelect"),
   projectDialogSave: document.getElementById("projectDialogSave"),
+  projectDialogRemoveBtn: document.getElementById("projectDialogRemoveBtn"),
 
   branchDialog: document.getElementById("branchDialog"),
   branchDialogClose: document.getElementById("branchDialogClose"),
@@ -3909,50 +3910,37 @@ function promptBranchMismatch({ projectName, projectPath, currentBranch, default
 
 function renderProjects() {
   els.projectsList.innerHTML = state.projects
-    .map(
-      (p) => {
-        const color = normalizeHexColor(p.color) || "#64d8a3";
-        const shortName = normalizeShortName(p.shortName);
-        const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
-        const dirty = !!p.gitDirty;
-        const branchHtml = branch
-          ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
-          : "";
-        const fullPath = String(p.path || "");
-        const displayPath = formatProjectPathForDisplay(fullPath);
-        return `
-	        <div class="project" style="--proj-color: ${escapeHtml(color)}">
-	          <input
-	            class="project__swatch"
-	            type="color"
-	            value="${escapeHtml(color)}"
-	            data-project-color="${escapeHtml(p.id)}"
-	            title="Project color"
-	            aria-label="Project color"
-	          />
-	          <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
-	            <div class="project__name">
-	              <span class="project__nametext">${escapeHtml(p.name)}</span>
-	              ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
-                ${branchHtml}
-	            </div>
-	            <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
-	          </div>
-	          <div class="project__actions">
-	            <button
-	              class="iconbtn iconbtn--danger project__remove"
-	              data-project-remove="${escapeHtml(p.id)}"
-	              title="Remove project"
-              aria-label="Remove project"
-              type="button"
-            >
-              &times;
-            </button>
+    .map((p) => {
+      const color = normalizeHexColor(p.color) || "#64d8a3";
+      const shortName = normalizeShortName(p.shortName);
+      const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
+      const dirty = !!p.gitDirty;
+      const branchHtml = branch
+        ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
+        : "";
+      const fullPath = String(p.path || "");
+      const displayPath = formatProjectPathForDisplay(fullPath);
+      return `
+        <div class="project" style="--proj-color: ${escapeHtml(color)}">
+          <input
+            class="project__swatch"
+            type="color"
+            value="${escapeHtml(color)}"
+            data-project-color="${escapeHtml(p.id)}"
+            title="Project color"
+            aria-label="Project color"
+          />
+          <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
+            <div class="project__name">
+              <span class="project__nametext">${escapeHtml(p.name)}</span>
+              ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
+            </div>
+            <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
           </div>
+          <div class="project__actions">${branchHtml}</div>
         </div>
       `;
-      }
-    )
+    })
     .join("");
 
   // project select
@@ -7179,34 +7167,6 @@ function wireUi() {
   });
 
   els.projectsList.addEventListener("click", async (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest("[data-project-remove]") : null;
-    if (btn) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const id = btn.getAttribute("data-project-remove") || "";
-      const project = state.projects.find((p) => p.id === id) || null;
-      if (!id) return;
-
-      const label = project ? `"${project.name}"` : "this project";
-      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
-      if (!ok) return;
-
-      try {
-        const removed = await api.projectsRemove(id);
-        if (!removed) return;
-
-        if (getStoredProjectId() === id) clearStoredProjectId();
-
-        state.projects = await api.projectsList();
-        renderProjects();
-        renderBoard();
-      } catch (err) {
-        setHint(String(err && err.message ? err.message : err), "error");
-      }
-      return;
-    }
-
     const colorInp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
     if (colorInp) return;
 
@@ -7241,6 +7201,32 @@ function wireUi() {
       const id = String(state.editingProjectId || "").trim();
       if (!id) return;
       await openCheckoutsDialog(id);
+    });
+  }
+  if (els.projectDialogRemoveBtn) {
+    els.projectDialogRemoveBtn.addEventListener("click", async () => {
+      const id = String(state.editingProjectId || "").trim();
+      if (!id) return;
+
+      const project = state.projects.find((p) => p && p.id === id) || null;
+      const label = project ? `"${project.name}"` : "this project";
+      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
+      if (!ok) return;
+
+      try {
+        setHint("");
+        const removed = await api.projectsRemove(id);
+        if (!removed) return;
+
+        if (getStoredProjectId() === id) clearStoredProjectId();
+
+        state.projects = await api.projectsList();
+        renderProjects();
+        renderBoard();
+        closeProjectDialog();
+      } catch (err) {
+        setHint(String(err && err.message ? err.message : err), "error");
+      }
     });
   }
   if (els.projectDialog) {
