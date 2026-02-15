@@ -45,6 +45,8 @@ export const DEFAULT_STATE = {
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
 
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
+    // Versioned seeding for built-in actions (so existing installs can pick up new defaults once).
+    actionsDefaultsVersion: 0,
     actions: [
       {
         id: "ah_builtin_integrate_to_default",
@@ -448,6 +450,17 @@ function ensureActionsSettings(settings) {
   const next: any = { ...s };
   let changed = false;
 
+  const DEFAULTS_VERSION = 1;
+  {
+    const raw = (next as any).actionsDefaultsVersion;
+    let v = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(v) || v < 0) {
+      v = 0;
+      changed = true;
+    }
+    (next as any).actionsDefaultsVersion = Math.trunc(v);
+  }
+
   const raw = (next as any).actions;
   const arr = Array.isArray(raw) ? raw : [];
   if (!Array.isArray(raw) && raw != null) changed = true;
@@ -499,6 +512,30 @@ function ensureActionsSettings(settings) {
   const MAX_ACTIONS = 200;
   if (out.length > MAX_ACTIONS) {
     out.splice(MAX_ACTIONS);
+    changed = true;
+  }
+
+  // Seed built-in actions once (versioned) so existing users get them,
+  // but can remove them later without the app re-adding them.
+  if ((next as any).actionsDefaultsVersion < DEFAULTS_VERSION) {
+    const hasIntegrate =
+      out.some((a) => a && typeof a === "object" && String((a as any).id || "").trim() === "ah_builtin_integrate_to_default") ||
+      out.some((a) => {
+        const cmd = a && typeof a === "object" ? String((a as any).command || "") : "";
+        const first = (cmd.replaceAll("\r\n", "\n").split("\n")[0] || "").trim();
+        return first === "ah:integrate-to-default" || first === "ah:integrate";
+      });
+
+    if (!hasIntegrate && out.length < MAX_ACTIONS) {
+      out.push({
+        id: "ah_builtin_integrate_to_default",
+        name: "Integrate to default branch",
+        command: "ah:integrate-to-default"
+      });
+      changed = true;
+    }
+
+    (next as any).actionsDefaultsVersion = DEFAULTS_VERSION;
     changed = true;
   }
 
