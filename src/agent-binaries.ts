@@ -46,12 +46,33 @@ function getAgentsFromSettings(settings: any): any {
   return isPlainObject((s as any).agents) ? (s as any).agents : {};
 }
 
+function firstExistingCandidateCliPath(name: AgentBinaryKey): string {
+  try {
+    for (const c of candidateCliPaths(name)) {
+      try {
+        const st = fs.statSync(c);
+        if (st && st.isFile()) return c;
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
 export function resolveCodexCliPathFromSettings(settings: any): string {
   const s = isPlainObject(settings) ? settings : {};
   const agents = getAgentsFromSettings(s);
   const codex = isPlainObject((agents as any).codex) ? (agents as any).codex : {};
   const p = normalizeCliPath((codex as any).path || (s as any).codexPath || "");
-  return p || "codex";
+  if (p) return p;
+
+  // Packaged apps on macOS commonly start with a minimal PATH (no /usr/local/bin).
+  // Prefer a stable absolute candidate if we can find one.
+  const detected = firstExistingCandidateCliPath("codex");
+  return detected || "codex";
 }
 
 function defaultClaudeLocalInstallerPath(): string {
@@ -78,7 +99,8 @@ export function resolveClaudeCliPathFromSettings(settings: any): string {
   const local = defaultClaudeLocalInstallerPath();
   if (local) return local;
 
-  return "claude";
+  const detected = firstExistingCandidateCliPath("claude");
+  return detected || "claude";
 }
 
 function safeErrorString(err: any): string {
