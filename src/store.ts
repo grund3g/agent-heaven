@@ -1,10 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
-import {
-  normalizeBranchName as normalizeGitBranchName,
-  normalizeCheckoutMode as normalizeGitCheckoutMode
-} from "./core/git-normalize";
 
 const PROJECT_COLOR_PALETTE = [
   "#64d8a3", // green
@@ -77,6 +73,9 @@ export const DEFAULT_STATE = {
         command: "ah:commit-only"
       }
     ],
+
+    // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
+    actions: [],
 
     // Per-agent settings (Codex, Claude, ...)
     agents: {
@@ -449,17 +448,6 @@ function ensureActionsSettings(settings) {
   const next: any = { ...s };
   let changed = false;
 
-  const DEFAULTS_VERSION = 2;
-  {
-    const raw = (next as any).actionsDefaultsVersion;
-    let v = typeof raw === "number" ? raw : Number(raw);
-    if (!Number.isFinite(v) || v < 0) {
-      v = 0;
-      changed = true;
-    }
-    (next as any).actionsDefaultsVersion = Math.trunc(v);
-  }
-
   const raw = (next as any).actions;
   const arr = Array.isArray(raw) ? raw : [];
   if (!Array.isArray(raw) && raw != null) changed = true;
@@ -514,110 +502,8 @@ function ensureActionsSettings(settings) {
     changed = true;
   }
 
-  // Seed built-in actions once (versioned) so existing users get them,
-  // but can remove them later without the app re-adding them.
-  if ((next as any).actionsDefaultsVersion < DEFAULTS_VERSION) {
-    const hasBuiltIn = (opts: { id: string; commands: string[] }) =>
-      out.some((a) => a && typeof a === "object" && String((a as any).id || "").trim() === opts.id) ||
-      out.some((a) => {
-        const cmd = a && typeof a === "object" ? String((a as any).command || "") : "";
-        const first = (cmd.replaceAll("\r\n", "\n").split("\n")[0] || "").trim();
-        return opts.commands.includes(first);
-      });
-
-    const builtIns = [
-      {
-        id: "ah_builtin_integrate_to_default",
-        name: "Integrate to default branch",
-        command: "ah:integrate-to-default",
-        aliases: ["ah:integrate-to-default", "ah:integrate"]
-      },
-      {
-        id: "ah_builtin_commit_and_push",
-        name: "Commit + push",
-        command: "ah:commit-and-push",
-        aliases: ["ah:commit-and-push", "ah:commit+push", "ah:commit-push"]
-      },
-      {
-        id: "ah_builtin_commit_only",
-        name: "Commit only",
-        command: "ah:commit-only",
-        aliases: ["ah:commit-only", "ah:commit"]
-      }
-    ];
-
-    for (const bi of builtIns) {
-      if (out.length >= MAX_ACTIONS) break;
-      if (hasBuiltIn({ id: bi.id, commands: bi.aliases })) continue;
-      out.push({ id: bi.id, name: bi.name, command: bi.command });
-      changed = true;
-    }
-
-    (next as any).actionsDefaultsVersion = DEFAULTS_VERSION;
-    changed = true;
-  }
-
   // Always set a normalized array so the renderer can rely on the shape.
   (next as any).actions = out;
-
-  return { settings: next, changed };
-}
-
-function ensureHelperSettings(settings) {
-  const s = isPlainObject(settings) ? settings : {};
-  const next: any = { ...s };
-  let changed = false;
-
-  {
-    const raw = (next as any).helperDefaultAgent;
-    const norm = normalizeHelperDefaultAgent(raw);
-    if (raw !== norm) {
-      (next as any).helperDefaultAgent = norm;
-      changed = true;
-    }
-  }
-
-  {
-    const raw = (next as any).helperDefaultModel;
-    if (typeof raw !== "string") {
-      (next as any).helperDefaultModel = "opus";
-      changed = true;
-    } else {
-      const norm = normalizeHelperDefaultModel(raw);
-      if (raw !== norm) {
-        (next as any).helperDefaultModel = norm;
-        changed = true;
-      }
-    }
-  }
-
-  if (typeof (next as any).helperDefaultModel !== "string") {
-    (next as any).helperDefaultModel = "opus";
-    changed = true;
-  }
-
-  if (typeof (next as any).helperDefaultModel === "string" && (next as any).helperDefaultModel.length > 160) {
-    (next as any).helperDefaultModel = String((next as any).helperDefaultModel).slice(0, 160);
-    changed = true;
-  }
-
-  if (typeof (next as any).helperDefaultAgent !== "string") {
-    (next as any).helperDefaultAgent = "";
-    changed = true;
-  }
-
-  if ((next as any).helperDefaultAgent === "codex") {
-    const low = String((next as any).helperDefaultModel || "").trim().toLowerCase();
-    if (low === "opus" || low === "sonnet" || low === "haiku") {
-      (next as any).helperDefaultModel = "";
-      changed = true;
-    }
-  }
-
-  if (typeof (next as any).helperPersistHistory !== "boolean") {
-    (next as any).helperPersistHistory = true;
-    changed = true;
-  }
 
   return { settings: next, changed };
 }
@@ -653,10 +539,6 @@ function ensureSettings(settings) {
   const actRes = ensureActionsSettings(next);
   next = actRes.settings;
   if (actRes.changed) changed = true;
-
-  const helperRes = ensureHelperSettings(next);
-  next = helperRes.settings;
-  if (helperRes.changed) changed = true;
 
   return { settings: next, changed };
 }

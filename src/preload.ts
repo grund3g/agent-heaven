@@ -21,21 +21,9 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsUpdate: (patch) => ipcRenderer.invoke("settings:update", patch),
 
-  mcpStatus: () => ipcRenderer.invoke("mcp:status"),
-
   actionsGenerate: async (prompt) => {
     const res = await invokeOk("actions:generate", { prompt });
     return res && typeof res === "object" ? (res as any).action : null;
-  },
-  helperAsk: async (payload) => {
-    const p = payload && typeof payload === "object" ? payload : {};
-    const res = await invokeOk("helper:ask", p);
-    return {
-      answer: typeof (res as any).answer === "string" ? (res as any).answer : "",
-      agent: typeof (res as any).agent === "string" ? (res as any).agent : "",
-      model: typeof (res as any).model === "string" ? (res as any).model : "",
-      timedOut: !!((res as any).timedOut === true)
-    };
   },
 
   shellOpenExternal: async (url) => {
@@ -105,6 +93,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   checkoutsRemove: async (projectId, kind, jobId) => {
     await invokeOk("checkouts:remove", { projectId, kind, jobId });
     return true;
+  },
+  checkoutsIntegrateToDefault: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:integrateToDefault", { jobId, commitMessage: p.commitMessage });
+    return res;
   },
 
   jobsList: () => ipcRenderer.invoke("jobs:list"),

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import * as path from "node:path";
 
 function truncate(s: string, max = 12_000): string {
   const str = typeof s === "string" ? s : String(s || "");
@@ -279,4 +280,104 @@ export async function createBranchInRepo(opts: { cwd: string; branchName: string
   }
 
   throw new Error(res.error);
+}
+
+export async function getGitCommonDir(cwd: string): Promise<string> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const out = await gitOkStdout(["rev-parse", "--git-common-dir"], { cwd: dir, timeoutMs: 2_500 });
+  return path.resolve(dir, String(out || "").trim());
+}
+
+export async function getPorcelainStatus(cwd: string): Promise<string> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  return await gitOkStdout(["status", "--porcelain=v1"], { cwd: dir, timeoutMs: 4_000 });
+}
+
+export async function addAll(cwd: string): Promise<void> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const res = await git(["add", "-A"], { cwd: dir, timeoutMs: 20_000 });
+  if (!res.ok) throw new Error(res.error);
+}
+
+export async function commitWithMessage(cwd: string, message: string): Promise<string> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const msg = String(message || "").trim();
+  if (!msg) throw new Error("Missing commit message");
+  const res = await git(["commit", "-m", msg], { cwd: dir, timeoutMs: 60_000 });
+  if (!res.ok) throw new Error(res.error);
+  return await gitOkStdout(["rev-parse", "--short", "HEAD"], { cwd: dir, timeoutMs: 2_500 });
+}
+
+export async function listCommitsInRange(
+  cwd: string,
+  range: string,
+  opts?: { noMerges?: boolean }
+): Promise<string[]> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const r = String(range || "").trim();
+  if (!r) return [];
+  const noMerges = opts && typeof opts === "object" ? opts.noMerges !== false : true;
+
+  const args = ["rev-list", "--reverse"];
+  if (noMerges) args.push("--no-merges");
+  args.push(r);
+
+  const out = await gitOkStdout(args, { cwd: dir, timeoutMs: 8_000 });
+  return String(out || "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export async function cherryPick(cwd: string, commits: string[]): Promise<void> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const arr = Array.isArray(commits) ? commits.map((c) => String(c || "").trim()).filter(Boolean) : [];
+  if (arr.length === 0) return;
+  const res = await git(["cherry-pick", ...arr], { cwd: dir, timeoutMs: 10 * 60_000 });
+  if (!res.ok) throw new Error(res.error);
+}
+
+export async function findWorktreePathForBranch(cwd: string, branchName: string): Promise<string> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const b = String(branchName || "").trim();
+  if (!b) return "";
+
+  const wantRef = `refs/heads/${b}`;
+
+  let raw = "";
+  try {
+    raw = await gitOkStdout(["worktree", "list", "--porcelain"], { cwd: dir, timeoutMs: 8_000 });
+  } catch {
+    raw = "";
+  }
+  if (!raw) return "";
+
+  let current: { worktree: string; branch: string } | null = null;
+  const entries: Array<{ worktree: string; branch: string }> = [];
+
+  for (const line of String(raw).split("\n")) {
+    const s = line.trim();
+    if (!s) {
+      if (current && current.worktree) entries.push(current);
+      current = null;
+      continue;
+    }
+
+    const sp = s.indexOf(" ");
+    const key = sp === -1 ? s : s.slice(0, sp);
+    const val = sp === -1 ? "" : s.slice(sp + 1).trim();
+    if (key === "worktree") {
+      if (current && current.worktree) entries.push(current);
+      current = { worktree: val, branch: "" };
+      continue;
+    }
+    if (!current) continue;
+    if (key === "branch") current.branch = val;
+  }
+  if (current && current.worktree) entries.push(current);
+
+  for (const e of entries) {
+    if (e.branch === wantRef) return e.worktree;
+  }
+  return "";
 }
