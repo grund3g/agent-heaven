@@ -45,6 +45,13 @@
         "zip"
       ]
     },
+    "win": {
+      "icon": "build-res/icon.ico",
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
     "files": [
       "build/**/*",
       "renderer/**/*",
