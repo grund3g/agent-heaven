@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.5.0...agent-heaven-v0.6.0) (2026-02-15)
+
+
+### Features
+
+* add Windows build targets + release workflow ([867af7d](https://github.com/grund3g/agent-heaven/commit/867af7d85e554ee3aec32844fd9a1d5bfab060c4))
+
 ## [0.5.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.4.0...agent-heaven-v0.5.0) (2026-02-14)
 
 
