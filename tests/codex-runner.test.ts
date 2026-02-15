@@ -41,7 +41,7 @@ describe("codex-runner", () => {
     if (isWin) {
       // Windows can't execute shebang scripts directly; use a .cmd shim that calls Node.
       fs.writeFileSync(jsPath, script, { encoding: "utf8" });
-      const cmd = [`@echo off`, `setlocal`, `"${process.execPath}" "${jsPath}" %*`].join("\r\n") + "\r\n";
+      const cmd = [`@echo off`, `setlocal`, `"${process.execPath}" "${jsPath}" %*`, `exit /b %errorlevel%`].join("\r\n") + "\r\n";
       fs.writeFileSync(binPath, cmd, { encoding: "utf8" });
     } else {
       fs.writeFileSync(binPath, script, { encoding: "utf8" });
