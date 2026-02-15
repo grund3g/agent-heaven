@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.6.2...agent-heaven-v0.7.0) (2026-02-15)
+
+
+### Features
+
+* **actions:** generate actions + integrate checkout to default ([bd0ae18](https://github.com/grund3g/agent-heaven/commit/bd0ae189900f24c3a8a9afc046de5451c00efd77))
+* **board:** add project filter ([bd8af0c](https://github.com/grund3g/agent-heaven/commit/bd8af0cf1b47c8e12316afa18e821f10288ac58b))
+* **ui:** show counters since last message/output ([033b3c0](https://github.com/grund3g/agent-heaven/commit/033b3c044a1dea26f57e5b2e18b3d8542dddd636))
+
+
+### Bug Fixes
+
+* **agents:** auto-detect cli paths when PATH is minimal ([88256a3](https://github.com/grund3g/agent-heaven/commit/88256a341dffc581cc53b424c503e338accf1c70))
+* **chat:** show queued follow-ups in chat ([a842604](https://github.com/grund3g/agent-heaven/commit/a84260409338bf9a14ae983992cd92ad4c3df0f0))
+* **mac:** window dragging + dev app name ([181de43](https://github.com/grund3g/agent-heaven/commit/181de43db62d5d055cd02b02eec13703c0a75b07))
+* **ui:** restore improved job footer composer ([9a210bb](https://github.com/grund3g/agent-heaven/commit/9a210bb5c0f7d16a434cd553e6541597982239f0))
+* **ui:** show existing actions in Actions dialog ([cff922c](https://github.com/grund3g/agent-heaven/commit/cff922c7891009e92bbade3ab77ae26380f89b23))
+
 ## [0.6.2](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.6.1...agent-heaven-v0.6.2) (2026-02-15)
 
 
