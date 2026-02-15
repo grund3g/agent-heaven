@@ -37,6 +37,8 @@ export class JobsManager {
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
+  // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
+  private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -564,9 +566,13 @@ export class JobsManager {
       }
 
       if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
-        const text = data.item.text || "";
-        this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
-        this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
+        const extracted = this.extractStatusHint(data.item.text || "");
+        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
+        const text = extracted.cleanText;
+        if (String(text || "").trim()) {
+          this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
+        }
       }
 
       if (data.type === "turn.completed" && data.usage) {
@@ -621,7 +627,9 @@ export class JobsManager {
       }
 
       if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
-        const text = this.claudeMessageToText(data.message);
+        const extracted = this.extractStatusHint(this.claudeMessageToText(data.message));
+        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
+        const text = extracted.cleanText;
         if (text) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
           this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
@@ -640,6 +648,8 @@ export class JobsManager {
   private setJobStatus(jobId: string, status: any, extraPatch: any = {}) {
     const job = this.jobs.get(jobId);
     if (!job) return;
+    // Clear per-run hints when a new run begins (prevents stale hints affecting resumed runs).
+    if (status === "running") this.attentionHintByJobId.delete(jobId);
     job.status = status;
     Object.assign(job, extraPatch);
     this.sendJobEvent({ jobId, kind: "status", patch: { status, ...extraPatch } });
@@ -651,6 +661,42 @@ export class JobsManager {
     }
 
     this.markJobDirty(jobId);
+  }
+
+  private wrapPromptWithStatusHint(promptText: string): string {
+    const raw = String(promptText || "");
+    const base = raw.trimEnd();
+    if (!base) return raw;
+
+    const suffix =
+      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nDo not add any other text after the AH_STATUS line.\n";
+
+    // Best-effort: keep within the existing max prompt size guard.
+    if (base.length + suffix.length > 200_000) return raw;
+    return `${base}${suffix}`;
+  }
+
+  private extractStatusHint(text: unknown): { cleanText: string; hint: "done" | "needs_attention" | null } {
+    const raw = typeof text === "string" ? text : text == null ? "" : String(text);
+    if (!raw) return { cleanText: "", hint: null };
+
+    const lines = raw.split(/\r?\n/);
+    let hint: "done" | "needs_attention" | null = null;
+    const out: string[] = [];
+    for (const line of lines) {
+      const m = line.match(/^\s*AH_STATUS\s*:\s*(done|needs_attention)\s*$/i);
+      if (m) {
+        const v = String(m[1] || "").trim().toLowerCase();
+        if (v === "done" || v === "needs_attention") hint = v;
+        continue;
+      }
+      out.push(line);
+    }
+
+    // If we stripped the final line, remove trailing empty lines so we don't store messages that end with blank space.
+    while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
+
+    return { cleanText: out.join("\n"), hint };
   }
 
   private wantsAttentionOnSuccess(job: Job): boolean {
@@ -702,6 +748,7 @@ export class JobsManager {
 
     const next = job.queuedPrompts[0];
     if (!next) return { ok: false, error: "No queued prompts" };
+    const runPrompt = this.wrapPromptWithStatusHint(next.text);
 
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
@@ -727,7 +774,7 @@ export class JobsManager {
           cwd: job.projectPath || process.cwd(),
           sessionId: job.threadId,
           model,
-          prompt: next.text,
+          prompt: runPrompt,
           onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
         });
       } else {
@@ -738,7 +785,7 @@ export class JobsManager {
           cwd: job.projectPath || process.cwd(),
           threadId: job.threadId,
           model,
-          prompt: next.text,
+          prompt: runPrompt,
           images: next.images || [],
           onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
         });
@@ -830,7 +877,8 @@ export class JobsManager {
       return;
     }
 
-    const wantsAttention = this.wantsAttentionOnSuccess(job);
+    const hinted = this.attentionHintByJobId.get(jobId) || null;
+    const wantsAttention = hinted ? hinted === "needs_attention" : this.wantsAttentionOnSuccess(job);
 
     if (signal) {
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
@@ -853,6 +901,7 @@ export class JobsManager {
     const prompt = (params && params.prompt ? String(params.prompt) : "").trim();
     if (!prompt) return { ok: false, error: "Prompt is empty" };
     if (prompt.length > 200_000) return { ok: false, error: "Prompt is too large" };
+    const runPrompt = this.wrapPromptWithStatusHint(prompt);
 
     const projectId = params && params.projectId ? String(params.projectId) : "";
     if (projects.length === 0) return { ok: false, error: "No projects configured. Add one in sidebar." };
@@ -946,7 +995,7 @@ export class JobsManager {
           projectPath: run.projectPath || project.path,
           model,
           sessionId: threadId,
-          prompt,
+          prompt: runPrompt,
           onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
         });
       } else {
@@ -956,7 +1005,7 @@ export class JobsManager {
           settings: codexSettings,
           projectPath: run.projectPath || project.path,
           model,
-          prompt,
+          prompt: runPrompt,
           images,
           onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
         });
@@ -1123,6 +1172,7 @@ export class JobsManager {
 
     this.jobs.delete(id);
     this.procs.delete(id);
+    this.attentionHintByJobId.delete(id);
     this.dirtyJobIds.delete(id);
     try {
       this.history.remove(id);
