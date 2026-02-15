@@ -1965,6 +1965,39 @@ body::before {
   border-bottom-left-radius: 6px;
 }
 
+.queued {
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--stroke-faint);
+}
+
+.queued__head {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  margin: 2px 0 10px 2px;
+}
+
+.msg--queued {
+  opacity: 0.78;
+  border-style: dashed;
+}
+
+.msg__badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--accent2-rgb), 0.28);
+  background: rgba(var(--accent2-rgb), 0.08);
+  color: var(--muted2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .msg__role {
   font-size: 11px;
   letter-spacing: 0.12em;

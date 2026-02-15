@@ -5649,6 +5649,34 @@ function renderJobDialogPanels(job) {
   const stickLogs = isNearBottom(els.jobDialogLogs);
   const agentName = agentDisplayName(job && job.agent);
 
+  // queued follow-ups (entered while a job is running)
+  const queuedPrompts = Array.isArray(job && job.queuedPrompts) ? job.queuedPrompts : [];
+  const queuedHtml = queuedPrompts.length
+    ? (() => {
+        const head = `Queued follow-ups (${queuedPrompts.length})`;
+        const qItems = queuedPrompts
+          .map((p) => {
+            const ts = p && typeof p.ts === "string" ? p.ts : "";
+            const tMs = isoMs(ts);
+            const clock = fmtClock(tMs);
+            const timeHtml = clock
+              ? ` <span class="msg__time" title="${escapeHtml(ts)}">${escapeHtml(clock)}</span>`
+              : "";
+            const text = p && typeof p.text === "string" ? p.text : "";
+            const images = p && Array.isArray(p.images) ? p.images : [];
+            return `
+		      <div class="msg msg--user msg--queued">
+			        <div class="msg__role">You <span class="msg__badge">Queued</span>${timeHtml}</div>
+		        <div class="msg__text">${renderMarkdownSafeHtml(text)}</div>
+		        ${attachmentChipsHtml(images)}
+		      </div>
+		    `;
+          })
+          .join("");
+        return `<div class="queued" title="Queued follow-ups will run after the current agent process finishes."><div class="queued__head">${escapeHtml(head)}</div>${qItems}</div>`;
+      })()
+    : "";
+
   // chat (merge user prompts + assistant messages by timestamp)
   const timeline = [];
   for (let i = 0; i < (job.prompts || []).length; i += 1) {
@@ -5694,10 +5722,11 @@ function renderJobDialogPanels(job) {
 		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}</div>
 	        <div class="msg__text">${renderMarkdownSafeHtml(t.text)}</div>
 	        ${attachmentChipsHtml(t.images)}
-	      </div>
-	    `;
-	  });
-  els.jobDialogChat.innerHTML = items.join("") || `<div class="logline">No messages yet.</div>`;
+		      </div>
+		    `;
+		  });
+  const chatHtml = `${queuedHtml}${items.join("")}`;
+  els.jobDialogChat.innerHTML = chatHtml || `<div class="logline">No messages yet.</div>`;
   wireAttachmentThumbs(els.jobDialogChat);
 
   // live feed (terminal-ish tail)
