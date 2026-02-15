@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const PROJECT_COLOR_PALETTE = [
   "#64d8a3", // green
@@ -42,6 +43,9 @@ export const DEFAULT_STATE = {
     soundVolume: 35, // 0..100
     boardDoneLimit: 250, // 0 = unlimited (limits Done lane rendering on Board)
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
+
+    // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
+    actions: [],
 
     // Per-agent settings (Codex, Claude, ...)
     agents: {
@@ -432,6 +436,71 @@ function ensureGlobalHotkeySettings(settings) {
   return { settings: next, changed };
 }
 
+function ensureActionsSettings(settings) {
+  const s = isPlainObject(settings) ? settings : {};
+  const next: any = { ...s };
+  let changed = false;
+
+  const raw = (next as any).actions;
+  const arr = Array.isArray(raw) ? raw : [];
+  if (!Array.isArray(raw) && raw != null) changed = true;
+
+  const out: any[] = [];
+  const seen = new Set<string>();
+
+  for (const item of arr) {
+    const obj: any = item && typeof item === "object" ? item : {};
+    let id = typeof obj.id === "string" ? obj.id.trim() : "";
+    let name = typeof obj.name === "string" ? obj.name.trim() : "";
+    let command = typeof obj.command === "string" ? obj.command : "";
+
+    // Normalize newlines (renderer tends to use \n).
+    command = command.replaceAll("\r\n", "\n").trimEnd();
+    if (!command) {
+      changed = true;
+      continue;
+    }
+
+    if (!id) {
+      id = randomUUID();
+      changed = true;
+    }
+    if (seen.has(id)) {
+      id = randomUUID();
+      changed = true;
+    }
+    seen.add(id);
+
+    if (!name) {
+      const firstLine = command.split("\n")[0] || "";
+      name = firstLine.trim().slice(0, 80) || "Action";
+      changed = true;
+    } else if (name.length > 80) {
+      name = name.slice(0, 80);
+      changed = true;
+    }
+
+    const MAX_CMD_CHARS = 20_000;
+    if (command.length > MAX_CMD_CHARS) {
+      command = command.slice(0, MAX_CMD_CHARS);
+      changed = true;
+    }
+
+    out.push({ id, name, command });
+  }
+
+  const MAX_ACTIONS = 200;
+  if (out.length > MAX_ACTIONS) {
+    out.splice(MAX_ACTIONS);
+    changed = true;
+  }
+
+  // Always set a normalized array so the renderer can rely on the shape.
+  (next as any).actions = out;
+
+  return { settings: next, changed };
+}
+
 function ensureSettings(settings) {
   let next = isPlainObject(settings) ? { ...settings } : {};
   let changed = !isPlainObject(settings);
@@ -454,6 +523,10 @@ function ensureSettings(settings) {
   const hkRes = ensureGlobalHotkeySettings(next);
   next = hkRes.settings;
   if (hkRes.changed) changed = true;
+
+  const actRes = ensureActionsSettings(next);
+  next = actRes.settings;
+  if (actRes.changed) changed = true;
 
   return { settings: next, changed };
 }

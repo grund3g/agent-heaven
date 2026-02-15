@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import { app, BrowserWindow, ipcMain, dialog, globalShortcut, nativeTheme, screen, shell, session } from "electron";
 import type { OpenDialogOptions } from "electron";
 import type { WebContents } from "electron";
@@ -19,9 +20,20 @@ import { TrayManager } from "./tray-manager";
 import { WindowManager } from "./window-manager";
 import { ensureMacAppMenu } from "./mac-app-menu";
 import { listCodexModels } from "./codex-models";
-import { checkAgentBinaries, resolveCodexCliPathFromSettings } from "../agent-binaries";
+import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
 import { installAgentCli } from "../agent-install";
-import { detectDefaultBranch, getGitInfo, removeWorktree, switchBranch } from "./git";
+import {
+  addAll,
+  cherryPick,
+  commitWithMessage,
+  detectDefaultBranch,
+  findWorktreePathForBranch,
+  getGitCommonDir,
+  getGitInfo,
+  listCommitsInRange,
+  removeWorktree,
+  switchBranch
+} from "./git";
 
 function isMenuBarMode(settings: any) {
   return process.platform === "darwin" && !!(settings && settings.menuBarMode);
@@ -66,6 +78,230 @@ function assertTrustedIpcSender(evt: any) {
   const url = senderUrlFromIpcEvent(evt);
   if (isTrustedRendererUrl(url)) return;
   throw new Error(`Untrusted IPC sender (${url || "unknown"})`);
+}
+
+function isPlainObject(value: any): value is Record<string, any> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function stripMarkdownCodeFences(raw: string): string {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  // Strip a single wrapping ```...``` fence if present.
+  s = s.replace(/^```[a-zA-Z0-9_-]*\s*/i, "").replace(/```$/i, "").trim();
+  return s;
+}
+
+function tryParseJson(raw: string): any | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonFromText(raw: string): any | null {
+  const s = stripMarkdownCodeFences(raw);
+  if (!s) return null;
+
+  // Best case: model returns JSON only.
+  const direct = tryParseJson(s);
+  if (direct != null) return direct;
+
+  // Fallback: look for a JSON object or array embedded in surrounding text.
+  const objStart = s.indexOf("{");
+  const objEnd = s.lastIndexOf("}");
+  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+    const parsed = tryParseJson(s.slice(objStart, objEnd + 1));
+    if (parsed != null) return parsed;
+  }
+
+  const arrStart = s.indexOf("[");
+  const arrEnd = s.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
+    const parsed = tryParseJson(s.slice(arrStart, arrEnd + 1));
+    if (parsed != null) return parsed;
+  }
+
+  return null;
+}
+
+function normalizeGeneratedAction(parsed: any): { name: string; command: string } | null {
+  let obj: any = parsed;
+  if (Array.isArray(obj)) obj = obj[0];
+  if (!isPlainObject(obj)) return null;
+
+  const rawName = typeof obj.name === "string" ? obj.name.trim() : "";
+  let command = typeof obj.command === "string" ? obj.command : "";
+  command = command.replaceAll("\r\n", "\n").trimEnd();
+  if (!command) return null;
+
+  const MAX_NAME = 80;
+  const MAX_CMD = 20_000;
+
+  let name = rawName;
+  if (!name) {
+    const first = (command.split("\n")[0] || "").trim();
+    name = first.slice(0, MAX_NAME) || "Action";
+  }
+  if (name.length > MAX_NAME) name = name.slice(0, MAX_NAME);
+  if (command.length > MAX_CMD) command = command.slice(0, MAX_CMD);
+
+  return { name, command };
+}
+
+function buildActionGeneratorPrompt(opts: { userPrompt: string; platform: string; shell: string }): string {
+  const userPrompt = String(opts.userPrompt || "").trim();
+  const platform = String(opts.platform || "").trim();
+  const shell = String(opts.shell || "").trim();
+
+  return [
+    "You generate a saved shell Action for an Electron desktop app.",
+    "The action will be executed by pasting it into an interactive shell in the project's working directory (often a git repo).",
+    "",
+    "Environment:",
+    `- platform: ${platform || "unknown"}`,
+    `- shell: ${shell || "unknown"}`,
+    "",
+    "Task:",
+    userPrompt,
+    "",
+    "Output format (STRICT):",
+    "- Return ONLY valid JSON (no markdown, no commentary).",
+    "- Shape: {\"name\":\"...\",\"command\":\"...\"}",
+    "- \"name\": max 80 chars, same language as the task.",
+    "- \"command\": shell command(s) to run. Use \\n for newlines inside the JSON string.",
+    "",
+    "Rules:",
+    "- Do NOT run commands or inspect files; this is a text-only generation task.",
+    "- Do NOT include triple backticks.",
+    "- Avoid destructive commands unless explicitly asked.",
+    "- Prefer safe defaults (e.g. no force-push).",
+    "- If git commit is requested and no message is given, prefer opening the editor (git commit) over inventing a message."
+  ].join("\n");
+}
+
+function claudeMessageToText(message: any): string {
+  if (!message || typeof message !== "object") return "";
+  const content = (message as any).content;
+  if (typeof content === "string") return content;
+  const blocks = Array.isArray(content) ? content : [];
+  const parts: string[] = [];
+  for (const b of blocks) {
+    if (!b || typeof b !== "object") continue;
+    if ((b as any).type === "text" && typeof (b as any).text === "string") parts.push((b as any).text);
+  }
+  return parts.join("");
+}
+
+function runCodexUiPrompt(opts: {
+  codexPath: string;
+  settings: any;
+  projectPath: string;
+  model: string;
+  prompt: string;
+}): Promise<string> {
+  const { codexPath, settings, projectPath, model, prompt } = opts;
+  return new Promise((resolve) => {
+    let out = "";
+    let resolved = false;
+
+    const child = runCodexExec({
+      codexPath,
+      settings,
+      projectPath,
+      model,
+      prompt,
+      images: [],
+      onEvent: (ev: any) => {
+        if (!ev || ev.kind !== "codex") return;
+        const data = ev.data || {};
+        if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+          const text = typeof data.item.text === "string" ? data.item.text : "";
+          if (text) out += (out ? "\n" : "") + text;
+        }
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      resolve(out);
+    }, 25_000);
+
+    child.once("error", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve(out);
+    });
+    child.once("close", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve(out);
+    });
+  });
+}
+
+function runClaudeUiPrompt(opts: {
+  claudePath: string;
+  settings: any;
+  projectPath: string;
+  model: string;
+  prompt: string;
+}): Promise<string> {
+  const { claudePath, settings, projectPath, model, prompt } = opts;
+  return new Promise((resolve) => {
+    let out = "";
+    let resolved = false;
+
+    const child = runClaudeExec({
+      claudePath,
+      settings,
+      projectPath,
+      model,
+      sessionId: randomUUID(),
+      prompt,
+      onEvent: (ev: any) => {
+        if (!ev || ev.kind !== "claude") return;
+        const data = ev.data || {};
+        if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+          const text = claudeMessageToText(data.message);
+          if (text) out += (out ? "\n" : "") + text;
+        }
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      resolve(out);
+    }, 25_000);
+
+    child.once("error", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve(out);
+    });
+    child.once("close", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve(out);
+    });
+  });
 }
 
 function maybeOpenExternal(rawUrl: unknown) {
@@ -321,6 +557,100 @@ export async function startApp(): Promise<void> {
     applyRuntimeSettings(next);
     sendSettingsChanged(next);
     return next;
+  });
+
+  ipcMain.handle("actions:generate", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const userPrompt = typeof p.prompt === "string" ? p.prompt.trim() : "";
+    if (!userPrompt) return { ok: false, error: "Missing prompt" };
+    if (userPrompt.length > 4000) return { ok: false, error: "Prompt too long" };
+
+    const settings = store.getSettings();
+    const agents = settings && typeof settings === "object" && (settings as any).agents && typeof (settings as any).agents === "object" ? (settings as any).agents : {};
+    const codexSettings = agents && typeof agents.codex === "object" ? agents.codex : {};
+    const claudeSettings = agents && typeof agents.claude === "object" ? agents.claude : {};
+
+    // Pick agent/model (prefer Settings -> UI model; fall back to any installed agent).
+    let binaries: any = null;
+    try {
+      binaries = await checkAgentBinaries(settings, { timeoutMs: 1200 });
+    } catch {
+      binaries = null;
+    }
+    const codexFound = !!(binaries && binaries.codex && binaries.codex.found);
+    const claudeFound = !!(binaries && binaries.claude && binaries.claude.found);
+
+    const uiModelRaw = settings && typeof settings === "object" ? String((settings as any).uiModel || "").trim() : "";
+    const uiModelLow = uiModelRaw.toLowerCase();
+    const uiAgent = uiModelRaw ? (uiModelLow === "opus" || uiModelLow === "sonnet" || uiModelLow === "haiku" ? "claude" : "codex") : "";
+    const preferredAgent = uiAgent || "codex";
+
+    let agent: "codex" | "claude" = "codex";
+    if (preferredAgent === "claude" && claudeFound) agent = "claude";
+    else if (preferredAgent === "codex" && codexFound) agent = "codex";
+    else if (codexFound) agent = "codex";
+    else if (claudeFound) agent = "claude";
+    else return { ok: false, error: "No agent CLI found (install Codex and/or Claude, or set the binary path in Settings)." };
+
+    let model = "";
+    if (uiAgent === agent && uiModelRaw) {
+      model = uiModelRaw;
+    } else if (agent === "claude") {
+      model = typeof claudeSettings.model === "string" ? String(claudeSettings.model || "").trim() : "";
+    } else {
+      model = typeof codexSettings.model === "string" ? String(codexSettings.model || "").trim() : "";
+    }
+
+    const shellPath =
+      process.platform === "win32"
+        ? "powershell.exe"
+        : (typeof process.env.SHELL === "string" && process.env.SHELL.trim()) ||
+          (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+
+    const prompt = buildActionGeneratorPrompt({ userPrompt, platform: process.platform, shell: shellPath });
+
+    try {
+      let raw = "";
+      if (agent === "claude") {
+        const claudePath = resolveClaudeCliPathFromSettings(settings);
+        const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
+        raw = await runClaudeUiPrompt({
+          claudePath,
+          settings: safeClaudeSettings,
+          projectPath: process.cwd(),
+          model,
+          prompt
+        });
+      } else {
+        const codexPath = resolveCodexCliPathFromSettings(settings);
+        const safeCodexSettings = {
+          ...(codexSettings || {}),
+          sandboxMode: "read-only",
+          bypassApprovalsAndSandbox: false,
+          skipGitRepoCheck: true
+        };
+        raw = await runCodexUiPrompt({
+          codexPath,
+          settings: safeCodexSettings,
+          projectPath: process.cwd(),
+          model,
+          prompt
+        });
+      }
+
+      const parsed = extractJsonFromText(raw || "");
+      const action = normalizeGeneratedAction(parsed);
+      if (!action) {
+        const preview = stripMarkdownCodeFences(String(raw || "")).trim();
+        const clipped = preview.length > 800 ? `${preview.slice(0, 800).trimEnd()}…` : preview;
+        return { ok: false, error: `Model did not return a valid action JSON.${clipped ? ` Output:\n\n${clipped}` : ""}` };
+      }
+
+      return { ok: true, action };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
   });
 
   ipcMain.handle("shell:openExternal", async (evt, rawUrl) => {
@@ -594,6 +924,166 @@ export async function startApp(): Promise<void> {
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  });
+
+  function normalizeBranchName(value: unknown): string {
+    const s = typeof value === "string" ? value.trim() : "";
+    if (!s) return "";
+    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+    return stripped.slice(0, 200);
+  }
+
+  ipcMain.handle("checkouts:integrateToDefault", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const jobId = String(p.jobId || "").trim();
+    const commitMessage = typeof p.commitMessage === "string" ? p.commitMessage.trim() : "";
+    if (!jobId) return { ok: false, error: "Missing jobId" };
+
+    const got = jobsManager.getJob(jobId);
+    if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
+    const job = (got as any).job || {};
+
+    const projectId = String(job.projectId || "").trim();
+    if (!projectId) return { ok: false, error: "Job is missing projectId" };
+    const project = store.listProjects().find((x: any) => x && x.id === projectId) || null;
+    if (!project) return { ok: false, error: "Project not found" };
+
+    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!sourceDir) return { ok: false, error: "Job is missing projectPath" };
+    if (!fs.existsSync(sourceDir)) return { ok: false, error: `Checkout path does not exist: ${sourceDir}` };
+
+    const projectPath = typeof (project as any).path === "string" ? String((project as any).path || "").trim() : "";
+    if (!projectPath) return { ok: false, error: "Project is missing path" };
+    if (!fs.existsSync(projectPath)) return { ok: false, error: `Project path does not exist: ${projectPath}` };
+
+    // If this job ran in-place in the project folder, there is nothing to integrate.
+    if (path.resolve(sourceDir) === path.resolve(projectPath)) {
+      return { ok: false, error: "This job is using the project folder checkout (in-place). Nothing to integrate." };
+    }
+
+    const configuredBranch = normalizeBranchName((project as any).defaultBranch);
+    let targetBranch = configuredBranch;
+    if (!targetBranch) {
+      try {
+        targetBranch = await detectDefaultBranch(projectPath);
+      } catch {
+        targetBranch = "";
+      }
+    }
+    if (!targetBranch) {
+      return {
+        ok: false,
+        error: 'Could not detect default branch. Set it in Project settings ("Default branch").'
+      };
+    }
+
+    // Prefer the worktree where the default branch is actually checked out (avoids switching a random worktree).
+    let targetDir = projectPath;
+    try {
+      const wt = await findWorktreePathForBranch(projectPath, targetBranch);
+      if (wt) targetDir = wt;
+    } catch {
+      // ignore; fall back to projectPath
+    }
+
+    const srcInfo = await getGitInfo(sourceDir);
+    if (!srcInfo.isGitRepo) return { ok: false, error: `Checkout is not a git repo: ${sourceDir}` };
+
+    const tgtInfo = await getGitInfo(targetDir);
+    if (!tgtInfo.isGitRepo) return { ok: false, error: `Default-branch checkout is not a git repo: ${targetDir}` };
+
+    // Safety: only support same-repo worktrees (clone checkouts have separate object DBs).
+    try {
+      const srcCommon = await getGitCommonDir(sourceDir);
+      const tgtCommon = await getGitCommonDir(targetDir);
+      if (!srcCommon || !tgtCommon || srcCommon !== tgtCommon) {
+        return {
+          ok: false,
+          error:
+            "This checkout does not share git objects with the project's checkout (likely a clone). Automatic integration isn't supported yet."
+        };
+      }
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+
+    if (tgtInfo.dirty) {
+      return {
+        ok: false,
+        error: `Default-branch checkout has uncommitted changes. Commit/stash them first:\n\n  ${targetDir}`
+      };
+    }
+    if (tgtInfo.detached) {
+      return {
+        ok: false,
+        error: `Default-branch checkout is in detached HEAD (${tgtInfo.sha || "?"}). Switch to ${targetBranch} first:\n\n  ${targetDir}`
+      };
+    }
+
+    // Best-effort: ensure we're on the target branch in the chosen target worktree.
+    if (tgtInfo.branch !== targetBranch) {
+      try {
+        await switchBranch(targetDir, targetBranch);
+      } catch (err: any) {
+        return {
+          ok: false,
+          error: `Failed to switch default checkout to ${targetBranch}:\n\n  ${targetDir}\n\n${String(err && err.message ? err.message : err)}`
+        };
+      }
+    }
+
+    let committed = false;
+    let committedSha = "";
+    if (srcInfo.dirty) {
+      if (!commitMessage) return { ok: false, error: "Checkout has uncommitted changes. Provide a commit message first." };
+      try {
+        await addAll(sourceDir);
+        committedSha = await commitWithMessage(sourceDir, commitMessage);
+        committed = true;
+      } catch (err: any) {
+        return { ok: false, error: String(err && err.message ? err.message : err) };
+      }
+    }
+
+    let commits: string[] = [];
+    try {
+      commits = await listCommitsInRange(sourceDir, `${targetBranch}..HEAD`, { noMerges: true });
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+
+    if (commits.length === 0) {
+      return {
+        ok: true,
+        targetPath: targetDir,
+        targetBranch,
+        commitsApplied: 0,
+        committed,
+        committedSha
+      };
+    }
+
+    try {
+      await cherryPick(targetDir, commits);
+      return {
+        ok: true,
+        targetPath: targetDir,
+        targetBranch,
+        commitsApplied: commits.length,
+        committed,
+        committedSha
+      };
+    } catch (err: any) {
+      const msg = String(err && err.message ? err.message : err);
+      return {
+        ok: false,
+        error:
+          `Cherry-pick failed in:\n\n  ${targetDir}\n\n` +
+          `${msg}\n\n` +
+          `Resolve conflicts, then run:\n\n  git cherry-pick --continue\n\n(or abort with: git cherry-pick --abort)`
+      };
     }
   });
 

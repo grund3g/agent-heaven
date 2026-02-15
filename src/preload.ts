@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsUpdate: (patch) => ipcRenderer.invoke("settings:update", patch),
 
+  actionsGenerate: async (prompt) => {
+    const res = await invokeOk("actions:generate", { prompt });
+    return res && typeof res === "object" ? (res as any).action : null;
+  },
+
   shellOpenExternal: async (url) => {
     await invokeOk("shell:openExternal", url);
     return true;
@@ -84,6 +89,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   checkoutsRemove: async (projectId, kind, jobId) => {
     await invokeOk("checkouts:remove", { projectId, kind, jobId });
     return true;
+  },
+  checkoutsIntegrateToDefault: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:integrateToDefault", { jobId, commitMessage: p.commitMessage });
+    return res;
   },
 
   jobsList: () => ipcRenderer.invoke("jobs:list"),
