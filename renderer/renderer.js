@@ -127,13 +127,22 @@ const api = window.agentHeaven;
 	  actionsDialogClose: document.getElementById("actionsDialogClose"),
 	  saveActionsBtn: document.getElementById("saveActionsBtn"),
 
-	  actionPromptDialog: document.getElementById("actionPromptDialog"),
-	  actionPromptDialogClose: document.getElementById("actionPromptDialogClose"),
-	  actionPromptDialogMeta: document.getElementById("actionPromptDialogMeta"),
-	  actionPromptInput: document.getElementById("actionPromptInput"),
-	  actionPromptGenerateBtn: document.getElementById("actionPromptGenerateBtn"),
+		  actionPromptDialog: document.getElementById("actionPromptDialog"),
+		  actionPromptDialogClose: document.getElementById("actionPromptDialogClose"),
+		  actionPromptDialogMeta: document.getElementById("actionPromptDialogMeta"),
+		  actionPromptInput: document.getElementById("actionPromptInput"),
+		  actionPromptGenerateBtn: document.getElementById("actionPromptGenerateBtn"),
 
-		  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
+		  textPromptDialog: document.getElementById("textPromptDialog"),
+		  textPromptDialogTitle: document.getElementById("textPromptDialogTitle"),
+		  textPromptDialogMessage: document.getElementById("textPromptDialogMessage"),
+		  textPromptDialogLabel: document.getElementById("textPromptDialogLabel"),
+		  textPromptDialogInput: document.getElementById("textPromptDialogInput"),
+		  textPromptDialogClose: document.getElementById("textPromptDialogClose"),
+		  textPromptDialogCancel: document.getElementById("textPromptDialogCancel"),
+		  textPromptDialogOk: document.getElementById("textPromptDialogOk"),
+
+			  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
 
   codexModelsList: document.getElementById("codexModelsList"),
 
@@ -429,13 +438,96 @@ function laneTitleForKey(key) {
   return "Needs Attention";
 }
 
-function isJobMode() {
-  return document.documentElement.dataset.mode === "job";
-}
+	function isJobMode() {
+	  return document.documentElement.dataset.mode === "job";
+	}
 
-async function pickDisplayId(actionLabel) {
-  if (!api.windowListDisplays) return null;
-  const title = String(actionLabel || "Select display").trim() || "Select display";
+	let textPromptDialogInFlight = false;
+	let textPromptDialogResolve = null;
+	function closeTextPromptDialog() {
+	  if (!els.textPromptDialog) return;
+	  try {
+	    if (els.textPromptDialog.open) els.textPromptDialog.close();
+	  } catch {
+	    // ignore
+	  }
+	}
+	function resolveTextPromptDialog(value) {
+	  if (typeof textPromptDialogResolve !== "function") return;
+	  const resolve = textPromptDialogResolve;
+	  textPromptDialogResolve = null;
+	  textPromptDialogInFlight = false;
+	  resolve(value);
+	}
+	async function promptText(opts = {}) {
+	  const o = opts && typeof opts === "object" ? opts : {};
+	  const title = typeof o.title === "string" ? o.title : "Input";
+	  const message = typeof o.message === "string" ? o.message : "";
+	  const label = typeof o.label === "string" ? o.label : "Value";
+	  const defaultValue = typeof o.defaultValue === "string" ? o.defaultValue : "";
+	  const placeholder = typeof o.placeholder === "string" ? o.placeholder : "";
+	  const okLabel = typeof o.okLabel === "string" ? o.okLabel : "OK";
+	  const cancelLabel = typeof o.cancelLabel === "string" ? o.cancelLabel : "Cancel";
+
+	  // Fallback (or last resort) for builds without the custom dialog.
+	  if (!els.textPromptDialog || !els.textPromptDialogInput) {
+	    const full = message ? `${title}\n\n${message}` : title;
+	    try {
+	      return window.prompt(full, defaultValue);
+	    } catch {
+	      return null;
+	    }
+	  }
+
+	  if (textPromptDialogInFlight) return null;
+	  textPromptDialogInFlight = true;
+
+	  if (els.textPromptDialogTitle) els.textPromptDialogTitle.textContent = title || "Input";
+	  if (els.textPromptDialogMessage) {
+	    els.textPromptDialogMessage.textContent = message;
+	    els.textPromptDialogMessage.hidden = !message;
+	  }
+	  if (els.textPromptDialogLabel) els.textPromptDialogLabel.textContent = label || "Value";
+	  if (els.textPromptDialogOk) els.textPromptDialogOk.textContent = okLabel || "OK";
+	  if (els.textPromptDialogCancel) els.textPromptDialogCancel.textContent = cancelLabel || "Cancel";
+	  if (els.textPromptDialogInput) {
+	    els.textPromptDialogInput.value = defaultValue;
+	    if (placeholder) els.textPromptDialogInput.placeholder = placeholder;
+	    else els.textPromptDialogInput.removeAttribute("placeholder");
+	  }
+
+	  return await new Promise((resolve) => {
+	    textPromptDialogResolve = resolve;
+
+	    try {
+	      els.textPromptDialog.showModal();
+	    } catch {
+	      // Best-effort fallback: reset state and try native prompt.
+	      textPromptDialogResolve = null;
+	      textPromptDialogInFlight = false;
+	      const full = message ? `${title}\n\n${message}` : title;
+	      try {
+	        resolve(window.prompt(full, defaultValue));
+	      } catch {
+	        resolve(null);
+	      }
+	      return;
+	    }
+
+	    try {
+	      if (els.textPromptDialogInput) {
+	        els.textPromptDialogInput.focus();
+	        els.textPromptDialogInput.select();
+	      }
+	    } catch {
+	      // ignore
+	    }
+	  });
+	}
+
+	async function pickDisplayId(actionLabel) {
+	  if (!api.windowListDisplays) return null;
+	  const title = String(actionLabel || "Select display").trim() || "Select display";
 
   let displays;
   try {
@@ -444,17 +536,22 @@ async function pickDisplayId(actionLabel) {
     displays = [];
   }
 
-  const arr = Array.isArray(displays) ? displays : [];
-  if (arr.length === 0) return null;
-  if (arr.length === 1) return arr[0].id;
+	  const arr = Array.isArray(displays) ? displays : [];
+	  if (arr.length === 0) return null;
+	  if (arr.length === 1) return arr[0].id;
 
-  const lines = arr.map((d, idx) => `${idx + 1}: ${d && d.label ? d.label : `Display ${idx + 1}`}`);
-  const raw = window.prompt(`${title}\n\n${lines.join("\n")}\n\nEnter a number (1-${arr.length}):`, "1");
-  if (!raw) return null;
-  const n = Number(String(raw).trim());
-  if (!Number.isFinite(n) || n < 1 || n > arr.length) return null;
-  return arr[n - 1].id;
-}
+	  const lines = arr.map((d, idx) => `${idx + 1}: ${d && d.label ? d.label : `Display ${idx + 1}`}`);
+	  const raw = await promptText({
+	    title,
+	    message: `${lines.join("\n")}\n\nEnter a number (1-${arr.length}):`,
+	    label: "Number",
+	    defaultValue: "1"
+	  });
+	  if (!raw) return null;
+	  const n = Number(String(raw).trim());
+	  if (!Number.isFinite(n) || n < 1 || n > arr.length) return null;
+	  return arr[n - 1].id;
+	}
 
 async function moveThisWindowToDisplay() {
   if (!api.windowMoveToDisplay) {
@@ -3579,13 +3676,18 @@ async function promptEditProjectShortName(projectId, opts = {}) {
   const project = state.projects.find((p) => p && p.id === id) || null;
   if (!project) return false;
 
-  const suggested = suggestShortNameFromProjectName(project.name);
-  const current = normalizeShortName(project.shortName);
-  const def = current || suggested;
+	const suggested = suggestShortNameFromProjectName(project.name);
+	const current = normalizeShortName(project.shortName);
+	const def = current || suggested;
 
-  const label = project && project.name ? `"${project.name}"` : "this project";
-  const input = window.prompt(`Short name / Kürzel for ${label} (optional):`, def);
-  if (input == null) return false;
+	const label = project && project.name ? `"${project.name}"` : "this project";
+	const input = await promptText({
+	  title: "Project short name",
+	  message: `Short name / Kürzel for ${label} (optional):`,
+	  label: "Short name / Kürzel",
+	  defaultValue: def
+	});
+	if (input == null) return false;
 
   const next = normalizeShortName(input);
   if (next === current) return false;
@@ -4869,18 +4971,22 @@ async function runIntegrateToDefaultAction(jobId) {
     let res = null;
     try {
       res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
-    } catch (err) {
-      const msg = String(err && err.message ? err.message : err);
-      if (msg.includes("Provide a commit message first")) {
-        const entered = window.prompt(
-          "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
-          defaultIntegrateCommitMessage(job)
-        );
-        const commitMessage = String(entered || "").trim();
-        if (!commitMessage) {
-          showToast("Integration cancelled.");
-          return;
-        }
+	    } catch (err) {
+	      const msg = String(err && err.message ? err.message : err);
+	      if (msg.includes("Provide a commit message first")) {
+	        const entered = await promptText({
+	          title: "Commit message",
+	          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
+	          label: "Commit message",
+	          defaultValue: defaultIntegrateCommitMessage(job),
+	          okLabel: "Continue",
+	          cancelLabel: "Cancel"
+	        });
+	        const commitMessage = String(entered || "").trim();
+	        if (!commitMessage) {
+	          showToast("Integration cancelled.");
+	          return;
+	        }
         res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
       } else {
         showError(msg);
@@ -7719,21 +7825,66 @@ function wireUi() {
 	  if (els.actionPromptGenerateBtn) {
 	    els.actionPromptGenerateBtn.addEventListener("click", () => generateActionFromPrompt());
 	  }
-  if (els.actionPromptInput) {
-    els.actionPromptInput.addEventListener("keydown", (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        generateActionFromPrompt();
-      }
-    });
-  }
+	  if (els.actionPromptInput) {
+	    els.actionPromptInput.addEventListener("keydown", (e) => {
+	      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+	        e.preventDefault();
+	        generateActionFromPrompt();
+	      }
+	    });
+	  }
 
-  // Settings live previews should not persist unless saved.
-  if (els.settingsDialog) {
-    els.settingsDialog.addEventListener("close", () => {
-      renderBrandLogo(FIXED_LOGO_VARIANT);
-    });
-  }
+	  if (els.textPromptDialogClose) {
+	    els.textPromptDialogClose.addEventListener("click", () => {
+	      resolveTextPromptDialog(null);
+	      closeTextPromptDialog();
+	    });
+	  }
+	  if (els.textPromptDialogCancel) {
+	    els.textPromptDialogCancel.addEventListener("click", () => {
+	      resolveTextPromptDialog(null);
+	      closeTextPromptDialog();
+	    });
+	  }
+	  if (els.textPromptDialogOk) {
+	    els.textPromptDialogOk.addEventListener("click", () => {
+	      const val = els.textPromptDialogInput ? String(els.textPromptDialogInput.value || "") : "";
+	      resolveTextPromptDialog(val);
+	      closeTextPromptDialog();
+	    });
+	  }
+	  if (els.textPromptDialogInput) {
+	    els.textPromptDialogInput.addEventListener("keydown", (e) => {
+	      if (e.key !== "Enter") return;
+	      e.preventDefault();
+	      const val = els.textPromptDialogInput ? String(els.textPromptDialogInput.value || "") : "";
+	      resolveTextPromptDialog(val);
+	      closeTextPromptDialog();
+	    });
+	  }
+	  if (els.textPromptDialog) {
+	    els.textPromptDialog.addEventListener("click", (e) => {
+	      if (e.target === els.textPromptDialog) {
+	        resolveTextPromptDialog(null);
+	        closeTextPromptDialog();
+	      }
+	    });
+	    els.textPromptDialog.addEventListener("cancel", (e) => {
+	      e.preventDefault();
+	      resolveTextPromptDialog(null);
+	      closeTextPromptDialog();
+	    });
+	    els.textPromptDialog.addEventListener("close", () => {
+	      resolveTextPromptDialog(null);
+	    });
+	  }
+
+	  // Settings live previews should not persist unless saved.
+	  if (els.settingsDialog) {
+	    els.settingsDialog.addEventListener("close", () => {
+	      renderBrandLogo(FIXED_LOGO_VARIANT);
+	    });
+	  }
 
   wireAcceleratorCaptureInput(els.settingsGlobalHotkeyAccelerator);
 

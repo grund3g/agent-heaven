@@ -2533,6 +2533,10 @@ body::before {
   color: var(--muted2);
 }
 
+.settings__note--prewrap {
+  white-space: pre-wrap;
+}
+
 .settings__actions {
   display: flex;
   gap: 10px;

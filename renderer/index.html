@@ -553,13 +553,37 @@
 	          </div>
 	        </div>
 	      </div>
-	    </dialog>
+		    </dialog>
 
-	    <dialog id="projectDialog" class="dialog">
-	      <div class="dialog__inner dialog__inner--project">
-	        <div class="dialog__header">
-	          <div class="dialog__title" id="projectDialogTitle">Project</div>
-	          <button id="projectDialogClose" class="btn btn--ghost" type="button">Close</button>
+		    <dialog id="textPromptDialog" class="dialog">
+		      <div class="dialog__inner dialog__inner--rerun">
+		        <div class="dialog__header">
+		          <div class="dialog__title" id="textPromptDialogTitle">Input</div>
+		          <button id="textPromptDialogClose" class="btn btn--ghost" type="button">Close</button>
+		        </div>
+		        <div class="settings">
+		          <div class="settings__section">
+		            <div id="textPromptDialogMessage" class="settings__note settings__note--prewrap"></div>
+		            <label class="field">
+		              <div class="field__label" id="textPromptDialogLabel">Value</div>
+		              <input id="textPromptDialogInput" class="input" />
+		            </label>
+		          </div>
+		        </div>
+		        <div class="dialog__footer">
+		          <div class="dialog__actions dialog__actions--right">
+		            <button id="textPromptDialogCancel" class="btn btn--ghost" type="button">Cancel</button>
+		            <button id="textPromptDialogOk" class="btn btn--primary" type="button">OK</button>
+		          </div>
+		        </div>
+		      </div>
+		    </dialog>
+
+		    <dialog id="projectDialog" class="dialog">
+		      <div class="dialog__inner dialog__inner--project">
+		        <div class="dialog__header">
+		          <div class="dialog__title" id="projectDialogTitle">Project</div>
+		          <button id="projectDialogClose" class="btn btn--ghost" type="button">Close</button>
 	        </div>
 	        <div class="dialog__meta" id="projectDialogMeta"></div>
 	        <div class="settings">
