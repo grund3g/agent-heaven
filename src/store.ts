@@ -45,7 +45,14 @@ export const DEFAULT_STATE = {
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
 
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
-    actions: [],
+    actions: [
+      {
+        id: "ah_builtin_integrate_to_default",
+        name: "Integrate to default branch",
+        // Built-in command handled by the renderer (not executed in the shell).
+        command: "ah:integrate-to-default"
+      }
+    ],
 
     // Per-agent settings (Codex, Claude, ...)
     agents: {

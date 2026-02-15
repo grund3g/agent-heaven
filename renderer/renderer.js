@@ -4739,6 +4739,124 @@ function openJobActionsMenu(anchorEl) {
   menu.style.top = `${Math.round(y)}px`;
 }
 
+function builtInActionKindFromCommand(command) {
+  const raw = String(command || "").replaceAll("\r\n", "\n");
+  const first = (raw.split("\n")[0] || "").trim();
+  if (!first) return "";
+  if (first === "ah:integrate-to-default" || first === "ah:integrate") return "integrate_to_default";
+  return "";
+}
+
+function defaultIntegrateCommitMessage(job) {
+  const title = jobDisplayTitle(job) || "Job";
+  const id = job && typeof job.id === "string" ? job.id : "";
+  const msg = id ? `Integrate ${title} (${id})` : `Integrate ${title}`;
+  return msg.slice(0, 72);
+}
+
+let integrateToDefaultInFlight = false;
+async function runIntegrateToDefaultAction(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+
+  if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
+    showToast("Integration is not supported in this build.");
+    return;
+  }
+
+  if (job.status === "running") {
+    showToast("Wait until the job has finished before integrating.");
+    return;
+  }
+
+  if (integrateToDefaultInFlight) {
+    showToast("Integration already running.");
+    return;
+  }
+
+  const ok = window.confirm(
+    "Integrate this job's checkout into the project's default branch?\n\nThis will cherry-pick the job's commits onto the default branch. Conflicts may require manual resolution.\n\nContinue?"
+  );
+  if (!ok) return;
+
+  const showError = (msg) => {
+    const full = String(msg || "").trim() || "Integration failed.";
+    const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
+    showToast(first, null, 12_000, {
+      actions: [
+        {
+          label: "Details",
+          onClick: () => {
+            try {
+              window.alert(full);
+            } catch {
+              // ignore
+            }
+          }
+        }
+      ]
+    });
+  };
+
+  integrateToDefaultInFlight = true;
+  try {
+    let res = null;
+    try {
+      res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (msg.includes("Provide a commit message first")) {
+        const entered = window.prompt(
+          "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
+          defaultIntegrateCommitMessage(job)
+        );
+        const commitMessage = String(entered || "").trim();
+        if (!commitMessage) {
+          showToast("Integration cancelled.");
+          return;
+        }
+        res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
+      } else {
+        showError(msg);
+        return;
+      }
+    }
+
+    const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
+    const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
+    const targetPath = res && typeof res.targetPath === "string" ? res.targetPath : "";
+    const committed = !!(res && res.committed === true);
+    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha : "";
+
+    let msg = "";
+    if (applied <= 0) msg = "Nothing to integrate.";
+    else msg = `Integrated ${applied} commit${applied === 1 ? "" : "s"} into ${targetBranch || "default branch"}.`;
+    if (committed && committedSha) msg += ` (Committed: ${committedSha})`;
+
+    const toastOpts = targetPath
+      ? {
+          actions: [
+            {
+              label: "Reveal target",
+              kind: "primary",
+              onClick: () => {
+                if (!api || typeof api.shellOpenPath !== "function") return;
+                api.shellOpenPath(targetPath).catch(() => {});
+              }
+            }
+          ]
+        }
+      : null;
+    showToast(msg, null, 12_000, toastOpts);
+  } catch (err) {
+    showError(String(err && err.message ? err.message : err));
+  } finally {
+    integrateToDefaultInFlight = false;
+  }
+}
+
 async function runJobActionById(actionId) {
   const jobId = state.selectedJobId;
   if (!jobId) return;
@@ -4757,6 +4875,12 @@ async function runJobActionById(actionId) {
   const cmd = String(action.command || "").trimEnd();
   if (!cmd) {
     showToast("Action has no command.");
+    return;
+  }
+
+  const builtIn = builtInActionKindFromCommand(cmd);
+  if (builtIn === "integrate_to_default") {
+    await runIntegrateToDefaultAction(jobId);
     return;
   }
 
