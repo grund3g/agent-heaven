@@ -79,6 +79,7 @@ const api = window.agentHeaven;
   branchDialogText: document.getElementById("branchDialogText"),
   branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
   branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
+  branchDialogRunNoAskBtn: document.getElementById("branchDialogRunNoAskBtn"),
   branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
 
   checkoutsDialog: document.getElementById("checkoutsDialog"),
@@ -5929,6 +5930,39 @@ function appendJobMessage(jobId, message) {
   upsertJob(job);
 }
 
+async function addSkipDefaultBranchConfirmBranch(projectId, branch) {
+  const id = String(projectId || "").trim();
+  const b = normalizeBranchName(branch);
+  if (!id || !b) return false;
+  if (!api || typeof api.projectsUpdate !== "function") return false;
+
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return false;
+
+  const existing = Array.isArray(project.skipDefaultBranchConfirmBranches) ? project.skipDefaultBranchConfirmBranches : [];
+  const next = [];
+  const seen = new Set();
+  for (const x of existing) {
+    const nx = normalizeBranchName(x);
+    if (!nx) continue;
+    if (seen.has(nx)) continue;
+    seen.add(nx);
+    next.push(nx);
+    if (next.length >= 100) break;
+  }
+  if (!seen.has(b)) next.push(b);
+  while (next.length > 100) next.shift();
+
+  try {
+    await api.projectsUpdate(id, { skipDefaultBranchConfirmBranches: next });
+    project.skipDefaultBranchConfirmBranches = next;
+    return true;
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err));
+    return false;
+  }
+}
+
 async function maybeConfirmDefaultBranchBeforeRun(projectId) {
   const id = String(projectId || "").trim();
   if (!id) return true;
@@ -5953,6 +5987,11 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId) {
 
   const cur = typeof info.branch === "string" ? info.branch.trim() : "";
   if (!cur || cur === def) return true;
+  const curNorm = normalizeBranchName(cur);
+  if (curNorm && Array.isArray(project.skipDefaultBranchConfirmBranches)) {
+    const suppress = project.skipDefaultBranchConfirmBranches.some((b) => normalizeBranchName(b) === curNorm);
+    if (suppress) return true;
+  }
 
   const action = await promptBranchMismatch({
     projectName: project.name,
@@ -5973,6 +6012,11 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId) {
       setHint(String(err && err.message ? err.message : err), "error");
       return false;
     }
+  }
+
+  if (action === "run_no_ask") {
+    await addSkipDefaultBranchConfirmBranch(id, curNorm || cur);
+    return true;
   }
 
   if (action === "run") return true;
@@ -6856,6 +6900,7 @@ function wireUi() {
   if (els.branchDialogClose) els.branchDialogClose.addEventListener("click", () => resolveBranchDialog("cancel"));
   if (els.branchDialogCheckoutBtn) els.branchDialogCheckoutBtn.addEventListener("click", () => resolveBranchDialog("checkout"));
   if (els.branchDialogRunBtn) els.branchDialogRunBtn.addEventListener("click", () => resolveBranchDialog("run"));
+  if (els.branchDialogRunNoAskBtn) els.branchDialogRunNoAskBtn.addEventListener("click", () => resolveBranchDialog("run_no_ask"));
   if (els.branchDialogCancelBtn) els.branchDialogCancelBtn.addEventListener("click", () => resolveBranchDialog("cancel"));
   if (els.branchDialog) {
     els.branchDialog.addEventListener("click", (e) => {

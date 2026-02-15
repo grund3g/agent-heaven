@@ -126,6 +126,21 @@ function normalizeBranchName(value) {
   return stripped.slice(0, 200);
 }
 
+function normalizeBranchList(value, maxLen = 100) {
+  const arr = Array.isArray(value) ? value : value == null ? [] : [value];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of arr) {
+    const b = normalizeBranchName(item);
+    if (!b) continue;
+    if (seen.has(b)) continue;
+    seen.add(b);
+    out.push(b);
+    if (out.length >= maxLen) break;
+  }
+  return out;
+}
+
 function normalizeCheckoutMode(value) {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (!raw) return "";
@@ -219,6 +234,24 @@ function ensureProjectCheckoutSettings(projects) {
     } else if ((obj as any).defaultBranch !== nextBranch) {
       (obj as any).defaultBranch = nextBranch;
       changed = true;
+    }
+
+    {
+      const curRaw = (obj as any).skipDefaultBranchConfirmBranches;
+      const next = normalizeBranchList(curRaw);
+      const same =
+        Array.isArray(curRaw) &&
+        curRaw.length === next.length &&
+        curRaw.every((x: any, i: number) => x === next[i]);
+      if (next.length === 0) {
+        if (Object.prototype.hasOwnProperty.call(obj, "skipDefaultBranchConfirmBranches")) {
+          delete (obj as any).skipDefaultBranchConfirmBranches;
+          changed = true;
+        }
+      } else if (!same) {
+        (obj as any).skipDefaultBranchConfirmBranches = next;
+        changed = true;
+      }
     }
 
     return obj;
@@ -523,6 +556,11 @@ export class Store {
       if (b) (p as any).defaultBranch = b;
       else if (Object.prototype.hasOwnProperty.call(p, "defaultBranch")) delete (p as any).defaultBranch;
     }
+    {
+      const next = normalizeBranchList((p as any).skipDefaultBranchConfirmBranches);
+      if (next.length > 0) (p as any).skipDefaultBranchConfirmBranches = next;
+      else if (Object.prototype.hasOwnProperty.call(p, "skipDefaultBranchConfirmBranches")) delete (p as any).skipDefaultBranchConfirmBranches;
+    }
 
     this.state.projects = [...this.state.projects, p];
     this.save();
@@ -553,6 +591,12 @@ export class Store {
     const nextDefaultBranch = hasDefaultBranch ? normalizeBranchName((rawPatch as any).defaultBranch) : "";
     if (hasDefaultBranch) delete (rawPatch as any).defaultBranch;
 
+    const hasSkipDefaultBranchConfirmBranches = Object.prototype.hasOwnProperty.call(rawPatch, "skipDefaultBranchConfirmBranches");
+    const nextSkipDefaultBranchConfirmBranches = hasSkipDefaultBranchConfirmBranches
+      ? normalizeBranchList((rawPatch as any).skipDefaultBranchConfirmBranches)
+      : [];
+    if (hasSkipDefaultBranchConfirmBranches) delete (rawPatch as any).skipDefaultBranchConfirmBranches;
+
     const hasCheckoutMode = Object.prototype.hasOwnProperty.call(rawPatch, "checkoutMode");
     const nextCheckoutMode = hasCheckoutMode ? normalizeCheckoutMode((rawPatch as any).checkoutMode) || "inplace" : "";
     if (hasCheckoutMode) delete (rawPatch as any).checkoutMode;
@@ -568,6 +612,13 @@ export class Store {
       if (hasDefaultBranch) {
         if (nextDefaultBranch) (updated as any).defaultBranch = nextDefaultBranch;
         else delete (updated as any).defaultBranch;
+      }
+      if (hasSkipDefaultBranchConfirmBranches) {
+        if (nextSkipDefaultBranchConfirmBranches.length > 0) {
+          (updated as any).skipDefaultBranchConfirmBranches = nextSkipDefaultBranchConfirmBranches;
+        } else {
+          delete (updated as any).skipDefaultBranchConfirmBranches;
+        }
       }
       if (hasCheckoutMode) {
         (updated as any).checkoutMode = nextCheckoutMode;
