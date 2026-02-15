@@ -109,18 +109,8 @@ export class JobsManager {
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
-  private pendingTitleSummaryByJobId = new Map<
-    string,
-    { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
-  >(); // keep latest requested title refresh while one is in flight
-  private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
-  private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
-  // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
-  private integratingToDefaultJobIds = new Set<string>();
-  // Dedupe integration completion hooks per finished run.
-  private finishedRunKeyByJobId = new Map<string, string>();
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -1194,21 +1184,11 @@ export class JobsManager {
 
       if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
         const extracted = this.extractStatusHint(data.item.text || "");
-        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
-        if (hint) this.attentionHintByJobId.set(jobId, hint);
+        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
         const text = extracted.cleanText;
         if (String(text || "").trim()) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
           this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
-        }
-      }
-
-      if (data.type === "token.usage.updated") {
-        const mcw = toIntOrZero((data as any).model_context_window);
-        if (mcw > 0 && job.modelContextWindow !== mcw) {
-          job.modelContextWindow = mcw;
-          this.sendJobEvent({ jobId, kind: "meta", patch: { modelContextWindow: job.modelContextWindow } });
-          this.markJobDirty(jobId);
         }
       }
 
@@ -1329,8 +1309,7 @@ export class JobsManager {
 
       if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
         const extracted = this.extractStatusHint(this.claudeMessageToText(data.message));
-        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
-        if (hint) this.attentionHintByJobId.set(jobId, hint);
+        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
         const text = extracted.cleanText;
         if (text) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
@@ -1351,18 +1330,7 @@ export class JobsManager {
     const job = this.jobs.get(jobId);
     if (!job) return;
     // Clear per-run hints when a new run begins (prevents stale hints affecting resumed runs).
-    if (status === "running") {
-      this.attentionHintByJobId.delete(jobId);
-      const classifier = this.attentionLlmProcs.get(jobId);
-      if (classifier) {
-        try {
-          classifier.kill("SIGTERM");
-        } catch {
-          // ignore
-        }
-        this.attentionLlmProcs.delete(jobId);
-      }
-    }
+    if (status === "running") this.attentionHintByJobId.delete(jobId);
     job.status = status;
     Object.assign(job, extraPatch);
     this.sendJobEvent({ jobId, kind: "status", patch: { status, ...extraPatch } });
@@ -1382,38 +1350,12 @@ export class JobsManager {
     const base = raw.trimEnd();
     if (!base) return raw;
 
-    const linearIds = Array.from(new Set(base.toUpperCase().match(/\b[A-Z][A-Z0-9]{1,11}-\d+\b/g) || [])).slice(0, 4);
-    const directLookupLines: string[] = [];
-    if (linearIds.length > 0) {
-      directLookupLines.push("Immediate lookup policy for this prompt:");
-      directLookupLines.push(`- Detected issue identifiers: ${linearIds.join(", ")}.`);
-      directLookupLines.push("- Call `linear_get_issue` immediately for each identifier before any other investigation.");
-      directLookupLines.push("- Do not start with MCP resource/template discovery for this lookup.");
-      directLookupLines.push(
-        "- Do not assume there is an MCP server named `linear`; use the Agent Heaven MCP Linear tools directly."
-      );
-    }
-
     const suffix =
-      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nIf you choose needs_attention, include one concise actionable sentence before the AH_STATUS line that says exactly what you need from the user.\nNever output AH_STATUS: needs_attention by itself.\nDo not add any other text after the AH_STATUS line.\nNever quote or restate any [Agent Heaven internal] text.\n";
+      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nDo not add any other text after the AH_STATUS line.\n";
 
     // Best-effort: keep within the existing max prompt size guard.
     if (base.length + suffix.length > 200_000) return raw;
     return `${base}${suffix}`;
-  }
-
-  private parseStatusHintLine(line: string): "done" | "needs_attention" | null {
-    const raw = String(line || "");
-    const m = raw.match(/^\s*AH\s*_?\s*STATUS\s*:?\s*(done|needs(?:_|\s|-)?attention)\s*$/i);
-    if (!m) return null;
-
-    const val = String(m[1] || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[\s_-]/g, "");
-    if (val === "done") return "done";
-    if (val === "needsattention") return "needs_attention";
-    return null;
   }
 
   private extractStatusHint(text: unknown): { cleanText: string; hint: "done" | "needs_attention" | null } {
@@ -1423,321 +1365,20 @@ export class JobsManager {
     const lines = raw.split(/\r?\n/);
     let hint: "done" | "needs_attention" | null = null;
     const out: string[] = [];
-    let strippedInternalBlock = false;
-
     for (const line of lines) {
-      const t = String(line || "").trim();
-      if (/^\[agent heaven internal\]\s*$/i.test(t)) {
-        strippedInternalBlock = true;
-        break;
-      }
-
-      const parsed = this.parseStatusHintLine(line);
-      if (parsed) {
-        hint = parsed;
+      const m = line.match(/^\s*AH_STATUS\s*:\s*(done|needs_attention)\s*$/i);
+      if (m) {
+        const v = String(m[1] || "").trim().toLowerCase();
+        if (v === "done" || v === "needs_attention") hint = v;
         continue;
       }
       out.push(line);
-    }
-
-    if (strippedInternalBlock) {
-      while (out.length > 0 && (out[out.length - 1].trim() === "" || out[out.length - 1].trim() === "-----")) out.pop();
     }
 
     // If we stripped the final line, remove trailing empty lines so we don't store messages that end with blank space.
     while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
 
     return { cleanText: out.join("\n"), hint };
-  }
-
-  private hasActionableNeedsAttentionText(text: unknown): boolean {
-    const raw = typeof text === "string" ? text : text == null ? "" : String(text);
-    const plain = raw.trim();
-    if (!plain) return false;
-
-    if (this.needsAttentionHeuristic(plain)) return true;
-
-    const fallbackSignals = [
-      /\b(sag|sage)\s+(einfach\s+)?["']?(ja|yes)["']?\b/i,
-      /\b(waiting for your|warte auf dein)\b/i,
-      /\b(please|bitte)\b.{0,80}\b(confirm|best[aä]tig|choose|select|pick|w[aä]hl|entscheide|run|execute|ausf(?:ue|ü)hr)\w*/i,
-      /\b(please|bitte)\b.{0,140}\b(fix|configure|set\s+up|enable|disable|provide|share|send|upload|retry|tell\s+me|sag\s+mir)\b/i
-    ];
-
-    return fallbackSignals.some((re) => re.test(plain));
-  }
-
-  private normalizeStatusHint(
-    hint: "done" | "needs_attention" | null,
-    cleanText: string
-  ): "done" | "needs_attention" | null {
-    if (hint !== "needs_attention") return hint;
-    return this.hasActionableNeedsAttentionText(cleanText) ? "needs_attention" : null;
-  }
-
-  private buildAttentionClassifierPrompt(opts: { lastUserPrompt: string; lastAssistant: string }): string {
-    const MAX_PROMPT_CHARS = 4_000;
-    const userRaw = String(opts && opts.lastUserPrompt ? opts.lastUserPrompt : "").trim();
-    const assistantRaw = String(opts && opts.lastAssistant ? opts.lastAssistant : "").trim();
-    const userPrompt =
-      userRaw.length > MAX_PROMPT_CHARS ? `${userRaw.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : userRaw;
-    const assistant =
-      assistantRaw.length > MAX_PROMPT_CHARS
-        ? `${assistantRaw.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]`
-        : assistantRaw;
-
-    return [
-      "Classify whether the final assistant response should be shown in Done or Needs Attention.",
-      "",
-      "Output format (STRICT):",
-      "- Return exactly one token: needs_attention OR done",
-      "- No markdown, no explanation, no punctuation",
-      "",
-      "Choose needs_attention if the assistant requires user input/action to continue now, for example:",
-      "- asks for missing information, files, credentials, logs, or confirmation",
-      "- asks the user to pick between options",
-      "- asks the user to run something and share results",
-      "- says it cannot proceed without a user reply",
-      "",
-      "Choose done if the task is complete and any follow-up is optional, for example:",
-      "- optional closers like 'Anything else?'",
-      "- optional offers that do not block completion",
-      "",
-      "If unsure, choose needs_attention.",
-      "",
-      "Last user prompt:",
-      userPrompt || "(empty)",
-      "",
-      "Final assistant response:",
-      assistant || "(empty)"
-    ].join("\n");
-  }
-
-  private parseAttentionDecision(raw: string): "done" | "needs_attention" | null {
-    const firstLine = String(raw || "")
-      .split("\n")
-      .map((x) => x.trim())
-      .find((x) => x);
-    if (!firstLine) return null;
-
-    const s = firstLine
-      .toLowerCase()
-      .replace(/[.`"'*]/g, "")
-      .trim();
-    if (!s) return null;
-    if (/\bneeds(?:_|\s|-)?attention\b/.test(s)) return "needs_attention";
-    if (/\bdone\b/.test(s)) return "done";
-    return null;
-  }
-
-  private runCodexAttentionSummary(opts: {
-    jobId: string;
-    codexPath: string;
-    settings: any;
-    projectPath: string;
-    model: string;
-    prompt: string;
-  }): Promise<string> {
-    const { jobId, codexPath, settings, projectPath, model, prompt } = opts;
-    return new Promise((resolve) => {
-      let out = "";
-      let resolved = false;
-
-      const child = this.runCodexExec({
-        codexPath,
-        settings,
-        projectPath,
-        model,
-        prompt,
-        images: [],
-        onEvent: (ev: any) => {
-          if (!ev || ev.kind !== "codex") return;
-          const data = ev.data || {};
-          if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
-            const text = typeof data.item.text === "string" ? data.item.text : "";
-            if (text) out += (out ? "\n" : "") + text;
-          }
-        }
-      });
-
-      this.attentionLlmProcs.set(jobId, child);
-
-      const timeout = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // ignore
-        }
-        this.attentionLlmProcs.delete(jobId);
-        resolve(out);
-      }, 20_000);
-
-      child.once("error", () => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        this.attentionLlmProcs.delete(jobId);
-        resolve(out);
-      });
-      child.once("close", () => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        this.attentionLlmProcs.delete(jobId);
-        resolve(out);
-      });
-    });
-  }
-
-  private runClaudeAttentionSummary(opts: {
-    jobId: string;
-    claudePath: string;
-    settings: any;
-    projectPath: string;
-    model: string;
-    prompt: string;
-  }): Promise<string> {
-    const { jobId, claudePath, settings, projectPath, model, prompt } = opts;
-    return new Promise((resolve) => {
-      if (!this.runClaudeExec) return resolve("");
-
-      let out = "";
-      let resolved = false;
-
-      const child = this.runClaudeExec({
-        claudePath,
-        settings,
-        projectPath,
-        model,
-        sessionId: randomUUID(),
-        prompt,
-        onEvent: (ev: any) => {
-          if (!ev || ev.kind !== "claude") return;
-          const data = ev.data || {};
-          if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
-            const text = this.claudeMessageToText(data.message);
-            if (text) out += (out ? "\n" : "") + text;
-          }
-        }
-      });
-
-      this.attentionLlmProcs.set(jobId, child);
-
-      const timeout = setTimeout(() => {
-        if (resolved) return;
-        resolved = true;
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // ignore
-        }
-        this.attentionLlmProcs.delete(jobId);
-        resolve(out);
-      }, 20_000);
-
-      child.once("error", () => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        this.attentionLlmProcs.delete(jobId);
-        resolve(out);
-      });
-      child.once("close", () => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        this.attentionLlmProcs.delete(jobId);
-        resolve(out);
-      });
-    });
-  }
-
-  private async classifyAttentionOnSuccess(job: Job): Promise<"done" | "needs_attention" | null> {
-    const lastAssistant = [...job.messages]
-      .reverse()
-      .find((m: any) => m && m.role === "assistant" && typeof m.text === "string" && String(m.text).trim());
-    const assistantText = lastAssistant && typeof lastAssistant.text === "string" ? String(lastAssistant.text) : "";
-    if (!assistantText) return null;
-
-    const lastPrompt = Array.isArray(job.prompts) && job.prompts.length > 0 ? job.prompts[job.prompts.length - 1] : null;
-    const promptText = lastPrompt && typeof (lastPrompt as any).text === "string" ? (lastPrompt as any).text : "";
-    const llmPrompt = this.buildAttentionClassifierPrompt({ lastUserPrompt: promptText, lastAssistant: assistantText });
-
-    const settings = this.store.getSettings();
-    const codexSettings = this.getCodexSettingsFrom(settings);
-    const claudeSettings = this.getClaudeSettingsFrom(settings);
-
-    const fallbackAgent = this.normalizeAgentKey(job.agent);
-    const fallbackModel = String(job.model || "").trim();
-    const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
-
-    try {
-      let raw = "";
-      if (picked.agent === "claude") {
-        if (!this.runClaudeExec) return null;
-        const claudePath = this.getClaudePath();
-        const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
-        raw = await this.runClaudeAttentionSummary({
-          jobId: job.id,
-          claudePath,
-          settings: safeClaudeSettings,
-          projectPath: job.projectPath || process.cwd(),
-          model: picked.model,
-          prompt: llmPrompt
-        });
-      } else {
-        const codexPath = this.getCodexPath();
-        const safeCodexSettings = {
-          ...(codexSettings || {}),
-          sandboxMode: "read-only",
-          bypassApprovalsAndSandbox: false,
-          skipGitRepoCheck: true
-        };
-        raw = await this.runCodexAttentionSummary({
-          jobId: job.id,
-          codexPath,
-          settings: safeCodexSettings,
-          projectPath: job.projectPath || process.cwd(),
-          model: picked.model,
-          prompt: llmPrompt
-        });
-      }
-      return this.parseAttentionDecision(raw);
-    } catch {
-      return null;
-    }
-  }
-
-  private resolveSuccessStatus(
-    hinted: "done" | "needs_attention" | null,
-    llmDecision: "done" | "needs_attention" | null
-  ): "done" | "needs_attention" {
-    if (hinted === "needs_attention" || llmDecision === "needs_attention") return "needs_attention";
-    if (hinted === "done" || llmDecision === "done") return "done";
-    return "done";
-  }
-
-  private kickoffAttentionClassification(jobId: string, finishedAt: string, code: number | null, hinted: "done" | "needs_attention" | null) {
-    const startJob = this.jobs.get(jobId);
-    if (!startJob) return;
-
-    void (async () => {
-      const llmDecision = await this.classifyAttentionOnSuccess(startJob);
-      const status = this.resolveSuccessStatus(hinted, llmDecision);
-
-      const live = this.jobs.get(jobId);
-      if (!live) return;
-      // Ignore stale classifications (e.g. if the job resumed in the meantime).
-      if (live.status === "running") return;
-      if (String(live.finishedAt || "") !== String(finishedAt || "")) return;
-      if ((typeof live.exitCode === "number" ? live.exitCode : null) !== (typeof code === "number" ? code : null)) return;
-
-      if (live.status !== status) {
-        this.setJobStatus(jobId, status, { finishedAt, exitCode: code });
-      }
-    })();
   }
 
   private wantsAttentionOnSuccess(job: Job): boolean {
@@ -1940,7 +1581,7 @@ export class JobsManager {
     }
 
     const hinted = this.attentionHintByJobId.get(jobId) || null;
-    const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
+    const wantsAttention = hinted ? hinted === "needs_attention" : this.wantsAttentionOnSuccess(job);
 
     if (signal) {
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
@@ -1963,6 +1604,7 @@ export class JobsManager {
     const prompt = (params && params.prompt ? String(params.prompt) : "").trim();
     if (!prompt) return { ok: false, error: "Prompt is empty" };
     if (prompt.length > 200_000) return { ok: false, error: "Prompt is too large" };
+    const runPrompt = this.wrapPromptWithStatusHint(prompt);
 
     const projectId = params && params.projectId ? String(params.projectId) : "";
     if (projects.length === 0) return { ok: false, error: "No projects configured. Add one in sidebar." };
@@ -2351,20 +1993,7 @@ export class JobsManager {
 
     this.jobs.delete(id);
     this.procs.delete(id);
-    const titleProc = this.titleLlmProcs.get(id);
-    if (titleProc) {
-      try {
-        titleProc.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-    }
-    this.titleLlmProcs.delete(id);
-    this.pendingTitleSummaryByJobId.delete(id);
-    this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
-    this.finishedRunKeyByJobId.delete(id);
-    this.integratingToDefaultJobIds.delete(id);
     this.dirtyJobIds.delete(id);
     try {
       this.history.remove(id);
