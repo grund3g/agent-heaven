@@ -4583,27 +4583,95 @@ function safeUuid() {
   return `ah_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function fnv1a32Hex(s) {
+  const str = typeof s === "string" ? s : "";
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function stableActionId(seed) {
+  return `ah_act_${fnv1a32Hex(seed)}`;
+}
+
 function normalizeActions(value) {
-  const arr = Array.isArray(value) ? value : [];
+  // Accept multiple shapes for backwards compatibility:
+  // - [{ id, name, command }]
+  // - [{ id, title|label, cmd|command|value }]
+  // - ["shell command", ...]
+  // - [["Name", "shell command"], ...]
+  // - { "Name": "shell command", ... }
+  let arr = [];
+  if (Array.isArray(value)) {
+    arr = value;
+  } else if (value && typeof value === "object") {
+    try {
+      arr = Object.entries(value).map(([k, v]) => ({ name: k, command: v }));
+    } catch {
+      arr = [];
+    }
+  }
   const seen = new Set();
   const out = [];
 
   for (const item of arr) {
-    const obj = item && typeof item === "object" ? item : {};
-    let id = typeof obj.id === "string" ? obj.id.trim() : "";
-    let name = typeof obj.name === "string" ? obj.name.trim() : "";
-    let command = typeof obj.command === "string" ? obj.command : "";
+    let id = "";
+    let name = "";
+    let command = "";
 
-    command = command.replaceAll("\r\n", "\n").trimEnd();
+    if (typeof item === "string") {
+      command = item;
+    } else if (Array.isArray(item)) {
+      const rawName = item.length > 0 && typeof item[0] === "string" ? item[0].trim() : "";
+      const rawCommand = item.length > 1 && typeof item[1] === "string" ? item[1] : "";
+      name = rawCommand ? rawName : "";
+      command = rawCommand || (typeof item[0] === "string" ? item[0] : "");
+    } else {
+      const obj = item && typeof item === "object" ? item : {};
+      id = typeof obj.id === "string" ? obj.id.trim() : "";
+      name = typeof obj.name === "string" ? obj.name.trim() : "";
+      if (!name && typeof obj.title === "string") name = obj.title.trim();
+      if (!name && typeof obj.label === "string") name = obj.label.trim();
+
+      const rawCmd =
+        typeof obj.command === "string"
+          ? obj.command
+          : typeof obj.cmd === "string"
+            ? obj.cmd
+            : typeof obj.shell === "string"
+              ? obj.shell
+              : typeof obj.value === "string"
+                ? obj.value
+                : Array.isArray(obj.command)
+                  ? obj.command.filter((x) => typeof x === "string").join("\n")
+                  : "";
+      command = rawCmd;
+    }
+
+    command = String(command || "").replaceAll("\r\n", "\n").trimEnd();
     if (!command) continue;
-
-    if (!id || seen.has(id)) id = safeUuid();
-    seen.add(id);
 
     if (!name) {
       const first = (command.split("\n")[0] || "").trim();
       name = first.slice(0, 80) || "Action";
     }
+
+    if (!id) {
+      // Stable ids help keep select values intact even if actions were stored without ids.
+      id = stableActionId(`${name}\n${command}`);
+      if (seen.has(id)) {
+        let n = 2;
+        while (seen.has(`${id}_${n}`)) n++;
+        id = `${id}_${n}`;
+      }
+    } else if (seen.has(id)) {
+      id = safeUuid();
+      while (seen.has(id)) id = safeUuid();
+    }
+    seen.add(id);
 
     out.push({ id, name, command });
   }
