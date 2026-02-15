@@ -133,6 +133,8 @@ const api = window.agentHeaven;
 			  settingsTestSoundDone: document.getElementById("settingsTestSoundDone"),
 	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
+	  settingsDemoMode: document.getElementById("settingsDemoMode"),
+	  settingsDemoResetBtn: document.getElementById("settingsDemoResetBtn"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -186,6 +188,7 @@ const api = window.agentHeaven;
 
 const state = {
   settings: null,
+  demoMode: false,
   agentBinaries: null,
   projects: [],
   jobs: new Map(),
@@ -240,7 +243,8 @@ const STORAGE = {
   sidebarCollapsed: "agentHeaven.sidebarCollapsed",
   composerDraft: "agentHeaven.draft.composer",
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
-  onboardingSeen: "agentHeaven.onboarding.seen.v1"
+  onboardingSeen: "agentHeaven.onboarding.seen.v1",
+  demoMode: "agentHeaven.demoMode.v1"
 };
 
 const DEMO = {
@@ -250,6 +254,30 @@ const DEMO = {
     attention: "__ah_demo_attention__",
     done: "__ah_demo_done__"
   }
+};
+
+const DEMO_MODE = {
+  projectIds: {
+    acme: "__ah_demo_mode_proj_acme__",
+    orbit: "__ah_demo_mode_proj_orbit__",
+    helio: "__ah_demo_mode_proj_helio__"
+  },
+  jobIds: {
+    running1: "__ah_demo_mode_job_running_1__",
+    running2: "__ah_demo_mode_job_running_2__",
+    attention1: "__ah_demo_mode_job_attention_1__",
+    attention2: "__ah_demo_mode_job_attention_2__",
+    done1: "__ah_demo_mode_job_done_1__",
+    done2: "__ah_demo_mode_job_done_2__",
+    done3: "__ah_demo_mode_job_done_3__",
+    archived1: "__ah_demo_mode_job_archived_1__",
+    archived2: "__ah_demo_mode_job_archived_2__",
+    trashed1: "__ah_demo_mode_job_trashed_1__"
+  }
+};
+
+const demoRuntime = {
+  timersByJobId: new Map()
 };
 
 const TOUR_ROOT_ID = "ahTour";
@@ -982,6 +1010,23 @@ function getStoredOnboardingSeen() {
 function storeOnboardingSeen() {
   try {
     window.localStorage.setItem(STORAGE.onboardingSeen, "1");
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredDemoMode() {
+  try {
+    return window.localStorage.getItem(STORAGE.demoMode) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function storeDemoMode(enabled) {
+  try {
+    if (enabled) window.localStorage.setItem(STORAGE.demoMode, "1");
+    else window.localStorage.removeItem(STORAGE.demoMode);
   } catch {
     // ignore
   }
@@ -2728,8 +2773,9 @@ async function runSearch(query) {
   renderSearchUi();
 
   try {
-    const res =
-      api && typeof api.jobsSearch === "function"
+    const res = state.demoMode
+      ? localSearchJobs(q)
+      : api && typeof api.jobsSearch === "function"
         ? await api.jobsSearch(q, { limit: 20000, includeLogs: true })
         : localSearchJobs(q);
 
@@ -2975,6 +3021,533 @@ function clearDemoJobs() {
   }
 
   return removed;
+}
+
+function isInteractiveDemoJob(job) {
+  return !!(state.demoMode && isDemoJob(job));
+}
+
+function demoModeProjects() {
+  return [
+    {
+      id: DEMO_MODE.projectIds.acme,
+      name: "Acme Webapp",
+      shortName: "WEB",
+      path: "/Users/demo/Projects/acme-webapp",
+      color: "#4bb6ff",
+      defaultBranch: "main",
+      checkoutMode: "worktree",
+      gitBranch: "main",
+      gitSha: "7c9a1bf",
+      gitDetached: false,
+      gitDirty: false,
+      gitError: ""
+    },
+    {
+      id: DEMO_MODE.projectIds.orbit,
+      name: "Orbit API",
+      shortName: "API",
+      path: "/Users/demo/Projects/orbit-api",
+      color: "#64d8a3",
+      defaultBranch: "main",
+      checkoutMode: "clone",
+      gitBranch: "feature/rate-limits",
+      gitSha: "c2f1a0d",
+      gitDetached: false,
+      gitDirty: true,
+      gitError: ""
+    },
+    {
+      id: DEMO_MODE.projectIds.helio,
+      name: "Helio Mobile",
+      shortName: "MOB",
+      path: "/Users/demo/Projects/helio-mobile",
+      color: "#ffd166",
+      defaultBranch: "main",
+      checkoutMode: "inplace",
+      gitBranch: "main",
+      gitSha: "b18d3e4",
+      gitDetached: false,
+      gitDirty: false,
+      gitError: ""
+    }
+  ];
+}
+
+function demoModeAgentBinaries() {
+  const now = new Date().toISOString();
+  return {
+    checkedAt: now,
+    codex: { found: true, path: "codex" },
+    claude: { found: true, path: "claude" }
+  };
+}
+
+function demoModeSeedJobs() {
+  const now = Date.now();
+  const iso = (ms) => new Date(ms).toISOString();
+  const prompt = (ms, text) => ({ ts: iso(ms), text: String(text || ""), images: [] });
+  const msg = (ms, role, text) => ({ ts: iso(ms), role: String(role || ""), text: String(text || "") });
+  const log = (ms, stream, text) => ({ ts: iso(ms), kind: "log", stream: String(stream || "stdout"), text: String(text || "") });
+
+  return [
+    {
+      id: DEMO_MODE.jobIds.running1,
+      demo: true,
+      title: "",
+      status: "running",
+      box: "board",
+      createdAt: iso(now - 7 * 60 * 1000),
+      startedAt: iso(now - 6.6 * 60 * 1000),
+      finishedAt: "",
+      projectId: DEMO_MODE.projectIds.orbit,
+      projectPath: "/Users/demo/Projects/orbit-api",
+      agent: "codex",
+      model: "gpt-5.3-codex",
+      threadId: "demo-thread-orbit-1",
+      prompts: [
+        prompt(
+          now - 6.6 * 60 * 1000,
+          "Add a /v1/reports endpoint with pagination + filters (status, owner). Include tests."
+        )
+      ],
+      queuedPrompts: [prompt(now - 0.8 * 60 * 1000, "Also add OpenAPI docs for the new endpoint.")],
+      messages: [
+        msg(
+          now - 6.3 * 60 * 1000,
+          "assistant",
+          "Plan:\n1) Add query params (cursor, limit, status, owner)\n2) Implement DB query + index\n3) Add integration tests\n4) Update OpenAPI spec"
+        ),
+        msg(now - 2.1 * 60 * 1000, "assistant", "Running test suite and verifying pagination edge cases…")
+      ],
+      logs: [
+        log(now - 6.4 * 60 * 1000, "stdout", "Parsing route definitions…"),
+        log(now - 4.8 * 60 * 1000, "stdout", "Implementing query builder (cursor + filters)…"),
+        log(now - 2.0 * 60 * 1000, "stdout", "$ npm test"),
+        log(now - 1.9 * 60 * 1000, "stdout", "PASS  reports.test.ts"),
+        log(now - 1.2 * 60 * 1000, "stdout", "Adding OpenAPI schema…")
+      ],
+      usageTotal: { input_tokens: 1432, output_tokens: 612, turns: 4 }
+    },
+    {
+      id: DEMO_MODE.jobIds.running2,
+      demo: true,
+      title: "",
+      status: "running",
+      box: "board",
+      createdAt: iso(now - 16 * 60 * 1000),
+      startedAt: iso(now - 15.5 * 60 * 1000),
+      finishedAt: "",
+      projectId: DEMO_MODE.projectIds.acme,
+      projectPath: "/Users/demo/Projects/acme-webapp",
+      agent: "claude",
+      model: "sonnet",
+      threadId: "demo-thread-acme-1",
+      prompts: [prompt(now - 15.5 * 60 * 1000, "Improve the onboarding flow copy and tighten the empty state UI.")],
+      queuedPrompts: [],
+      messages: [msg(now - 14.8 * 60 * 1000, "assistant", "Drafting copy variants and a compact layout for the empty state…")],
+      logs: [
+        log(now - 15.4 * 60 * 1000, "stdout", "Reviewing UI screens…"),
+        log(now - 12.1 * 60 * 1000, "stdout", "Writing copy options (A/B/C)…")
+      ],
+      usageTotal: { input_tokens: 920, output_tokens: 488, turns: 3 }
+    },
+    {
+      id: DEMO_MODE.jobIds.attention1,
+      demo: true,
+      title: "",
+      status: "needs_attention",
+      box: "board",
+      createdAt: iso(now - 44 * 60 * 1000),
+      startedAt: iso(now - 43.5 * 60 * 1000),
+      finishedAt: iso(now - 41.8 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.helio,
+      projectPath: "/Users/demo/Projects/helio-mobile",
+      agent: "claude",
+      model: "sonnet",
+      threadId: "demo-thread-helio-1",
+      prompts: [prompt(now - 43.5 * 60 * 1000, "Add a settings toggle for push notifications.")],
+      messages: [
+        msg(
+          now - 41.8 * 60 * 1000,
+          "assistant",
+          "Quick question before I implement this: should the toggle be app-wide, or per-account (multi-login)?"
+        )
+      ],
+      logs: [log(now - 43.2 * 60 * 1000, "stdout", "Locating notification registration code…")],
+      usageTotal: { input_tokens: 610, output_tokens: 162, turns: 2 }
+    },
+    {
+      id: DEMO_MODE.jobIds.attention2,
+      demo: true,
+      title: "",
+      status: "failed",
+      box: "board",
+      createdAt: iso(now - 72 * 60 * 1000),
+      startedAt: iso(now - 71.8 * 60 * 1000),
+      finishedAt: iso(now - 70.9 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.orbit,
+      projectPath: "/Users/demo/Projects/orbit-api",
+      agent: "codex",
+      model: "gpt-5.3-codex",
+      threadId: "demo-thread-orbit-2",
+      prompts: [prompt(now - 71.8 * 60 * 1000, "Fix the flaky rate limiter test on CI.")],
+      messages: [
+        msg(
+          now - 70.9 * 60 * 1000,
+          "assistant",
+          "I hit a failing assertion that only repros intermittently. I can add retries, but I'd prefer fixing the underlying timing issue.\n\nWant me to switch the test to fake timers?"
+        )
+      ],
+      logs: [
+        log(now - 71.5 * 60 * 1000, "stdout", "$ npm test"),
+        log(now - 71.4 * 60 * 1000, "stderr", "FAIL  rateLimiter.test.ts (timeout after 5000ms)")
+      ],
+      usageTotal: { input_tokens: 802, output_tokens: 301, turns: 3 }
+    },
+    {
+      id: DEMO_MODE.jobIds.done1,
+      demo: true,
+      title: "",
+      status: "done",
+      box: "board",
+      createdAt: iso(now - 2.8 * 60 * 60 * 1000),
+      startedAt: iso(now - 2.79 * 60 * 60 * 1000),
+      finishedAt: iso(now - 2.74 * 60 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.acme,
+      projectPath: "/Users/demo/Projects/acme-webapp",
+      agent: "codex",
+      model: "gpt-5.3-codex",
+      threadId: "demo-thread-acme-2",
+      prompts: [prompt(now - 2.79 * 60 * 60 * 1000, "Add CSV export to the users table (respect current filters).")],
+      messages: [
+        msg(
+          now - 2.74 * 60 * 60 * 1000,
+          "assistant",
+          "Implemented CSV export on the Users page.\n\n- Adds an Export button next to the filters\n- Exports only the currently filtered rows\n- Includes a header row and stable column order"
+        )
+      ],
+      logs: [log(now - 2.78 * 60 * 60 * 1000, "stdout", "Implementing CSV generator + download…")],
+      usageTotal: { input_tokens: 1310, output_tokens: 540, turns: 4 }
+    },
+    {
+      id: DEMO_MODE.jobIds.done2,
+      demo: true,
+      title: "",
+      status: "done",
+      box: "board",
+      createdAt: iso(now - 4.4 * 60 * 60 * 1000),
+      startedAt: iso(now - 4.39 * 60 * 60 * 1000),
+      finishedAt: iso(now - 4.33 * 60 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.helio,
+      projectPath: "/Users/demo/Projects/helio-mobile",
+      agent: "claude",
+      model: "opus",
+      threadId: "demo-thread-helio-2",
+      prompts: [prompt(now - 4.39 * 60 * 60 * 1000, "Write a migration plan to split the monolith into services.")],
+      messages: [
+        msg(
+          now - 4.33 * 60 * 60 * 1000,
+          "assistant",
+          "Migration plan (high level):\n1) Identify boundaries (auth, billing, reporting)\n2) Extract the first service behind a feature flag\n3) Introduce an event bus for cross-service workflows\n4) Gradually decompose shared DB tables"
+        )
+      ],
+      logs: [log(now - 4.37 * 60 * 60 * 1000, "stdout", "Drafting plan + milestones…")],
+      usageTotal: { input_tokens: 980, output_tokens: 1120, turns: 5 }
+    },
+    {
+      id: DEMO_MODE.jobIds.done3,
+      demo: true,
+      title: "",
+      status: "done",
+      box: "board",
+      createdAt: iso(now - 8.6 * 60 * 60 * 1000),
+      startedAt: iso(now - 8.58 * 60 * 60 * 1000),
+      finishedAt: iso(now - 8.55 * 60 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.orbit,
+      projectPath: "/Users/demo/Projects/orbit-api",
+      agent: "codex",
+      model: "gpt-5.3-codex",
+      threadId: "demo-thread-orbit-3",
+      prompts: [prompt(now - 8.58 * 60 * 60 * 1000, "Refactor the auth middleware to support multiple issuers.")],
+      messages: [
+        msg(
+          now - 8.55 * 60 * 60 * 1000,
+          "assistant",
+          "Done. The middleware now supports multiple JWT issuers via a config map.\n\nAdded tests for:\n- unknown issuer\n- key rotation\n- mixed audience validation"
+        )
+      ],
+      logs: [log(now - 8.57 * 60 * 60 * 1000, "stdout", "Refactoring middleware + tests…")],
+      usageTotal: { input_tokens: 1104, output_tokens: 736, turns: 4 }
+    },
+    {
+      id: DEMO_MODE.jobIds.archived1,
+      demo: true,
+      title: "",
+      status: "done",
+      box: "archive",
+      archivedAt: iso(now - 1.6 * 24 * 60 * 60 * 1000),
+      createdAt: iso(now - 1.62 * 24 * 60 * 60 * 1000),
+      startedAt: iso(now - 1.62 * 24 * 60 * 60 * 1000),
+      finishedAt: iso(now - 1.61 * 24 * 60 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.acme,
+      projectPath: "/Users/demo/Projects/acme-webapp",
+      agent: "codex",
+      model: "gpt-5.3-codex",
+      threadId: "demo-thread-acme-archive-1",
+      prompts: [prompt(now - 1.62 * 24 * 60 * 60 * 1000, "Investigate Lighthouse regressions on the marketing page.")],
+      messages: [msg(now - 1.61 * 24 * 60 * 60 * 1000, "assistant", "Found the culprit: unoptimized hero image + blocking font load. Suggested fixes and quick wins.")],
+      logs: [log(now - 1.62 * 24 * 60 * 60 * 1000, "stdout", "Analyzing performance trace…")],
+      usageTotal: { input_tokens: 620, output_tokens: 410, turns: 3 }
+    },
+    {
+      id: DEMO_MODE.jobIds.archived2,
+      demo: true,
+      title: "",
+      status: "done",
+      box: "archive",
+      archivedAt: iso(now - 3.2 * 24 * 60 * 60 * 1000),
+      createdAt: iso(now - 3.25 * 24 * 60 * 60 * 1000),
+      startedAt: iso(now - 3.25 * 24 * 60 * 60 * 1000),
+      finishedAt: iso(now - 3.24 * 24 * 60 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.helio,
+      projectPath: "/Users/demo/Projects/helio-mobile",
+      agent: "claude",
+      model: "sonnet",
+      threadId: "demo-thread-helio-archive-1",
+      prompts: [prompt(now - 3.25 * 24 * 60 * 60 * 1000, "Draft a release note for v2.3.0 (3 bullet points).")],
+      messages: [msg(now - 3.24 * 24 * 60 * 60 * 1000, "assistant", "Release notes drafted (highlights + fixes).")],
+      logs: [log(now - 3.25 * 24 * 60 * 60 * 1000, "stdout", "Summarizing changes…")],
+      usageTotal: { input_tokens: 210, output_tokens: 140, turns: 1 }
+    },
+    {
+      id: DEMO_MODE.jobIds.trashed1,
+      demo: true,
+      title: "",
+      status: "cancelled",
+      box: "trash",
+      trashedAt: iso(now - 6.1 * 24 * 60 * 60 * 1000),
+      createdAt: iso(now - 6.1 * 24 * 60 * 60 * 1000),
+      startedAt: iso(now - 6.1 * 24 * 60 * 60 * 1000),
+      finishedAt: iso(now - 6.1 * 24 * 60 * 60 * 1000),
+      projectId: DEMO_MODE.projectIds.orbit,
+      projectPath: "/Users/demo/Projects/orbit-api",
+      agent: "codex",
+      model: "gpt-5.3-codex",
+      threadId: "demo-thread-orbit-trash-1",
+      prompts: [prompt(now - 6.1 * 24 * 60 * 60 * 1000, "Try a different approach for the caching layer (scratch).")],
+      messages: [msg(now - 6.1 * 24 * 60 * 60 * 1000, "assistant", "Cancelled by user.")],
+      logs: [log(now - 6.1 * 24 * 60 * 60 * 1000, "stderr", "Job cancelled.")],
+      usageTotal: { input_tokens: 120, output_tokens: 0, turns: 1 }
+    }
+  ];
+}
+
+function loadDemoModeData() {
+  state.projects = demoModeProjects();
+  state.agentBinaries = demoModeAgentBinaries();
+
+  state.jobs.clear();
+  for (const j of demoModeSeedJobs()) state.jobs.set(j.id, j);
+
+  renderProjects();
+  renderBoard();
+  ensureDurationTicker();
+  scheduleStatusDialogRender();
+}
+
+function demoClearTimers(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  const timers = demoRuntime.timersByJobId.get(id);
+  if (!timers) return;
+  demoRuntime.timersByJobId.delete(id);
+  for (const t of timers) {
+    try {
+      window.clearTimeout(t);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function demoSchedule(jobId, delayMs, fn) {
+  const id = String(jobId || "").trim();
+  if (!id) return 0;
+  const ms = Math.max(0, Number(delayMs) || 0);
+  const t = window.setTimeout(() => {
+    if (!state.demoMode) return;
+    if (!state.jobs.has(id)) return;
+    try {
+      fn();
+    } catch {
+      // ignore
+    }
+  }, ms);
+  const arr = demoRuntime.timersByJobId.get(id) || [];
+  arr.push(t);
+  demoRuntime.timersByJobId.set(id, arr);
+  return t;
+}
+
+function demoAppendLog(jobId, stream, text) {
+  const id = String(jobId || "");
+  if (!id) return;
+  appendJobLog(id, {
+    ts: new Date().toISOString(),
+    kind: "log",
+    stream: String(stream || "stdout"),
+    text: String(text || "")
+  });
+}
+
+function demoAppendMessage(jobId, role, text) {
+  const id = String(jobId || "");
+  if (!id) return;
+  appendJobMessage(id, {
+    ts: new Date().toISOString(),
+    role: String(role || ""),
+    text: String(text || "")
+  });
+}
+
+function demoDecideOutcome(promptText, agent) {
+  const p = String(promptText || "").trim();
+  const low = p.toLowerCase();
+  if (p.includes("?")) return "needs_attention";
+  if (/\b(choose|pick|decide|should we|which one)\b/i.test(p)) return "needs_attention";
+  if (agent === "claude" && /\b(question|confirm|clarify)\b/i.test(low)) return "needs_attention";
+  return "done";
+}
+
+function demoBumpUsage(jobId, patch) {
+  const id = String(jobId || "");
+  const job = state.jobs.get(id);
+  if (!job) return;
+  const cur = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : { input_tokens: 0, output_tokens: 0, turns: 0 };
+  const p = patch && typeof patch === "object" ? patch : {};
+  const next = {
+    input_tokens: toIntOrZero(cur.input_tokens) + toIntOrZero(p.input_tokens),
+    output_tokens: toIntOrZero(cur.output_tokens) + toIntOrZero(p.output_tokens),
+    turns: toIntOrZero(cur.turns) + toIntOrZero(p.turns)
+  };
+  patchJob(id, { usageTotal: next });
+}
+
+function demoStartJob({ prompt, projectId, agent, model, images }) {
+  const text = String(prompt || "").trim();
+  if (!text) return null;
+
+  const pidRaw = String(projectId || "").trim();
+  let pid = "";
+  if (pidRaw && state.projects.some((p) => p && p.id === pidRaw)) {
+    pid = pidRaw;
+  } else if (pidRaw === "auto") {
+    const hay = text.toLowerCase();
+    const match =
+      state.projects.find((p) => (p && p.name ? hay.includes(String(p.name).toLowerCase()) : false)) ||
+      state.projects.find((p) => (p && p.shortName ? hay.includes(String(p.shortName).toLowerCase()) : false)) ||
+      null;
+    pid = match && match.id ? match.id : "";
+  }
+  if (!pid) pid = state.projects[0] ? state.projects[0].id : "";
+  const project = state.projects.find((p) => p && p.id === pid) || null;
+  const projectPath = project && typeof project.path === "string" ? project.path : "";
+
+  const jobId = `__ah_demo_mode_job_${safeUuid()}__`;
+  const createdAt = new Date().toISOString();
+
+  const job = {
+    id: jobId,
+    demo: true,
+    title: "",
+    status: "running",
+    box: "board",
+    archivedAt: "",
+    archiveReason: "",
+    trashedAt: "",
+    createdAt,
+    startedAt: createdAt,
+    finishedAt: "",
+    exitCode: null,
+    projectId: pid,
+    projectPath,
+    agent: normalizeAgentKey(agent),
+    model: String(model || "").trim() || (normalizeAgentKey(agent) === "claude" ? "sonnet" : "gpt-5.3-codex"),
+    threadId: `demo-${safeUuid()}`,
+    prompts: [{ ts: createdAt, text, images: Array.isArray(images) ? images : [] }],
+    queuedPrompts: [],
+    messages: [],
+    logs: [],
+    usageTotal: { input_tokens: 0, output_tokens: 0, turns: 0 }
+  };
+
+  state.jobs.set(jobId, job);
+  upsertJob(job);
+
+  // Simulate activity.
+  demoClearTimers(jobId);
+  demoAppendLog(jobId, "stdout", "Starting demo run…");
+  demoBumpUsage(jobId, { input_tokens: 220, output_tokens: 0, turns: 1 });
+
+  const outcome = demoDecideOutcome(text, normalizeAgentKey(agent));
+
+  demoSchedule(jobId, 650, () => demoAppendLog(jobId, "stdout", "Reading context…"));
+  demoSchedule(jobId, 1100, () => demoAppendMessage(jobId, "assistant", "Got it. I'll implement this and report back with a short summary."));
+  demoBumpUsage(jobId, { input_tokens: 0, output_tokens: 120, turns: 1 });
+
+  demoSchedule(jobId, 1600, () => demoAppendLog(jobId, "stdout", "Editing files…"));
+  demoSchedule(jobId, 2200, () => demoAppendLog(jobId, "stdout", "$ npm test"));
+  demoSchedule(jobId, 2600, () => demoAppendLog(jobId, "stdout", "PASS  demo.test.ts"));
+
+  demoSchedule(jobId, 3400, () => {
+    const finishedAt = new Date().toISOString();
+    const status = outcome;
+    patchJob(jobId, { status, finishedAt, exitCode: status === "done" ? 0 : 0 });
+    demoBumpUsage(jobId, { input_tokens: 0, output_tokens: status === "done" ? 260 : 120, turns: 1 });
+    if (status === "needs_attention") {
+      demoAppendMessage(jobId, "assistant", "One question before I finalize: do you want this behind a feature flag?");
+    } else {
+      demoAppendMessage(
+        jobId,
+        "assistant",
+        "Done.\n\n- Added the feature with sensible defaults\n- Updated UI copy\n- Added a small test to keep behavior stable"
+      );
+    }
+  });
+
+  return jobId;
+}
+
+function demoResumeJob(jobId, promptText, images) {
+  const id = String(jobId || "").trim();
+  const job = state.jobs.get(id);
+  if (!job) return false;
+
+  const text = String(promptText || "").trim();
+  if (!text) return false;
+
+  const now = new Date().toISOString();
+  job.prompts = Array.isArray(job.prompts) ? job.prompts : [];
+  job.prompts.push({ ts: now, text, images: Array.isArray(images) ? images : [] });
+  job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
+  job.status = "running";
+  job.startedAt = now;
+  job.finishedAt = "";
+  job.exitCode = null;
+  upsertJob(job);
+
+  demoClearTimers(id);
+  demoAppendLog(id, "stdout", "Resuming (demo)…");
+  demoSchedule(id, 550, () => demoAppendMessage(id, "assistant", "Working on the follow-up now."));
+  demoSchedule(id, 1600, () => {
+    const finishedAt = new Date().toISOString();
+    patchJob(id, { status: "done", finishedAt, exitCode: 0 });
+    demoAppendMessage(id, "assistant", "Done. Follow-up applied.");
+    demoBumpUsage(id, { input_tokens: 180, output_tokens: 140, turns: 2 });
+  });
+
+  return true;
 }
 
 function ensureTourDom() {
@@ -5428,7 +6001,7 @@ function openJobMoreMenu() {
 
   const jobId = state.selectedJobId;
   const job = jobId ? state.jobs.get(jobId) : null;
-  if (!job || isDemoJob(job)) return;
+  if (!job || (isDemoJob(job) && !state.demoMode)) return;
 
   updateJobMoreMenuActions(job);
   if (btn.hidden || btn.disabled) return;
@@ -5488,7 +6061,8 @@ function updateJobMoreMenuActions(job) {
     if (el) el.hidden = !!hidden;
   };
 
-  setActionHidden("actions", false);
+  const demoInteractive = isDemoJob(job) && state.demoMode;
+  setActionHidden("actions", demoInteractive);
   setActionHidden("rerun", !canRerun);
   setActionHidden("restore", !canRestore);
   setActionHidden("archive", !canFile);
@@ -5724,7 +6298,7 @@ async function generateActionFromPrompt() {
 }
 
 function updateJobDialogActions(job) {
-  if (isDemoJob(job)) {
+  if (isDemoJob(job) && !state.demoMode) {
     // Demo cards are UI-only; disable actions that would hit the main process.
     setHidden(els.cancelJobBtn, true);
     setHidden(els.jobMoreBtn, true);
@@ -5752,8 +6326,9 @@ function updateJobDialogActions(job) {
       els.followupInput.placeholder = DEFAULT_FOLLOWUP_PLACEHOLDER;
     }
   }
-  if (els.jobDialogPopout) els.jobDialogPopout.hidden = isJobMode();
-  if (els.jobDialogMove) els.jobDialogMove.hidden = !isJobMode();
+  const isDemo = isDemoJob(job);
+  if (els.jobDialogPopout) els.jobDialogPopout.hidden = isDemo || isJobMode();
+  if (els.jobDialogMove) els.jobDialogMove.hidden = isDemo || !isJobMode();
 
   const b = jobBox(job);
   const running = job && job.status === "running";
@@ -5815,7 +6390,7 @@ function updateCardContextMenuActions(job) {
     if (el) el.hidden = !!hidden;
   };
 
-  if (isDemoJob(job)) {
+  if (isDemoJob(job) && !state.demoMode) {
     for (const a of ["rerun", "stop", "restore", "archive", "trash", "delete"]) setActionHidden(a, true);
     const sep = menu.querySelector('[data-ctx-sep="main"]');
     if (sep) sep.hidden = true;
@@ -6146,7 +6721,28 @@ async function attachTerminalToJob(jobId) {
 
   const job = state.jobs.get(id);
   if (isDemoJob(job)) {
-    els.jobDialogTerm.innerHTML = `<div class="logline">Terminal is not available for demo cards.</div>`;
+    if (!state.demoMode) {
+      els.jobDialogTerm.innerHTML = `<div class="logline">Terminal is not available for demo cards.</div>`;
+      return;
+    }
+
+    const proj = projectById(job && job.projectId) || null;
+    const cwd = (job && typeof job.projectPath === "string" ? job.projectPath : "") || (proj && proj.path) || "~/Projects/demo";
+    const displayCwd = formatProjectPathForDisplay(cwd);
+    const lines = [
+      `$ cd ${displayCwd || "."}`,
+      `$ git status`,
+      `On branch main`,
+      `nothing to commit, working tree clean`,
+      ``,
+      `$ npm test`,
+      `PASS  demo.spec.ts`,
+      ``,
+      `$ npm run dev`,
+      `VITE v5.x  ready in 421 ms`,
+      `Local:   http://localhost:5173/`
+    ];
+    els.jobDialogTerm.innerHTML = lines.map((ln) => `<div class="logline">${escapeHtml(ln)}</div>`).join("");
     return;
   }
 
@@ -6292,7 +6888,7 @@ async function openJobDialog(jobId) {
 
   // While a job is running, the most useful default view is the live feed.
   state.activeTab = job.status === "running" ? "live" : "chat";
-  setTerminalTabHidden(isDemoJob(job));
+  setTerminalTabHidden(isDemoJob(job) && !state.demoMode);
 
   {
     const title = jobDisplayTitle(job);
@@ -6804,6 +7400,30 @@ async function startJobFromComposer() {
   const prompt = (els.promptInput.value || "").trim();
   if (!prompt) return;
 
+  if (state.demoMode) {
+    setView("board");
+    let projectId = els.projectSelect.value;
+    const agent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
+    const model = (els.modelInput.value || "").trim();
+    const images = [...(state.composerImages || [])];
+
+    if (!projectId) {
+      applyDefaultProjectSelection();
+      projectId = els.projectSelect.value;
+    }
+
+    const jobId = demoStartJob({ prompt, projectId, agent, model, images });
+    if (!jobId) {
+      setHint("Failed to start demo job.", "error");
+      return;
+    }
+
+    els.promptInput.value = "";
+    clearStoredComposerDraft();
+    setComposerImages([]);
+    return;
+  }
+
   // If the user starts a real job during onboarding, clean up demo UI.
   if (tour.active) stopFirstRunTour();
   else clearDemoJobs();
@@ -6914,6 +7534,28 @@ async function sendFollowup() {
   const text = cmd;
   if (!text) return;
   const images = [...(state.followupImages || [])];
+
+  if (isInteractiveDemoJob(job)) {
+    setHint("");
+    setView("board");
+    els.followupInput.value = "";
+    scheduleAutosizeFollowupInput();
+    setFollowupImages([]);
+
+    if (running) {
+      const now = new Date().toISOString();
+      const qp = Array.isArray(job.queuedPrompts) ? [...job.queuedPrompts] : [];
+      qp.push({ ts: now, text, images });
+      patchJob(jobId, { queuedPrompts: qp });
+      showToast("Queued follow-up.");
+      return;
+    }
+
+    const ok = demoResumeJob(jobId, text, images);
+    if (!ok) showToast("Failed to send follow-up (demo).");
+    return;
+  }
+
   try {
     setHint("");
     setView("board");
@@ -6931,6 +7573,24 @@ async function cancelJob(jobId, { closeDialog = false } = {}) {
   const id = String(jobId || "");
   if (!id) return;
   const job = state.jobs.get(id);
+
+  if (job && isInteractiveDemoJob(job)) {
+    if (job.status === "running") {
+      const title = job ? jobDisplayTitle(job) : "this job";
+      const ok = window.confirm(`Stop "${title}"?\n\nThis will interrupt the running agent.`);
+      if (!ok) return;
+    }
+    demoClearTimers(id);
+    const finishedAt = new Date().toISOString();
+    patchJob(id, { status: "cancelled", finishedAt, exitCode: 0 });
+    demoAppendLog(id, "stderr", "Job cancelled (demo).");
+    if (closeDialog && state.selectedJobId === id) {
+      if (els.jobDialog && els.jobDialog.open) els.jobDialog.close();
+      state.selectedJobId = null;
+    }
+    return;
+  }
+
   if (job && job.status === "running") {
     const title = job ? jobDisplayTitle(job) : "this job";
     const ok = window.confirm(`Stop "${title}"?\n\nThis will interrupt the running agent.`);
@@ -7120,6 +7780,20 @@ async function startRerunFromDialog() {
 
   try {
     setView("board");
+    if (state.demoMode) {
+      const jobId = demoStartJob({ prompt: text, projectId: job.projectId, agent, model, images });
+      if (!jobId) throw new Error("Failed to start demo rerun.");
+      showToast(`Rerun started (${agentDisplayName(agent)}${model ? ` · ${model}` : ""})`);
+      try {
+        if (els.rerunDialog && els.rerunDialog.open) els.rerunDialog.close();
+      } catch {
+        // ignore
+      } finally {
+        state.rerunSourceJobId = null;
+      }
+      return;
+    }
+
     await api.jobsStart({ prompt: text, projectId: job.projectId, agent, model, images });
     showToast(`Rerun started (${agentDisplayName(agent)}${model ? ` · ${model}` : ""})`);
     try {
@@ -7189,6 +7863,15 @@ async function archiveJob(jobId, { closeDialog = false } = {}) {
   if (!job) return;
   if (job.status === "running") return;
 
+  if (isInteractiveDemoJob(job)) {
+    const prev = { box: job.box, archivedAt: job.archivedAt || "", archiveReason: job.archiveReason || "", trashedAt: job.trashedAt || "" };
+    const archivedAt = new Date().toISOString();
+    patchJob(id, { box: "archive", archivedAt, archiveReason: "archived", trashedAt: "" });
+    if (closeDialog && state.selectedJobId === id) closeJobDialog();
+    showToast("Archived", () => patchJob(id, prev));
+    return;
+  }
+
   try {
     await api.jobsArchive(id);
     if (closeDialog && state.selectedJobId === id) closeJobDialog();
@@ -7212,6 +7895,15 @@ async function trashJob(jobId, { closeDialog = false } = {}) {
   if (job.status === "running") return;
   const prevBox = jobBox(job);
 
+  if (isInteractiveDemoJob(job)) {
+    const prev = { box: job.box, archivedAt: job.archivedAt || "", archiveReason: job.archiveReason || "", trashedAt: job.trashedAt || "" };
+    const trashedAt = new Date().toISOString();
+    patchJob(id, { box: "trash", trashedAt, archivedAt: "", archiveReason: "" });
+    if (closeDialog && state.selectedJobId === id) closeJobDialog();
+    showToast("Moved to Trash", () => patchJob(id, prev));
+    return;
+  }
+
   try {
     await api.jobsTrash(id);
     if (closeDialog && state.selectedJobId === id) closeJobDialog();
@@ -7234,6 +7926,14 @@ async function restoreJob(jobId, { closeDialog = false } = {}) {
   const job = state.jobs.get(id);
   if (!job) return;
 
+  if (isInteractiveDemoJob(job)) {
+    patchJob(id, { box: "board", archivedAt: "", archiveReason: "", trashedAt: "" });
+    if (closeDialog && state.selectedJobId === id) closeJobDialog();
+    showToast("Restored to Board");
+    setView("board");
+    return;
+  }
+
   try {
     await api.jobsRestore(id);
     if (closeDialog && state.selectedJobId === id) closeJobDialog();
@@ -7253,6 +7953,14 @@ async function deleteJob(jobId, { closeDialog = false } = {}) {
 
   const ok = window.confirm("Delete this job permanently? This cannot be undone.");
   if (!ok) return;
+
+  if (isInteractiveDemoJob(job)) {
+    demoClearTimers(id);
+    removeJob(id);
+    if (closeDialog && state.selectedJobId === id) closeJobDialog();
+    showToast("Deleted");
+    return;
+  }
 
   try {
     await api.jobsDelete(id);
@@ -7556,6 +8264,10 @@ function wireUi() {
 	  }
 
 	  els.addProjectBtn.addEventListener("click", async () => {
+	    if (state.demoMode) {
+	      showToast("Demo mode is enabled. Disable it in Settings to add real projects.");
+	      return;
+	    }
 	    const p = await api.projectsAddDialog();
 	    if (!p) return;
 
@@ -7577,6 +8289,13 @@ function wireUi() {
     const inp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
     if (!inp) return;
 
+    if (state.demoMode) {
+      showToast("Demo mode is enabled. Project changes are disabled.");
+      renderProjects();
+      renderBoard();
+      return;
+    }
+
     const id = inp.getAttribute("data-project-color") || "";
     const color = normalizeHexColor(inp.value);
     if (!id || !color) return;
@@ -7592,6 +8311,40 @@ function wireUi() {
   });
 
   els.projectsList.addEventListener("click", async (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-project-remove]") : null;
+    if (btn) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (state.demoMode) {
+        showToast("Demo mode is enabled. Project changes are disabled.");
+        renderProjects();
+        renderBoard();
+        return;
+      }
+
+      const id = btn.getAttribute("data-project-remove") || "";
+      const project = state.projects.find((p) => p.id === id) || null;
+      if (!id) return;
+
+      const label = project ? `"${project.name}"` : "this project";
+      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
+      if (!ok) return;
+
+      try {
+        const removed = await api.projectsRemove(id);
+        if (!removed) return;
+
+        if (getStoredProjectId() === id) clearStoredProjectId();
+
+        state.projects = await api.projectsList();
+        renderProjects();
+        renderBoard();
+      } catch (err) {
+        setHint(String(err && err.message ? err.message : err), "error");
+      }
+      return;
+    }
     const colorInp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
     if (colorInp) return;
 
@@ -7600,6 +8353,11 @@ function wireUi() {
 
     const id = edit.getAttribute("data-project-edit") || "";
     if (!id) return;
+
+    if (state.demoMode) {
+      showToast("Demo mode is enabled. Project settings are disabled.");
+      return;
+    }
 
     await openProjectDialog(id);
   });
@@ -7611,6 +8369,10 @@ function wireUi() {
     e.preventDefault();
     const id = edit.getAttribute("data-project-edit") || "";
     if (!id) return;
+    if (state.demoMode) {
+      showToast("Demo mode is enabled. Project settings are disabled.");
+      return;
+    }
     await openProjectDialog(id);
   });
 
@@ -7799,6 +8561,10 @@ function wireUi() {
       const installBtn = e.target && e.target.closest ? e.target.closest("[data-status-install-agents]") : null;
       if (installBtn) {
         e.preventDefault();
+        if (state.demoMode) {
+          showToast("Demo mode: installation is disabled.");
+          return;
+        }
         try {
           if (els.statusDialog && els.statusDialog.open) els.statusDialog.close();
         } catch {
@@ -7823,6 +8589,10 @@ function wireUi() {
       const refreshBtn = e.target && e.target.closest ? e.target.closest("[data-status-refresh-agents]") : null;
       if (refreshBtn) {
         e.preventDefault();
+        if (state.demoMode) {
+          showToast("Demo mode: agent binary checks are disabled.");
+          return;
+        }
         refreshAgentBinaries({ showToastOnMissing: false });
         return;
       }
@@ -8428,6 +9198,20 @@ function wireUi() {
   }
 
 					  els.saveSettingsBtn.addEventListener("click", async () => {
+							    const nextDemoMode = !!(els.settingsDemoMode && els.settingsDemoMode.checked);
+							    const demoChanged = nextDemoMode !== !!state.demoMode;
+							    if (demoChanged) {
+							      const msg = nextDemoMode
+							        ? "Enable demo mode?\n\nThis hides your real projects + job history and shows mock data.\nNo agents are executed."
+							        : "Disable demo mode?\n\nThis will show your real projects + job history again.";
+							      const ok = window.confirm(msg);
+							      if (!ok) {
+							        if (els.settingsDemoMode) els.settingsDemoMode.checked = !!state.demoMode;
+							        return;
+							      }
+							      storeDemoMode(nextDemoMode);
+							    }
+
 							    const patch = {
 						      uiModel: getUiModelFromControls(),
 						      uiTheme: els.settingsTheme.value,
@@ -8466,7 +9250,29 @@ function wireUi() {
 		    applyThemeFromSettings(state.settings);
 		    renderBoard();
 			    els.settingsDialog.close();
+
+			    if (demoChanged) {
+			      try {
+			        window.location.reload();
+			      } catch {
+			        // ignore
+			      }
+			    }
 			  });
+
+	  if (els.settingsDemoResetBtn) {
+	    els.settingsDemoResetBtn.addEventListener("click", (e) => {
+	      e.preventDefault();
+	      if (!state.demoMode) return;
+	      const ok = window.confirm("Reset demo data?\n\nThis will reload the window and restore the default demo projects + jobs.");
+	      if (!ok) return;
+	      try {
+	        window.location.reload();
+	      } catch {
+	        // ignore
+	      }
+	    });
+	  }
 
 	  if (els.saveActionsBtn) {
 	    els.saveActionsBtn.addEventListener("click", async () => {
@@ -9108,6 +9914,7 @@ async function refreshCodexModelsDatalist({ showErrors = false } = {}) {
 
 let agentBinariesFetchInFlight = false;
 async function refreshAgentBinaries({ showToastOnMissing = false } = {}) {
+  if (state.demoMode) return;
   if (!api || typeof api.agentsCheckBinaries !== "function") return;
   if (agentBinariesFetchInFlight) return;
   agentBinariesFetchInFlight = true;
@@ -9212,8 +10019,10 @@ function maybeShowMissingAgentBinariesToast(res) {
 					  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
 					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
 					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
+					  if (els.settingsDemoMode) els.settingsDemoMode.checked = !!state.demoMode;
+					  if (els.settingsDemoResetBtn) els.settingsDemoResetBtn.hidden = !state.demoMode;
 
-		  refreshCodexModelsDatalist({ showErrors: true });
+		  if (!state.demoMode) refreshCodexModelsDatalist({ showErrors: true });
 
 		  els.settingsDialog.showModal();
 		}
@@ -9869,6 +10678,7 @@ async function init() {
   if (els.sortSelect) els.sortSelect.value = state.sortMode;
 
   state.projectFilterId = String(getStoredProjectFilterId() || "").trim();
+  state.demoMode = getStoredDemoMode();
 
   state.settings = await api.settingsGet();
   applyThemeFromSettings(state.settings);
@@ -9884,30 +10694,41 @@ async function init() {
 	        if (job) updateJobDialogActions(job);
 	      }
 	      if (els.actionsDialog && els.actionsDialog.open) renderSettingsActions(next && next.actions);
-	      refreshAgentBinaries({ showToastOnMissing: false });
+	      if (!state.demoMode) refreshAgentBinaries({ showToastOnMissing: false });
 	    });
 	  }
-  state.projects = await api.projectsList();
-  renderProjects();
-  if (!state.projectRefreshTimer) {
-    state.projectRefreshTimer = setInterval(async () => {
-      try {
-        state.projects = await api.projectsList();
-        renderProjects();
-      } catch {
-        // ignore
-      }
-    }, 30_000);
+  if (state.demoMode) {
+    // Avoid leaking real user data (projects, job history, drafts) when recording demos.
+    clearStoredComposerDraft();
+    if (els.promptInput) els.promptInput.value = "";
+    setComposerImages([]);
+    setFollowupImages([]);
+
+    loadDemoModeData();
+    renderSearchUi();
+  } else {
+    state.projects = await api.projectsList();
+    renderProjects();
+    if (!state.projectRefreshTimer) {
+      state.projectRefreshTimer = setInterval(async () => {
+        try {
+          state.projects = await api.projectsList();
+          renderProjects();
+        } catch {
+          // ignore
+        }
+      }, 30_000);
+    }
+
+    const jobs = await api.jobsList();
+    for (const j of jobs) state.jobs.set(j.id, j);
+    renderBoard();
+    ensureDurationTicker();
+    refreshCodexModelsDatalist({ showErrors: false });
+    refreshAgentBinaries({ showToastOnMissing: true });
+
+    maybeStartFirstRunTour();
   }
-
-  const jobs = await api.jobsList();
-  for (const j of jobs) state.jobs.set(j.id, j);
-  renderBoard();
-  ensureDurationTicker();
-  refreshCodexModelsDatalist({ showErrors: false });
-  refreshAgentBinaries({ showToastOnMissing: true });
-
-  maybeStartFirstRunTour();
 
   // Job popout windows open directly into the selected job.
   if (state.focusJobId) {
@@ -9924,6 +10745,7 @@ async function init() {
   }
 
 	  api.onJobEvent((payload) => {
+	    if (state.demoMode) return;
 	    const { jobId, kind } = payload;
 	    if (!jobId) return;
 
