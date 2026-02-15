@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
-import { guessTitleFromPrompt, isBoilerplatePromptLine, promptSummary } from "../core/prompt";
+import { guessTitleFromPrompt, isLowSignalTitleText, promptSummary } from "../core/prompt";
 import { oneLine, truncateText } from "../core/text";
 import { addUsageTotals } from "../core/usage";
 import { newId } from "../core/id";
@@ -286,6 +286,9 @@ export class JobsManager {
       "- Max 120 characters.",
       "- Keep the same language as the user's request.",
       "- Prefer 'Verb + object' phrasing (e.g., 'Fix X', 'Add Y', 'Investigate Z').",
+      "- Do NOT phrase it as a question.",
+      "- Avoid generic titles like 'Any ideas?', 'What can we do?', 'Was br\u00e4uchten wir?', 'Was wir machen k\u00f6nnten?'.",
+      "- Make it specific: include the key feature/file/error if mentioned.",
       "",
       "User request:",
       clipped
@@ -311,7 +314,7 @@ export class JobsManager {
     t = t.trim();
 
     if (!t) return "";
-    if (isBoilerplatePromptLine(t)) return "";
+    if (isLowSignalTitleText(t)) return "";
 
     // Hard cap (display uses a 3-line clamp; keep tooltip/search reasonable).
     return truncateText(t, 120);
@@ -499,8 +502,13 @@ export class JobsManager {
         if (live.titleLlm && String(live.titleLlm).trim()) return;
 
         live.titleLlm = title;
-        // Also patch `title` for list views; renderer can prefer titleLlm when present.
-        this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title, title } });
+        // Keep visible titles stable while running; update the display title once the job is done/failed.
+        if (live.status !== "running") {
+          const meta = snapshotJobMeta(live);
+          this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title, title: meta.title } });
+        } else {
+          this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title } });
+        }
         this.markJobDirty(jobId);
         this.tryPersistJobNow(live);
       } catch {
@@ -635,6 +643,13 @@ export class JobsManager {
     job.status = status;
     Object.assign(job, extraPatch);
     this.sendJobEvent({ jobId, kind: "status", patch: { status, ...extraPatch } });
+
+    // Apply a queued LLM title once the run is finished, to avoid mid-run title changes.
+    if (status !== "running") {
+      const meta = snapshotJobMeta(job);
+      this.sendJobEvent({ jobId, kind: "meta", patch: { title: meta.title } });
+    }
+
     this.markJobDirty(jobId);
   }
 

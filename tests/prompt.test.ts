@@ -55,6 +55,11 @@ describe("core/prompt", () => {
     expect(guessTitleFromPrompt("Fix store migration bug. Any ideas?")).toBe("Fix store migration bug");
     expect(guessTitleFromPrompt("Fix store migration bug. Thanks!")).toBe("Fix store migration bug");
     expect(guessTitleFromPrompt("Fix store migration bug. Was könnte man da noch machen?")).toBe("Fix store migration bug");
+
+    // Same idea, but split across lines without punctuation between them.
+    expect(guessTitleFromPrompt(["Fix store migration bug", "Any ideas?"].join("\n"))).toBe("Fix store migration bug");
+    expect(guessTitleFromPrompt(["Fix store migration bug", "Was br\u00e4uchten wir?"].join("\n"))).toBe("Fix store migration bug");
+    expect(guessTitleFromPrompt(["Fix store migration bug", "Was wir machen k\u00f6nnten?"].join("\n"))).toBe("Fix store migration bug");
   });
 
   it("derives display titles from earliest meaningful prompt", () => {
@@ -70,6 +75,15 @@ describe("core/prompt", () => {
       title: "Fallback title",
       titleLlm: "Fix store migration bug",
       prompts: [{ ts: "t1", text: "AGENTS.md instructions" }, { ts: "t2", text: "Something else" }]
+    };
+    expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
+  });
+
+  it("ignores low-signal LLM titles", () => {
+    const job = {
+      title: "Fallback title",
+      titleLlm: "Was br\u00e4uchten wir?",
+      prompts: [{ ts: "t1", text: "Fix store migration bug" }]
     };
     expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
   });

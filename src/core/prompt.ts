@@ -90,7 +90,18 @@ function looksLikeLowSignalOutro(s: string): boolean {
   // Generic questions / sign-offs that add little to a title.
   if (/^(any(\s+(other|more))?\s+ideas|any\s+ideas|any\s+thoughts|anything\s+else|what\s+else|what\s+can\s+we\s+do)\b/.test(t))
     return true;
+  if (/^(what\s+do\s+we\s+need|what\s+should\s+we\s+do|what\s+could\s+we\s+do)\b/.test(t)) return true;
   if (/^(was\s+kann\s+man|was\s+k\u00f6nnte\s+man|was\s+meinst\s+du|irgendwelche\s+ideen)\b/.test(t)) return true;
+  // DE: ultra-generic follow-up questions without an object/context.
+  if (/^was\s+br\u00e4uchten\s+wir(\s+(daf\u00fcr|dafuer))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+braeuchten\s+wir(\s+(daf\u00fcr|dafuer))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+brauchen\s+wir(\s+(daf\u00fcr|dafuer))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+wir\s+machen\s+k\u00f6nnten(\s+(jetzt|noch|da))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+wir\s+machen\s+koennten(\s+(jetzt|noch|da))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+k\u00f6nnten\s+wir\s+machen(\s+(jetzt|noch|da))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+koennten\s+wir\s+machen(\s+(jetzt|noch|da))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+k\u00f6nnen\s+wir\s+machen(\s+(jetzt|noch|da))?\s*[.!?]*$/.test(t)) return true;
+  if (/^was\s+koennen\s+wir\s+machen(\s+(jetzt|noch|da))?\s*[.!?]*$/.test(t)) return true;
   if (/^(danke|thanks|thx)\b/.test(t)) return true;
   return false;
 }
@@ -199,6 +210,15 @@ export function isBoilerplatePromptLine(s: unknown): boolean {
   return false;
 }
 
+export function isLowSignalTitleText(s: unknown): boolean {
+  const t = oneLine(String(s || ""));
+  if (!t) return true;
+  if (isBoilerplatePromptLine(t)) return true;
+  if (looksLikeLowSignalIntro(t)) return true;
+  if (looksLikeLowSignalOutro(t)) return true;
+  return false;
+}
+
 export function promptSummary(s: unknown): string {
   const raw = String(s || "").replaceAll("\r\n", "\n");
   const lines = raw.split("\n");
@@ -226,36 +246,48 @@ export function promptSummary(s: unknown): string {
   }
 
   function pickLines(arr: string[]): string[] {
-    const picked: string[] = [];
-    let total = 0;
-    let fromEnd = true;
-
-    // Prefer the "ask" near the end of the prompt (common when prompts include big instruction preambles).
-    for (let i = arr.length - 1; i >= 0; i -= 1) {
-      const line = arr[i];
-      if (isBoilerplatePromptLine(line)) continue;
-      if (picked.length > 0 && line === picked[picked.length - 1]) continue;
-      picked.push(line);
-      total += line.length;
-      if (picked.length >= 3 || total >= 360) break;
-    }
-
-    // Fallback: take from the start.
-    if (picked.length === 0) {
-      fromEnd = false;
-      total = 0;
-      for (let i = 0; i < arr.length; i += 1) {
+    function pickFromEnd(allowLowSignal: boolean): string[] {
+      const picked: string[] = [];
+      let total = 0;
+      for (let i = arr.length - 1; i >= 0; i -= 1) {
         const line = arr[i];
         if (isBoilerplatePromptLine(line)) continue;
+        if (!allowLowSignal && (looksLikeLowSignalIntro(line) || looksLikeLowSignalOutro(line))) continue;
         if (picked.length > 0 && line === picked[picked.length - 1]) continue;
         picked.push(line);
         total += line.length;
         if (picked.length >= 3 || total >= 360) break;
       }
+      return [...picked].reverse();
     }
 
-    const ordered = fromEnd ? [...picked].reverse() : picked;
-    return ordered;
+    function pickFromStart(allowLowSignal: boolean): string[] {
+      const picked: string[] = [];
+      let total = 0;
+      for (let i = 0; i < arr.length; i += 1) {
+        const line = arr[i];
+        if (isBoilerplatePromptLine(line)) continue;
+        if (!allowLowSignal && (looksLikeLowSignalIntro(line) || looksLikeLowSignalOutro(line))) continue;
+        if (picked.length > 0 && line === picked[picked.length - 1]) continue;
+        picked.push(line);
+        total += line.length;
+        if (picked.length >= 3 || total >= 360) break;
+      }
+      return picked;
+    }
+
+    // Prefer the "ask" near the end of the prompt (common when prompts include big instruction preambles),
+    // but avoid low-signal follow-up questions like "Any ideas?" / "Was br\u00e4uchten wir?".
+    let ordered = pickFromEnd(false);
+    if (ordered.length > 0) return ordered;
+
+    ordered = pickFromStart(false);
+    if (ordered.length > 0) return ordered;
+
+    // If we skipped too aggressively, allow low-signal lines as a last resort.
+    ordered = pickFromEnd(true);
+    if (ordered.length > 0) return ordered;
+    return pickFromStart(true);
   }
 
   // Prefer non-fenced prompt text; if that yields nothing useful, fall back to fenced content.
@@ -284,7 +316,7 @@ export function jobDisplayTitle(job: unknown): string {
 
   const j = job && typeof job === "object" ? (job as any) : {};
   const llmTitle = typeof j.titleLlm === "string" ? oneLine(j.titleLlm) : "";
-  if (llmTitle && !isBoilerplatePromptLine(llmTitle)) return truncateText(llmTitle, JOB_TITLE_MAX_LEN);
+  if (llmTitle && !isLowSignalTitleText(llmTitle)) return truncateText(llmTitle, JOB_TITLE_MAX_LEN);
 
   const prompts = Array.isArray(j.prompts) ? j.prompts : [];
 
