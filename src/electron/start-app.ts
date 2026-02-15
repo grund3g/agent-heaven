@@ -22,6 +22,8 @@ import { ensureMacAppMenu } from "./mac-app-menu";
 import { listCodexModels } from "./codex-models";
 import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
 import { installAgentCli } from "../agent-install";
+import { inferCommitMessageStyleFromSubjects, suggestCommitMessage } from "../core/commit-message";
+import { jobDisplayTitle } from "../core/prompt";
 import {
   addAll,
   cherryPick,
@@ -30,7 +32,9 @@ import {
   findWorktreePathForBranch,
   getGitCommonDir,
   getGitInfo,
+  listChangedPaths,
   listCommitsInRange,
+  listRecentCommitSubjects,
   removeWorktree,
   switchBranch
 } from "./git";
@@ -933,6 +937,58 @@ export async function startApp(): Promise<void> {
     const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
     return stripped.slice(0, 200);
   }
+
+  function lastJobPromptText(job: any): string {
+    const prompts = job && typeof job === "object" && Array.isArray((job as any).prompts) ? (job as any).prompts : [];
+    for (let i = prompts.length - 1; i >= 0; i -= 1) {
+      const p = prompts[i];
+      const t = p && typeof p === "object" && typeof (p as any).text === "string" ? String((p as any).text || "").trimEnd() : "";
+      if (t) return t;
+    }
+    return "";
+  }
+
+  ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const jobId = String(p.jobId || "").trim();
+    if (!jobId) return { ok: false, error: "Missing jobId" };
+
+    const got = jobsManager.getJob(jobId);
+    if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
+    const job = (got as any).job || {};
+
+    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!sourceDir) return { ok: false, error: "Job is missing projectPath" };
+    if (!fs.existsSync(sourceDir)) return { ok: false, error: `Checkout path does not exist: ${sourceDir}` };
+
+    const info = await getGitInfo(sourceDir);
+    if (!info.isGitRepo) return { ok: false, error: `Checkout is not a git repo: ${sourceDir}` };
+
+    let changedPaths: string[] = [];
+    try {
+      changedPaths = await listChangedPaths(sourceDir);
+    } catch {
+      changedPaths = [];
+    }
+
+    let recentSubjects: string[] = [];
+    try {
+      recentSubjects = await listRecentCommitSubjects(sourceDir, 30);
+    } catch {
+      recentSubjects = [];
+    }
+
+    const style = inferCommitMessageStyleFromSubjects(recentSubjects);
+    const suggestion = suggestCommitMessage({
+      style,
+      changedPaths,
+      taskText: lastJobPromptText(job),
+      jobTitle: jobDisplayTitle(job)
+    });
+
+    return { ok: true, suggestion };
+  });
 
   ipcMain.handle("checkouts:integrateToDefault", async (evt, payload) => {
     assertTrustedIpcSender(evt);

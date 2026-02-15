@@ -95,6 +95,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     const res = await invokeOk("checkouts:integrateToDefault", { jobId, commitMessage: p.commitMessage });
     return res;
   },
+  checkoutsSuggestCommitMessage: async (jobId) => {
+    const res = await invokeOk("checkouts:suggestCommitMessage", { jobId });
+    return res && typeof res.suggestion === "string" ? res.suggestion : "";
+  },
 
   jobsList: () => ipcRenderer.invoke("jobs:list"),
   jobsGet: async (jobId) => {

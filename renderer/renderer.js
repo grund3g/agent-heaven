@@ -4914,9 +4914,8 @@ function builtInActionKindFromCommand(command) {
 }
 
 function defaultIntegrateCommitMessage(job) {
-  const title = jobDisplayTitle(job) || "Job";
-  const id = job && typeof job.id === "string" ? job.id : "";
-  const msg = id ? `Integrate ${title} (${id})` : `Integrate ${title}`;
+  const title = jobDisplayTitle(job) || "";
+  const msg = title || "Checkpoint changes";
   return msg.slice(0, 72);
 }
 
@@ -4974,11 +4973,19 @@ async function runIntegrateToDefaultAction(jobId) {
 	    } catch (err) {
 	      const msg = String(err && err.message ? err.message : err);
 	      if (msg.includes("Provide a commit message first")) {
+	        let suggested = "";
+	        try {
+	          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
+	            suggested = await api.checkoutsSuggestCommitMessage(id);
+	          }
+	        } catch {
+	          suggested = "";
+	        }
 	        const entered = await promptText({
 	          title: "Commit message",
 	          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
 	          label: "Commit message",
-	          defaultValue: defaultIntegrateCommitMessage(job),
+	          defaultValue: suggested || defaultIntegrateCommitMessage(job),
 	          okLabel: "Continue",
 	          cancelLabel: "Cancel"
 	        });

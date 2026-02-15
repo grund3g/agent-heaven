@@ -293,6 +293,47 @@ export async function getPorcelainStatus(cwd: string): Promise<string> {
   return await gitOkStdout(["status", "--porcelain=v1"], { cwd: dir, timeoutMs: 4_000 });
 }
 
+export async function listChangedPaths(cwd: string): Promise<string[]> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const res = await git(["status", "--porcelain=v1", "-z"], { cwd: dir, timeoutMs: 6_000 });
+  if (!res.ok) throw new Error(res.error);
+  const raw = String(res.stdout || "");
+  if (!raw) return [];
+
+  const parts = raw.split("\0").filter(Boolean);
+  const out: string[] = [];
+
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i] || "";
+    // Entry format: XY <path>
+    if (part.length >= 4 && part[2] === " ") {
+      const status = part.slice(0, 2);
+      const p = part.slice(3);
+      const isRenameOrCopy = status.includes("R") || status.includes("C");
+      if (isRenameOrCopy) {
+        const newPath = parts[i + 1] || "";
+        const picked = newPath || p;
+        if (picked) out.push(picked);
+        i += 1; // skip the extra path field
+      } else {
+        if (p) out.push(p);
+      }
+    }
+  }
+
+  // De-dupe while preserving order.
+  const seen = new Set<string>();
+  const uniq: string[] = [];
+  for (const p of out) {
+    const s = String(p || "").trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    uniq.push(s);
+  }
+  return uniq;
+}
+
 export async function addAll(cwd: string): Promise<void> {
   const dir = String(cwd || "").trim() || process.cwd();
   const res = await git(["add", "-A"], { cwd: dir, timeoutMs: 20_000 });
@@ -306,6 +347,17 @@ export async function commitWithMessage(cwd: string, message: string): Promise<s
   const res = await git(["commit", "-m", msg], { cwd: dir, timeoutMs: 60_000 });
   if (!res.ok) throw new Error(res.error);
   return await gitOkStdout(["rev-parse", "--short", "HEAD"], { cwd: dir, timeoutMs: 2_500 });
+}
+
+export async function listRecentCommitSubjects(cwd: string, limit: number): Promise<string[]> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const n = Number.isFinite(Number(limit)) ? Math.max(0, Math.min(200, Math.trunc(Number(limit)))) : 0;
+  if (!n) return [];
+  const out = await gitOkStdout(["log", "-n", String(n), "--pretty=format:%s"], { cwd: dir, timeoutMs: 6_000 });
+  return String(out || "")
+    .split("\n")
+    .map((s) => String(s || "").trim())
+    .filter(Boolean);
 }
 
 export async function listCommitsInRange(
