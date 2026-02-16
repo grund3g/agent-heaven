@@ -37,6 +37,11 @@ export class JobsManager {
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
+  private pendingTitleSummaryByJobId = new Map<
+    string,
+    { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
+  >(); // keep latest requested title refresh while one is in flight
+  private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
 
@@ -187,6 +192,8 @@ export class JobsManager {
       }
     }
     this.titleLlmProcs.clear();
+    this.pendingTitleSummaryByJobId.clear();
+    this.titleSummaryRevByJobId.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -326,10 +333,13 @@ export class JobsManager {
     return { agent: fallback.agent, model: fallback.model };
   }
 
-  private buildTitleSummarizerPrompt(userPrompt: string): string {
-    const rawPrompt = String(userPrompt || "").trim();
+  private buildTitleSummarizerPrompt(opts: { userPrompt: string; currentTitle?: string }): string {
+    const rawPrompt = String(opts && opts.userPrompt ? opts.userPrompt : "").trim();
+    const rawCurrentTitle =
+      opts && typeof opts.currentTitle === "string" ? truncateText(oneLine(opts.currentTitle).trim(), 120) : "";
     const MAX_PROMPT_CHARS = 6_000;
     const clipped = rawPrompt.length > MAX_PROMPT_CHARS ? `${rawPrompt.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : rawPrompt;
+    const currentTitleSection = rawCurrentTitle || "(none)";
 
     return [
       "Create a concise job card title summarizing the user's request.",
@@ -339,11 +349,15 @@ export class JobsManager {
       "- Max 120 characters.",
       "- Keep the same language as the user's request.",
       "- Prefer 'Verb + object' phrasing (e.g., 'Fix X', 'Add Y', 'Investigate Z').",
+      "- If the newest prompt is just continuation and does NOT change task focus, keep the current title (or only refine wording).",
       "- Do NOT phrase it as a question.",
       "- Avoid generic titles like 'Any ideas?', 'What can we do?', 'Was br\u00e4uchten wir?', 'Was wir machen k\u00f6nnten?'.",
       "- Make it specific: include the key feature/file/error if mentioned.",
       "",
-      "User request:",
+      "Current card title:",
+      currentTitleSection,
+      "",
+      "Latest user request:",
       clipped
     ].join("\n");
   }
@@ -496,21 +510,23 @@ export class JobsManager {
     });
   }
 
-  private kickoffTitleSummary(jobId: string, userPrompt: string, opts: any) {
+  private runPendingTitleSummary(jobId: string) {
+    if (this.titleLlmProcs.has(jobId)) return;
+    const queued = this.pendingTitleSummaryByJobId.get(jobId);
+    if (!queued) return;
+    this.pendingTitleSummaryByJobId.delete(jobId);
+
     const job = this.jobs.get(jobId);
     if (!job) return;
-    if (job.titleLlm && String(job.titleLlm).trim()) return;
-    if (this.titleLlmProcs.has(jobId)) return;
 
-    const settings = opts && typeof opts === "object" ? opts.settings : this.store.getSettings();
-    const codexSettings = opts && typeof opts === "object" ? opts.codexSettings : this.getCodexSettingsFrom(settings);
-    const claudeSettings = opts && typeof opts === "object" ? opts.claudeSettings : this.getClaudeSettingsFrom(settings);
-
+    const { rev, userPrompt, settings, codexSettings, claudeSettings } = queued;
     const fallbackAgent = this.normalizeAgentKey(job.agent);
     const fallbackModel = String(job.model || "").trim();
     const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
-
-    const prompt = this.buildTitleSummarizerPrompt(userPrompt);
+    const prompt = this.buildTitleSummarizerPrompt({
+      userPrompt,
+      currentTitle: String(job.titleLlm || job.title || "")
+    });
 
     void (async () => {
       try {
@@ -549,24 +565,51 @@ export class JobsManager {
         const title = this.cleanTitleFromLlm(raw);
         if (!title) return;
 
+        // A newer title refresh request arrived while this one was running.
+        if ((this.titleSummaryRevByJobId.get(jobId) || 0) !== rev) return;
+
         const live = this.jobs.get(jobId);
         if (!live) return;
-        if (live.titleLlm && String(live.titleLlm).trim()) return;
+        if (String(live.titleLlm || "").trim() === title) return;
 
         live.titleLlm = title;
-        // Keep visible titles stable while running; update the display title once the job is done/failed.
-        if (live.status !== "running") {
-          const meta = snapshotJobMeta(live);
-          this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title, title: meta.title } });
-        } else {
-          this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title } });
-        }
+        const meta = snapshotJobMeta(live);
+        this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title, title: meta.title } });
         this.markJobDirty(jobId);
         this.tryPersistJobNow(live);
       } catch {
         // ignore
+      } finally {
+        if (this.pendingTitleSummaryByJobId.has(jobId) && !this.titleLlmProcs.has(jobId)) {
+          this.runPendingTitleSummary(jobId);
+        }
       }
     })();
+  }
+
+  private kickoffTitleSummary(jobId: string, userPrompt: string, opts: any) {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    const promptText = String(userPrompt || "").trim();
+    if (!promptText) return;
+
+    const settings = opts && typeof opts === "object" ? opts.settings : this.store.getSettings();
+    const codexSettings = opts && typeof opts === "object" ? opts.codexSettings : this.getCodexSettingsFrom(settings);
+    const claudeSettings = opts && typeof opts === "object" ? opts.claudeSettings : this.getClaudeSettingsFrom(settings);
+    const rev = (this.titleSummaryRevByJobId.get(jobId) || 0) + 1;
+
+    this.titleSummaryRevByJobId.set(jobId, rev);
+    this.pendingTitleSummaryByJobId.set(jobId, {
+      rev,
+      userPrompt: promptText,
+      settings,
+      codexSettings,
+      claudeSettings
+    });
+
+    if (this.titleLlmProcs.has(jobId)) return;
+    this.runPendingTitleSummary(jobId);
   }
 
   private appendLog(job: Job, entry: any) {
@@ -1133,6 +1176,9 @@ export class JobsManager {
     // When idle, a thread id is required to resume.
     if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
 
+    // Re-evaluate card title for every accepted follow-up prompt (focus can shift over time).
+    this.kickoffTitleSummary(jobId, text, null);
+
     const queuedAt = new Date().toISOString();
     job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
     job.queuedPrompts.push({ ts: queuedAt, text, images });
@@ -1242,6 +1288,17 @@ export class JobsManager {
 
     this.jobs.delete(id);
     this.procs.delete(id);
+    const titleProc = this.titleLlmProcs.get(id);
+    if (titleProc) {
+      try {
+        titleProc.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+    this.titleLlmProcs.delete(id);
+    this.pendingTitleSummaryByJobId.delete(id);
+    this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
     this.dirtyJobIds.delete(id);
     try {

@@ -380,4 +380,92 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.messages[0].text).toBe("Done.");
     expect(snap.job.messages[0].text.includes("AH_STATUS")).toBe(false);
   });
+
+  it("refreshes the LLM title after follow-up prompts", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+    const events: any[] = [];
+
+    type TitleRun = { child: FakeChild; onEvent: (ev: any) => void; prompt: string };
+    const titleRuns: TitleRun[] = [];
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      const p = String(opts && opts.prompt ? opts.prompt : "");
+      const isTitleSummary = p.includes("Create a concise job card title summarizing the user's request.");
+      if (isTitleSummary) {
+        const child = new FakeChild();
+        titleRuns.push({ child, onEvent: opts.onEvent, prompt: p });
+        return child as any;
+      }
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const resumeChild = new FakeChild();
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return resumeChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: (p: any) => events.push(p),
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Fix flaky login test", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+
+    expect(titleRuns.length).toBe(1);
+    titleRuns[0].onEvent({
+      ts: "2020-01-01T00:00:00.100Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "item.completed", item: { type: "agent_message", text: "Fix flaky login test in CI" } }
+    });
+    titleRuns[0].child.emit("close", 0, null);
+    await Promise.resolve();
+
+    let snap = jm.getJob("job1") as any;
+    expect(snap.job.titleLlm).toBe("Fix flaky login test in CI");
+
+    execChild.emit("close", 0, null);
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.status).toBe("done");
+
+    expect(jm.send({ jobId: "job1", prompt: "Now focus on deployment rollback for prod", images: [] })).toEqual({ ok: true });
+    expect(resumeOpts.threadId).toBe("t123");
+    expect(titleRuns.length).toBe(2);
+    expect(titleRuns[1].prompt).toContain("Now focus on deployment rollback for prod");
+
+    titleRuns[1].onEvent({
+      ts: "2020-01-01T00:00:01.100Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "item.completed", item: { type: "agent_message", text: "Add production rollback deployment flow" } }
+    });
+    titleRuns[1].child.emit("close", 0, null);
+    await Promise.resolve();
+
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.titleLlm).toBe("Add production rollback deployment flow");
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.titleLlm === "Add production rollback deployment flow")).toBe(true);
+
+    resumeChild.emit("close", 0, null);
+  });
 });
