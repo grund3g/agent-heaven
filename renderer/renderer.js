@@ -154,35 +154,9 @@ const api = window.agentHeaven;
 	  settingsSoundVolume: document.getElementById("settingsSoundVolume"),
 			  settingsTestSoundAttention: document.getElementById("settingsTestSoundAttention"),
 			  settingsTestSoundDone: document.getElementById("settingsTestSoundDone"),
-		  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
-		  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
-		  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
-		  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
-	  settingsIntegrationsEnabled: document.getElementById("settingsIntegrationsEnabled"),
-	  settingsIntegrationsAutoEnrichPrompt: document.getElementById("settingsIntegrationsAutoEnrichPrompt"),
-	  settingsIntegrationsAutoCommentOnComplete: document.getElementById("settingsIntegrationsAutoCommentOnComplete"),
-	  settingsIntegrationsRequestTimeoutMs: document.getElementById("settingsIntegrationsRequestTimeoutMs"),
-	  settingsIntegrationsLinearEnabled: document.getElementById("settingsIntegrationsLinearEnabled"),
-	  settingsIntegrationsLinearApiBaseUrl: document.getElementById("settingsIntegrationsLinearApiBaseUrl"),
-	  settingsIntegrationsLinearToken: document.getElementById("settingsIntegrationsLinearToken"),
-	  settingsIntegrationsLinearTokenEnvVar: document.getElementById("settingsIntegrationsLinearTokenEnvVar"),
-	  settingsIntegrationsLinearMaxIssuesPerPrompt: document.getElementById("settingsIntegrationsLinearMaxIssuesPerPrompt"),
-	  settingsIntegrationsLinearIncludeDescription: document.getElementById("settingsIntegrationsLinearIncludeDescription"),
-	  settingsIntegrationsGithubEnabled: document.getElementById("settingsIntegrationsGithubEnabled"),
-	  settingsIntegrationsGithubApiBaseUrl: document.getElementById("settingsIntegrationsGithubApiBaseUrl"),
-	  settingsIntegrationsGithubToken: document.getElementById("settingsIntegrationsGithubToken"),
-	  settingsIntegrationsGithubTokenEnvVar: document.getElementById("settingsIntegrationsGithubTokenEnvVar"),
-	  settingsIntegrationsGithubMaxIssuesPerPrompt: document.getElementById("settingsIntegrationsGithubMaxIssuesPerPrompt"),
-	  settingsIntegrationsNotionEnabled: document.getElementById("settingsIntegrationsNotionEnabled"),
-	  settingsIntegrationsNotionApiBaseUrl: document.getElementById("settingsIntegrationsNotionApiBaseUrl"),
-	  settingsIntegrationsNotionToken: document.getElementById("settingsIntegrationsNotionToken"),
-	  settingsIntegrationsNotionTokenEnvVar: document.getElementById("settingsIntegrationsNotionTokenEnvVar"),
-	  settingsIntegrationsNotionVersion: document.getElementById("settingsIntegrationsNotionVersion"),
-	  settingsIntegrationsNotionMaxPagesPerPrompt: document.getElementById("settingsIntegrationsNotionMaxPagesPerPrompt"),
-	  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
-	  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
-	  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
-	  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
+	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
+	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
+	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -6842,66 +6816,6 @@ function isIntegrateAutoArchiveEnabled() {
   return s.integrateAutoArchive !== false;
 }
 
-function normalizeIntegrateToDefaultMode(value) {
-  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (raw === "cli") return "cli";
-  return "agent";
-}
-
-function normalizeIntegrationApiBaseUrl(value, fallback) {
-  const raw = typeof value === "string" ? value.trim() : "";
-  return raw || fallback;
-}
-
-function normalizeIntegrationEnvVar(value, fallback) {
-  const raw = typeof value === "string" ? value.trim() : "";
-  return raw || fallback;
-}
-
-function normalizeIntegrationToken(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function normalizeIntegrationSettingsForUi(value) {
-  const root = value && typeof value === "object" ? value : {};
-  const providers = root.providers && typeof root.providers === "object" ? root.providers : {};
-  const linear = providers.linear && typeof providers.linear === "object" ? providers.linear : {};
-  const github = providers.github && typeof providers.github === "object" ? providers.github : {};
-  const notion = providers.notion && typeof providers.notion === "object" ? providers.notion : {};
-
-  return {
-    enabled: !!root.enabled,
-    autoEnrichPrompt: root.autoEnrichPrompt !== false,
-    autoCommentOnComplete: root.autoCommentOnComplete !== false,
-    requestTimeoutMs: clampNumber(root.requestTimeoutMs, 1000, 60000, 12000),
-    providers: {
-      linear: {
-        enabled: !!linear.enabled,
-        apiBaseUrl: normalizeIntegrationApiBaseUrl(linear.apiBaseUrl, "https://api.linear.app/graphql"),
-        token: normalizeIntegrationToken(linear.token),
-        tokenEnvVar: normalizeIntegrationEnvVar(linear.tokenEnvVar, "LINEAR_API_KEY"),
-        maxIssuesPerPrompt: clampNumber(linear.maxIssuesPerPrompt, 1, 10, 3),
-        includeDescription: linear.includeDescription !== false
-      },
-      github: {
-        enabled: !!github.enabled,
-        apiBaseUrl: normalizeIntegrationApiBaseUrl(github.apiBaseUrl, "https://api.github.com"),
-        token: normalizeIntegrationToken(github.token),
-        tokenEnvVar: normalizeIntegrationEnvVar(github.tokenEnvVar, "GITHUB_TOKEN"),
-        maxIssuesPerPrompt: clampNumber(github.maxIssuesPerPrompt, 1, 10, 3)
-      },
-      notion: {
-        enabled: !!notion.enabled,
-        apiBaseUrl: normalizeIntegrationApiBaseUrl(notion.apiBaseUrl, "https://api.notion.com/v1"),
-        token: normalizeIntegrationToken(notion.token),
-        tokenEnvVar: normalizeIntegrationEnvVar(notion.tokenEnvVar, "NOTION_API_KEY"),
-        notionVersion: (typeof notion.notionVersion === "string" ? notion.notionVersion.trim() : "") || "2022-06-28",
-        maxPagesPerPrompt: clampNumber(notion.maxPagesPerPrompt, 1, 8, 2)
-      }
-    }
-  };
-}
-
 let integrateDialogJobId = "";
 let integrateDialogPhase = ""; // confirm | pending | success | error
 let integrateDialogStatusText = "";
@@ -7204,7 +7118,7 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     integrateDialogTargetBranch = targetBranch;
 
     const canArchive = jobBox(job) === "board";
-    const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
+    const autoArchive = canArchive && isIntegrateAutoArchiveEnabled();
     const details = [
       targetBranch ? `Target branch: ${targetBranch}` : "",
       targetPath ? `Target path: ${targetPath}` : "",
@@ -7230,61 +7144,8 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
       targetBranch
     });
 
-    if (toastOnly) {
-      if (autoArchive) {
-        if (backendAutoArchived) {
-          integrateDialogArchived = true;
-          showToast(msg, null, 2400);
-          window.setTimeout(() => {
-            showToast("Ticket archived.");
-          }, 950);
-        } else {
-          const archiveRes = await archiveJobWithRetry(id, { attempts: 6, baseDelayMs: 220 });
-          if (archiveRes.ok) {
-            integrateDialogArchived = true;
-            showToast(msg, null, 2400);
-            window.setTimeout(() => {
-              showToast("Ticket archived.");
-            }, 950);
-          } else {
-            const full = backendAutoArchiveError || archiveRes.error || "Failed to archive.";
-            const first = (String(full).split("\n")[0] || "").trim() || "Failed to archive.";
-            showToast(`${msg} ${first}`);
-          }
-        }
-      } else if (canArchive && api && typeof api.jobsArchive === "function") {
-        showToast(msg, null, 10000, {
-          actions: [
-            {
-              label: "Archive ticket",
-              kind: "primary",
-              onClick: async () => {
-                try {
-                  await api.jobsArchive(id);
-                  integrateDialogArchived = true;
-                  showToast("Ticket archived.");
-                } catch (err) {
-                  showToast(String(err && err.message ? err.message : err) || "Failed to archive.");
-                }
-              }
-            }
-          ]
-        });
-      } else {
-        showToast(msg);
-      }
-    } else if (autoArchive && !backendAutoArchived) {
+    if (autoArchive) {
       await archiveIntegrateDialogJob();
-    } else if (autoArchive && backendAutoArchived) {
-      integrateDialogArchived = true;
-      setIntegrateDialogPhase("success", {
-        status: "Archived",
-        message: "Ticket archived.",
-        details,
-        targetPath,
-        targetBranch,
-        archived: true
-      });
     }
   } catch (err) {
     const full = String(err && err.message ? err.message : err).trim() || "Integration failed.";
@@ -12306,99 +12167,10 @@ function wireUi() {
 					      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
 					      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
 					      integrateAutoArchive: !!els.settingsIntegrateAutoArchive.checked,
-					      integrateToDefaultMode: normalizeIntegrateToDefaultMode(
-					        els.settingsIntegrateToDefaultMode ? els.settingsIntegrateToDefaultMode.value : ""
-					      ),
-                helperDefaultAgent: normalizeHelperAgentSelection(
-                  els.settingsHelperDefaultAgent ? els.settingsHelperDefaultAgent.value : ""
-                ),
-	                helperDefaultModel: normalizeHelperModelValue(
-	                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
-	                ),
-	                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
-	                integrations: {
-	                  enabled: !!(els.settingsIntegrationsEnabled && els.settingsIntegrationsEnabled.checked),
-	                  autoEnrichPrompt: !!(
-	                    els.settingsIntegrationsAutoEnrichPrompt && els.settingsIntegrationsAutoEnrichPrompt.checked
-	                  ),
-	                  autoCommentOnComplete: !!(
-	                    els.settingsIntegrationsAutoCommentOnComplete && els.settingsIntegrationsAutoCommentOnComplete.checked
-	                  ),
-	                  requestTimeoutMs: clampNumber(
-	                    els.settingsIntegrationsRequestTimeoutMs ? els.settingsIntegrationsRequestTimeoutMs.value : 12000,
-	                    1000,
-	                    60000,
-	                    12000
-	                  ),
-	                  providers: {
-	                    linear: {
-	                      enabled: !!(els.settingsIntegrationsLinearEnabled && els.settingsIntegrationsLinearEnabled.checked),
-	                      apiBaseUrl: els.settingsIntegrationsLinearApiBaseUrl
-	                        ? els.settingsIntegrationsLinearApiBaseUrl.value.trim()
-	                        : "",
-	                      token: els.settingsIntegrationsLinearToken ? els.settingsIntegrationsLinearToken.value.trim() : "",
-	                      tokenEnvVar: els.settingsIntegrationsLinearTokenEnvVar
-	                        ? els.settingsIntegrationsLinearTokenEnvVar.value.trim()
-	                        : "",
-	                      maxIssuesPerPrompt: clampNumber(
-	                        els.settingsIntegrationsLinearMaxIssuesPerPrompt
-	                          ? els.settingsIntegrationsLinearMaxIssuesPerPrompt.value
-	                          : 3,
-	                        1,
-	                        10,
-	                        3
-	                      ),
-	                      includeDescription: !!(
-	                        els.settingsIntegrationsLinearIncludeDescription &&
-	                        els.settingsIntegrationsLinearIncludeDescription.checked
-	                      )
-	                    },
-	                    github: {
-	                      enabled: !!(els.settingsIntegrationsGithubEnabled && els.settingsIntegrationsGithubEnabled.checked),
-	                      apiBaseUrl: els.settingsIntegrationsGithubApiBaseUrl
-	                        ? els.settingsIntegrationsGithubApiBaseUrl.value.trim()
-	                        : "",
-	                      token: els.settingsIntegrationsGithubToken ? els.settingsIntegrationsGithubToken.value.trim() : "",
-	                      tokenEnvVar: els.settingsIntegrationsGithubTokenEnvVar
-	                        ? els.settingsIntegrationsGithubTokenEnvVar.value.trim()
-	                        : "",
-	                      maxIssuesPerPrompt: clampNumber(
-	                        els.settingsIntegrationsGithubMaxIssuesPerPrompt
-	                          ? els.settingsIntegrationsGithubMaxIssuesPerPrompt.value
-	                          : 3,
-	                        1,
-	                        10,
-	                        3
-	                      )
-	                    },
-	                    notion: {
-	                      enabled: !!(els.settingsIntegrationsNotionEnabled && els.settingsIntegrationsNotionEnabled.checked),
-	                      apiBaseUrl: els.settingsIntegrationsNotionApiBaseUrl
-	                        ? els.settingsIntegrationsNotionApiBaseUrl.value.trim()
-	                        : "",
-	                      token: els.settingsIntegrationsNotionToken ? els.settingsIntegrationsNotionToken.value.trim() : "",
-	                      tokenEnvVar: els.settingsIntegrationsNotionTokenEnvVar
-	                        ? els.settingsIntegrationsNotionTokenEnvVar.value.trim()
-	                        : "",
-	                      notionVersion: els.settingsIntegrationsNotionVersion
-	                        ? els.settingsIntegrationsNotionVersion.value.trim()
-	                        : "",
-	                      maxPagesPerPrompt: clampNumber(
-	                        els.settingsIntegrationsNotionMaxPagesPerPrompt
-	                          ? els.settingsIntegrationsNotionMaxPagesPerPrompt.value
-	                          : 2,
-	                        1,
-	                        8,
-	                        2
-	                      )
-	                    }
-	                  }
-	                },
-						      agents: {
-					        codex: {
-					          path: els.settingsCodexPath.value.trim(),
-				          model: els.settingsCodexModel.value.trim(),
-			          transport: els.settingsCodexTransport ? els.settingsCodexTransport.value : "exec_json",
+					      agents: {
+				        codex: {
+				          path: els.settingsCodexPath.value.trim(),
+			          model: els.settingsCodexModel.value.trim(),
 		          sandboxMode: els.settingsCodexSandboxMode.value,
 		          skipGitRepoCheck: !!els.settingsCodexSkipGitRepoCheck.checked,
 		          bypassApprovalsAndSandbox: !!els.settingsCodexBypass.checked,
@@ -13388,90 +13160,6 @@ function closeSettings() {
 					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
 					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
 					  els.settingsIntegrateAutoArchive.checked = s.integrateAutoArchive !== false;
-					  if (els.settingsIntegrateToDefaultMode) {
-					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
-					  }
-	            {
-	              const integrations = normalizeIntegrationSettingsForUi(s.integrations);
-	              if (els.settingsIntegrationsEnabled) {
-	                els.settingsIntegrationsEnabled.checked = integrations.enabled;
-	              }
-	              if (els.settingsIntegrationsAutoEnrichPrompt) {
-	                els.settingsIntegrationsAutoEnrichPrompt.checked = integrations.autoEnrichPrompt;
-	              }
-	              if (els.settingsIntegrationsAutoCommentOnComplete) {
-	                els.settingsIntegrationsAutoCommentOnComplete.checked = integrations.autoCommentOnComplete;
-	              }
-	              if (els.settingsIntegrationsRequestTimeoutMs) {
-	                els.settingsIntegrationsRequestTimeoutMs.value = String(integrations.requestTimeoutMs);
-	              }
-	              if (els.settingsIntegrationsLinearEnabled) {
-	                els.settingsIntegrationsLinearEnabled.checked = integrations.providers.linear.enabled;
-	              }
-	              if (els.settingsIntegrationsLinearApiBaseUrl) {
-	                els.settingsIntegrationsLinearApiBaseUrl.value = integrations.providers.linear.apiBaseUrl;
-	              }
-	              if (els.settingsIntegrationsLinearToken) {
-	                els.settingsIntegrationsLinearToken.value = integrations.providers.linear.token;
-	              }
-	              if (els.settingsIntegrationsLinearTokenEnvVar) {
-	                els.settingsIntegrationsLinearTokenEnvVar.value = integrations.providers.linear.tokenEnvVar;
-	              }
-	              if (els.settingsIntegrationsLinearMaxIssuesPerPrompt) {
-	                els.settingsIntegrationsLinearMaxIssuesPerPrompt.value = String(
-	                  integrations.providers.linear.maxIssuesPerPrompt
-	                );
-	              }
-	              if (els.settingsIntegrationsLinearIncludeDescription) {
-	                els.settingsIntegrationsLinearIncludeDescription.checked = integrations.providers.linear.includeDescription;
-	              }
-	              if (els.settingsIntegrationsGithubEnabled) {
-	                els.settingsIntegrationsGithubEnabled.checked = integrations.providers.github.enabled;
-	              }
-	              if (els.settingsIntegrationsGithubApiBaseUrl) {
-	                els.settingsIntegrationsGithubApiBaseUrl.value = integrations.providers.github.apiBaseUrl;
-	              }
-	              if (els.settingsIntegrationsGithubToken) {
-	                els.settingsIntegrationsGithubToken.value = integrations.providers.github.token;
-	              }
-	              if (els.settingsIntegrationsGithubTokenEnvVar) {
-	                els.settingsIntegrationsGithubTokenEnvVar.value = integrations.providers.github.tokenEnvVar;
-	              }
-	              if (els.settingsIntegrationsGithubMaxIssuesPerPrompt) {
-	                els.settingsIntegrationsGithubMaxIssuesPerPrompt.value = String(
-	                  integrations.providers.github.maxIssuesPerPrompt
-	                );
-	              }
-	              if (els.settingsIntegrationsNotionEnabled) {
-	                els.settingsIntegrationsNotionEnabled.checked = integrations.providers.notion.enabled;
-	              }
-	              if (els.settingsIntegrationsNotionApiBaseUrl) {
-	                els.settingsIntegrationsNotionApiBaseUrl.value = integrations.providers.notion.apiBaseUrl;
-	              }
-	              if (els.settingsIntegrationsNotionToken) {
-	                els.settingsIntegrationsNotionToken.value = integrations.providers.notion.token;
-	              }
-	              if (els.settingsIntegrationsNotionTokenEnvVar) {
-	                els.settingsIntegrationsNotionTokenEnvVar.value = integrations.providers.notion.tokenEnvVar;
-	              }
-	              if (els.settingsIntegrationsNotionVersion) {
-	                els.settingsIntegrationsNotionVersion.value = integrations.providers.notion.notionVersion;
-	              }
-	              if (els.settingsIntegrationsNotionMaxPagesPerPrompt) {
-	                els.settingsIntegrationsNotionMaxPagesPerPrompt.value = String(
-	                  integrations.providers.notion.maxPagesPerPrompt
-	                );
-	              }
-	            }
-	            if (els.settingsHelperDefaultAgent) {
-	              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
-	            }
-	            if (els.settingsHelperDefaultModel) {
-              els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
-            }
-            if (els.settingsHelperPersistHistory) {
-              els.settingsHelperPersistHistory.checked = helperPersistHistoryFromSettings(s);
-            }
 
 		  refreshCodexModelsDatalist({ showErrors: true });
 

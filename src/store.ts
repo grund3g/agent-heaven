@@ -50,43 +50,6 @@ export const DEFAULT_STATE = {
     boardDoneLimit: 250, // 0 = unlimited (limits Done lane rendering on Board)
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
     integrateAutoArchive: true, // auto-archive ticket after "Integrate to default branch"
-    integrateToDefaultMode: "agent", // agent | cli
-    helperDefaultAgent: "", // "" | claude | codex
-    helperDefaultModel: "opus",
-    helperPersistHistory: true,
-
-    // Provider integrations (Linear/GitHub/Notion). Tokens can be set directly in settings or via env-var fallback.
-    integrations: {
-      enabled: false,
-      autoEnrichPrompt: true,
-      autoCommentOnComplete: true,
-      requestTimeoutMs: 12000,
-      providers: {
-        linear: {
-          enabled: false,
-          apiBaseUrl: "https://api.linear.app/graphql",
-          token: "",
-          tokenEnvVar: "LINEAR_API_KEY",
-          maxIssuesPerPrompt: 3,
-          includeDescription: true
-        },
-        github: {
-          enabled: false,
-          apiBaseUrl: "https://api.github.com",
-          token: "",
-          tokenEnvVar: "GITHUB_TOKEN",
-          maxIssuesPerPrompt: 3
-        },
-        notion: {
-          enabled: false,
-          apiBaseUrl: "https://api.notion.com/v1",
-          token: "",
-          tokenEnvVar: "NOTION_API_KEY",
-          notionVersion: "2022-06-28",
-          maxPagesPerPrompt: 2
-        }
-      }
-    },
 
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
     // Versioned seeding for built-in actions (so existing installs can pick up new defaults once).
@@ -911,37 +874,9 @@ function ensureSettings(settings) {
     changed = true;
   }
 
-  {
-    const raw = typeof (next as any).uiDesignVersion === "string" ? (next as any).uiDesignVersion.trim().toLowerCase() : "";
-    const nextVersion = raw === "v2" ? "v2" : "v1";
-    if ((next as any).uiDesignVersion !== nextVersion) {
-      (next as any).uiDesignVersion = nextVersion;
-      changed = true;
-    }
-  }
-
   if (typeof (next as any).integrateAutoArchive !== "boolean") {
     (next as any).integrateAutoArchive = true;
     changed = true;
-  }
-
-  {
-    const mode = normalizeIntegrateToDefaultMode((next as any).integrateToDefaultMode) || "agent";
-    if ((next as any).integrateToDefaultMode !== mode) {
-      (next as any).integrateToDefaultMode = mode;
-      changed = true;
-    }
-  }
-
-  if (typeof (next as any).editorCommand !== "string") {
-    (next as any).editorCommand = "";
-    changed = true;
-  } else {
-    const trimmed = String((next as any).editorCommand).trim();
-    if ((next as any).editorCommand !== trimmed) {
-      (next as any).editorCommand = trimmed;
-      changed = true;
-    }
   }
 
   const agentRes = ensureAgentSettings(next);
