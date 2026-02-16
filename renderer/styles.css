@@ -2059,8 +2059,17 @@ body::before {
 }
 
 .integrate__icon--idle {
-  border: 1px solid var(--stroke);
-  background: var(--surface2);
+  border: 1px dashed rgba(var(--accent2-rgb), 0.42);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, rgba(var(--accent2-rgb), 0.14), rgba(var(--accent-rgb), 0.12)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(var(--accent2-rgb), 0.08) 0,
+      rgba(var(--accent2-rgb), 0.08) 3px,
+      transparent 3px,
+      transparent 6px
+    );
 }
 
 .integrate__icon--spinner {
