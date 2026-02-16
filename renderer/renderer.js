@@ -6304,29 +6304,6 @@ function updateCardEl(job) {
     integratedEl.title = integrated ? oneLine(integrated.title) : "";
   }
 
-  const ctx = jobContextStepper(job);
-  const topEl = existing.querySelector(".card__top");
-  let ctxEl = existing.querySelector("[data-job-context]");
-  if (ctx) {
-    if (!ctxEl && topEl) {
-      const statusEl = topEl.querySelector(".card__status");
-      const tpl = document.createElement("template");
-      tpl.innerHTML = renderCardContextStepper(ctx).trim();
-      ctxEl = tpl.content.firstElementChild;
-      if (ctxEl) topEl.insertBefore(ctxEl, statusEl || null);
-    }
-    if (ctxEl) {
-      ctxEl.hidden = false;
-      ctxEl.title = oneLine(ctx.title);
-      const fillEl = ctxEl.querySelector("[data-job-context-fill]");
-      if (fillEl && fillEl.style) fillEl.style.width = `${ctx.fillPct.toFixed(2)}%`;
-      const pctEl = ctxEl.querySelector("[data-job-context-pct]");
-      if (pctEl) pctEl.textContent = ctx.pctText;
-    }
-  } else if (ctxEl) {
-    ctxEl.remove();
-  }
-
   const pillEl = existing.querySelector(".pill");
   if (pillEl) {
     const s = uiStatus;

@@ -2118,11 +2118,7 @@ export async function startApp(): Promise<void> {
     }
 
     if (commits.length === 0) {
-      // Mark as integrated only when this action actually created a commit.
-      // For pure no-op runs ("nothing to integrate"), keep the merged badge hidden.
-      if (committed) {
-        jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
-      }
+      jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
       return {
         ok: true,
         targetPath: targetDir,
