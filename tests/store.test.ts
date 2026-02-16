@@ -88,4 +88,31 @@ describe("store", () => {
     const updated = s.updateSettings({ integrateAutoArchive: false });
     expect(updated.integrateAutoArchive).toBe(false);
   });
+
+  it("normalizes editorCommand to a trimmed string", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify(
+        {
+          settings: {
+            editorCommand: 123
+          },
+          projects: []
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect(s.getSettings().editorCommand).toBe("");
+
+    const updated = s.updateSettings({ editorCommand: "  code  " });
+    expect(updated.editorCommand).toBe("code");
+  });
 });
