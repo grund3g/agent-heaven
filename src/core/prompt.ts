@@ -72,13 +72,6 @@ export function isBoilerplatePromptLine(s: unknown): boolean {
   if (low.startsWith("cwd>") || low.startsWith("shell>")) return true;
   if (low.startsWith("cwd ") || low.startsWith("shell ")) return true;
   if (low.startsWith("cwd:") || low.startsWith("shell:")) return true;
-  if (low === "-----") return true;
-  if (low.includes("[agent heaven internal]")) return true;
-  if (low.startsWith("ah_status:") || low.startsWith("ah status:")) return true;
-  if (low.includes("at the very end of your final reply")) return true;
-  if (low.includes("do not add any other text after the ah_status line")) return true;
-  if (/^status=[^\s]+(?:\s+[a-z0-9_-]+=[^\s]+){3,}$/i.test(low)) return true;
-  if (low.includes("status=") && low.includes("thread=") && low.includes("model=")) return true;
   return false;
 }
 
