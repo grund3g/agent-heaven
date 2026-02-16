@@ -311,10 +311,8 @@ function buildCommitMessageGeneratorPrompt(opts: {
   style: "conventional" | "plain";
   changedPaths: string[];
   recentSubjects: string[];
-  forceEnglish?: boolean;
 }): string {
   const style = opts.style === "conventional" ? "conventional" : "plain";
-  const forceEnglish = !!opts.forceEnglish;
   const changedPaths = Array.isArray(opts.changedPaths)
     ? opts.changedPaths.map((p) => String(p || "").trim()).filter(Boolean).slice(0, 180)
     : [];
@@ -341,12 +339,7 @@ function buildCommitMessageGeneratorPrompt(opts: {
     `- ${styleHint}`,
     "- Base the subject on the actual file changes listed below.",
     "- Keep wording concise and specific.",
-    forceEnglish
-      ? "- Write the subject in English only (never use another language)."
-      : "- Match the repository language/style from recent subjects when possible.",
-    forceEnglish
-      ? "- Use recent subjects only as style/format reference, not as language reference."
-      : "- Prefer repository wording/style when possible.",
+    "- Match the repository language/style from recent subjects when possible.",
     "",
     "Changed files:",
     changedBlock,
@@ -1965,12 +1958,7 @@ export async function startApp(): Promise<void> {
       const settings = store.getSettings();
       const plan = await pickUiTextGenPlan(settings);
       if (plan.ok) {
-        const prompt = buildCommitMessageGeneratorPrompt({
-          style,
-          changedPaths,
-          recentSubjects,
-          forceEnglish
-        });
+        const prompt = buildCommitMessageGeneratorPrompt({ style, changedPaths, recentSubjects });
         const raw = await runUiTextPrompt({
           settings,
           codexSettings: plan.codexSettings,
