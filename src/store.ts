@@ -55,6 +55,18 @@ export const DEFAULT_STATE = {
         name: "Integrate to default branch",
         // Built-in command handled by the renderer (not executed in the shell).
         command: "ah:integrate-to-default"
+      },
+      {
+        id: "ah_builtin_commit_and_push",
+        name: "Commit + push",
+        // Built-in command handled by the renderer (not executed in the shell).
+        command: "ah:commit-and-push"
+      },
+      {
+        id: "ah_builtin_commit_only",
+        name: "Commit only",
+        // Built-in command handled by the renderer (not executed in the shell).
+        command: "ah:commit-only"
       }
     ],
 
@@ -452,7 +464,7 @@ function ensureActionsSettings(settings) {
   const next: any = { ...s };
   let changed = false;
 
-  const DEFAULTS_VERSION = 1;
+  const DEFAULTS_VERSION = 2;
   {
     const raw = (next as any).actionsDefaultsVersion;
     let v = typeof raw === "number" ? raw : Number(raw);
@@ -520,20 +532,39 @@ function ensureActionsSettings(settings) {
   // Seed built-in actions once (versioned) so existing users get them,
   // but can remove them later without the app re-adding them.
   if ((next as any).actionsDefaultsVersion < DEFAULTS_VERSION) {
-    const hasIntegrate =
-      out.some((a) => a && typeof a === "object" && String((a as any).id || "").trim() === "ah_builtin_integrate_to_default") ||
+    const hasBuiltIn = (opts: { id: string; commands: string[] }) =>
+      out.some((a) => a && typeof a === "object" && String((a as any).id || "").trim() === opts.id) ||
       out.some((a) => {
         const cmd = a && typeof a === "object" ? String((a as any).command || "") : "";
         const first = (cmd.replaceAll("\r\n", "\n").split("\n")[0] || "").trim();
-        return first === "ah:integrate-to-default" || first === "ah:integrate";
+        return opts.commands.includes(first);
       });
 
-    if (!hasIntegrate && out.length < MAX_ACTIONS) {
-      out.push({
+    const builtIns = [
+      {
         id: "ah_builtin_integrate_to_default",
         name: "Integrate to default branch",
-        command: "ah:integrate-to-default"
-      });
+        command: "ah:integrate-to-default",
+        aliases: ["ah:integrate-to-default", "ah:integrate"]
+      },
+      {
+        id: "ah_builtin_commit_and_push",
+        name: "Commit + push",
+        command: "ah:commit-and-push",
+        aliases: ["ah:commit-and-push", "ah:commit+push", "ah:commit-push"]
+      },
+      {
+        id: "ah_builtin_commit_only",
+        name: "Commit only",
+        command: "ah:commit-only",
+        aliases: ["ah:commit-only", "ah:commit"]
+      }
+    ];
+
+    for (const bi of builtIns) {
+      if (out.length >= MAX_ACTIONS) break;
+      if (hasBuiltIn({ id: bi.id, commands: bi.aliases })) continue;
+      out.push({ id: bi.id, name: bi.name, command: bi.command });
       changed = true;
     }
 

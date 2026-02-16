@@ -36,6 +36,7 @@ import {
   listChangedPaths,
   listCommitsInRange,
   listRecentCommitSubjects,
+  pushCurrentBranch,
   removeWorktree,
   switchBranch
 } from "./git";
@@ -174,6 +175,175 @@ function normalizeGeneratedAction(parsed: any): { name: string; command: string 
   if (command.length > MAX_CMD) command = command.slice(0, MAX_CMD);
 
   return { name, command };
+}
+
+type UiTextGenPlan = {
+  ok: true;
+  agent: "codex" | "claude";
+  model: string;
+  codexSettings: any;
+  claudeSettings: any;
+};
+
+async function pickUiTextGenPlan(settings: any): Promise<UiTextGenPlan | { ok: false; error: string }> {
+  const agents =
+    settings && typeof settings === "object" && (settings as any).agents && typeof (settings as any).agents === "object"
+      ? (settings as any).agents
+      : {};
+  const codexSettings = agents && typeof agents.codex === "object" ? agents.codex : {};
+  const claudeSettings = agents && typeof agents.claude === "object" ? agents.claude : {};
+
+  let binaries: any = null;
+  try {
+    binaries = await checkAgentBinaries(settings, { timeoutMs: 1200 });
+  } catch {
+    binaries = null;
+  }
+  const codexFound = !!(binaries && binaries.codex && binaries.codex.found);
+  const claudeFound = !!(binaries && binaries.claude && binaries.claude.found);
+
+  const uiModelRaw = settings && typeof settings === "object" ? String((settings as any).uiModel || "").trim() : "";
+  const uiModelLow = uiModelRaw.toLowerCase();
+  const uiAgent = uiModelRaw ? (uiModelLow === "opus" || uiModelLow === "sonnet" || uiModelLow === "haiku" ? "claude" : "codex") : "";
+  const preferredAgent = uiAgent || "codex";
+
+  let agent: "codex" | "claude" = "codex";
+  if (preferredAgent === "claude" && claudeFound) agent = "claude";
+  else if (preferredAgent === "codex" && codexFound) agent = "codex";
+  else if (codexFound) agent = "codex";
+  else if (claudeFound) agent = "claude";
+  else return { ok: false, error: "No agent CLI found (install Codex and/or Claude, or set the binary path in Settings)." };
+
+  let model = "";
+  if (uiAgent === agent && uiModelRaw) {
+    model = uiModelRaw;
+  } else if (agent === "claude") {
+    model = typeof claudeSettings.model === "string" ? String(claudeSettings.model || "").trim() : "";
+  } else {
+    model = typeof codexSettings.model === "string" ? String(codexSettings.model || "").trim() : "";
+  }
+
+  return { ok: true, agent, model, codexSettings, claudeSettings };
+}
+
+async function runUiTextPrompt(opts: {
+  settings: any;
+  codexSettings: any;
+  claudeSettings: any;
+  agent: "codex" | "claude";
+  model: string;
+  prompt: string;
+}): Promise<string> {
+  const { settings, codexSettings, claudeSettings, agent, model, prompt } = opts;
+  if (agent === "claude") {
+    const claudePath = resolveClaudeCliPathFromSettings(settings);
+    const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
+    return await runClaudeUiPrompt({
+      claudePath,
+      settings: safeClaudeSettings,
+      projectPath: process.cwd(),
+      model,
+      prompt
+    });
+  }
+
+  const codexPath = resolveCodexCliPathFromSettings(settings);
+  const safeCodexSettings = {
+    ...(codexSettings || {}),
+    sandboxMode: "read-only",
+    bypassApprovalsAndSandbox: false,
+    skipGitRepoCheck: true
+  };
+  return await runCodexUiPrompt({
+    codexPath,
+    settings: safeCodexSettings,
+    projectPath: process.cwd(),
+    model,
+    prompt
+  });
+}
+
+function truncateCommitSubjectLine(s: string, max = 72): string {
+  const str = String(s || "").replaceAll(/\s+/g, " ").trim();
+  if (!str) return "";
+  const m = Math.max(1, Math.trunc(max));
+  if (str.length <= m) return str;
+  const head = str.slice(0, m);
+  for (let i = head.length - 1; i >= Math.floor(m * 0.6); i -= 1) {
+    const ch = head[i];
+    if (ch === " " || ch === "\t") return head.slice(0, i).trimEnd();
+  }
+  return head.trimEnd();
+}
+
+function normalizeGeneratedCommitSubject(raw: string): string {
+  let s = stripMarkdownCodeFences(String(raw || "")).trim();
+  if (!s) return "";
+
+  const first = s
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => !!line);
+  s = String(first || "").trim();
+  if (!s) return "";
+
+  s = s
+    .replace(/^commit\s+message\s*:\s*/i, "")
+    .replace(/^commit\s+subject\s*:\s*/i, "")
+    .replace(/^subject\s*:\s*/i, "")
+    .trim();
+
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'")) ||
+    (s.startsWith("`") && s.endsWith("`"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+
+  return truncateCommitSubjectLine(s, 72);
+}
+
+function buildCommitMessageGeneratorPrompt(opts: {
+  style: "conventional" | "plain";
+  changedPaths: string[];
+  recentSubjects: string[];
+}): string {
+  const style = opts.style === "conventional" ? "conventional" : "plain";
+  const changedPaths = Array.isArray(opts.changedPaths)
+    ? opts.changedPaths.map((p) => String(p || "").trim()).filter(Boolean).slice(0, 180)
+    : [];
+  const recentSubjects = Array.isArray(opts.recentSubjects)
+    ? opts.recentSubjects.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 25)
+    : [];
+
+  const changedBlock = changedPaths.length > 0 ? changedPaths.map((p) => `- ${p}`).join("\n") : "- (no changed paths reported)";
+  const recentBlock = recentSubjects.length > 0 ? recentSubjects.map((s) => `- ${s}`).join("\n") : "- (none)";
+  const styleHint =
+    style === "conventional"
+      ? "Use Conventional Commits style: type(scope?): subject"
+      : "Use a plain imperative subject line (no Conventional Commit prefix).";
+
+  return [
+    "You generate a single git commit subject line.",
+    "",
+    "Output format (STRICT):",
+    "- Return ONLY the commit subject line.",
+    "- No markdown, no code fences, no quotes, no explanations.",
+    "- Max length: 72 characters.",
+    "",
+    "Rules:",
+    `- ${styleHint}`,
+    "- Base the subject on the actual file changes listed below.",
+    "- Keep wording concise and specific.",
+    "- Match the repository language/style from recent subjects when possible.",
+    "",
+    "Changed files:",
+    changedBlock,
+    "",
+    "Recent commit subjects (style reference):",
+    recentBlock
+  ].join("\n");
 }
 
 function buildActionGeneratorPrompt(opts: { userPrompt: string; platform: string; shell: string }): string {
@@ -743,40 +913,9 @@ export async function startApp(): Promise<void> {
     if (userPrompt.length > 4000) return { ok: false, error: "Prompt too long" };
 
     const settings = store.getSettings();
-    const agents = settings && typeof settings === "object" && (settings as any).agents && typeof (settings as any).agents === "object" ? (settings as any).agents : {};
-    const codexSettings = agents && typeof agents.codex === "object" ? agents.codex : {};
-    const claudeSettings = agents && typeof agents.claude === "object" ? agents.claude : {};
-
-    // Pick agent/model (prefer Settings -> UI model; fall back to any installed agent).
-    let binaries: any = null;
-    try {
-      binaries = await checkAgentBinaries(settings, { timeoutMs: 1200 });
-    } catch {
-      binaries = null;
-    }
-    const codexFound = !!(binaries && binaries.codex && binaries.codex.found);
-    const claudeFound = !!(binaries && binaries.claude && binaries.claude.found);
-
-    const uiModelRaw = settings && typeof settings === "object" ? String((settings as any).uiModel || "").trim() : "";
-    const uiModelLow = uiModelRaw.toLowerCase();
-    const uiAgent = uiModelRaw ? (uiModelLow === "opus" || uiModelLow === "sonnet" || uiModelLow === "haiku" ? "claude" : "codex") : "";
-    const preferredAgent = uiAgent || "codex";
-
-    let agent: "codex" | "claude" = "codex";
-    if (preferredAgent === "claude" && claudeFound) agent = "claude";
-    else if (preferredAgent === "codex" && codexFound) agent = "codex";
-    else if (codexFound) agent = "codex";
-    else if (claudeFound) agent = "claude";
-    else return { ok: false, error: "No agent CLI found (install Codex and/or Claude, or set the binary path in Settings)." };
-
-    let model = "";
-    if (uiAgent === agent && uiModelRaw) {
-      model = uiModelRaw;
-    } else if (agent === "claude") {
-      model = typeof claudeSettings.model === "string" ? String(claudeSettings.model || "").trim() : "";
-    } else {
-      model = typeof codexSettings.model === "string" ? String(codexSettings.model || "").trim() : "";
-    }
+    const plan = await pickUiTextGenPlan(settings);
+    if (!plan.ok) return plan;
+    const { agent, model, codexSettings, claudeSettings } = plan;
 
     const shellPath =
       process.platform === "win32"
@@ -787,33 +926,14 @@ export async function startApp(): Promise<void> {
     const prompt = buildActionGeneratorPrompt({ userPrompt, platform: process.platform, shell: shellPath });
 
     try {
-      let raw = "";
-      if (agent === "claude") {
-        const claudePath = resolveClaudeCliPathFromSettings(settings);
-        const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
-        raw = await runClaudeUiPrompt({
-          claudePath,
-          settings: safeClaudeSettings,
-          projectPath: process.cwd(),
-          model,
-          prompt
-        });
-      } else {
-        const codexPath = resolveCodexCliPathFromSettings(settings);
-        const safeCodexSettings = {
-          ...(codexSettings || {}),
-          sandboxMode: "read-only",
-          bypassApprovalsAndSandbox: false,
-          skipGitRepoCheck: true
-        };
-        raw = await runCodexUiPrompt({
-          codexPath,
-          settings: safeCodexSettings,
-          projectPath: process.cwd(),
-          model,
-          prompt
-        });
-      }
+      const raw = await runUiTextPrompt({
+        settings,
+        codexSettings,
+        claudeSettings,
+        agent,
+        model,
+        prompt
+      });
 
       const parsed = extractJsonFromText(raw || "");
       const action = normalizeGeneratedAction(parsed);
@@ -1296,7 +1416,7 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const suggestion = suggestCommitMessage({
+    const heuristicFallback = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",
@@ -1304,7 +1424,90 @@ export async function startApp(): Promise<void> {
       allowTaskContext: false
     });
 
+    let suggestion = heuristicFallback;
+    try {
+      const settings = store.getSettings();
+      const plan = await pickUiTextGenPlan(settings);
+      if (plan.ok) {
+        const prompt = buildCommitMessageGeneratorPrompt({ style, changedPaths, recentSubjects });
+        const raw = await runUiTextPrompt({
+          settings,
+          codexSettings: plan.codexSettings,
+          claudeSettings: plan.claudeSettings,
+          agent: plan.agent,
+          model: plan.model,
+          prompt
+        });
+        const llmSuggestion = normalizeGeneratedCommitSubject(raw);
+        if (llmSuggestion) suggestion = llmSuggestion;
+      }
+    } catch {
+      // Keep fallback suggestion.
+    }
+
     return { ok: true, suggestion };
+  });
+
+  ipcMain.handle("checkouts:commit", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const jobId = String(p.jobId || "").trim();
+    const commitMessage = typeof p.commitMessage === "string" ? p.commitMessage.trim() : "";
+    const push = !!p.push;
+    if (!jobId) return { ok: false, error: "Missing jobId" };
+    if (!commitMessage) return { ok: false, error: "Missing commit message" };
+
+    const got = jobsManager.getJob(jobId);
+    if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
+    const job = (got as any).job || {};
+
+    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!sourceDir) return { ok: false, error: "Job is missing projectPath" };
+    if (!fs.existsSync(sourceDir)) return { ok: false, error: `Checkout path does not exist: ${sourceDir}` };
+
+    const info = await getGitInfo(sourceDir);
+    if (!info.isGitRepo) return { ok: false, error: `Checkout is not a git repo: ${sourceDir}` };
+    if (!info.dirty) return { ok: false, error: "No local changes to commit." };
+    if (push && info.detached) return { ok: false, error: "Cannot push from detached HEAD. Switch to a branch first." };
+
+    let committedSha = "";
+    try {
+      await addAll(sourceDir);
+      committedSha = await commitWithMessage(sourceDir, commitMessage);
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+
+    if (!push) {
+      return {
+        ok: true,
+        committedSha,
+        pushed: false,
+        branch: info.branch || "",
+        remote: "",
+        upstreamRef: "",
+        setUpstream: false
+      };
+    }
+
+    try {
+      const pushRes = await pushCurrentBranch(sourceDir);
+      return {
+        ok: true,
+        committedSha,
+        pushed: true,
+        branch: pushRes.branch || info.branch || "",
+        remote: pushRes.remote || "",
+        upstreamRef: pushRes.upstreamRef || "",
+        setUpstream: !!pushRes.setUpstream
+      };
+    } catch (err: any) {
+      const msg = String(err && err.message ? err.message : err);
+      return {
+        ok: false,
+        error: `Committed ${committedSha}, but push failed.\n\n${msg}`
+      };
+    }
   });
 
   ipcMain.handle("checkouts:integrateToDefault", async (evt, payload) => {

@@ -349,6 +349,79 @@ export async function commitWithMessage(cwd: string, message: string): Promise<s
   return await gitOkStdout(["rev-parse", "--short", "HEAD"], { cwd: dir, timeoutMs: 2_500 });
 }
 
+function looksLikeMissingUpstreamPushError(msg: string): boolean {
+  const low = String(msg || "").toLowerCase();
+  if (!low) return false;
+  return (
+    low.includes("has no upstream branch") ||
+    low.includes("set upstream") ||
+    low.includes("no upstream configured") ||
+    low.includes("no upstream branch")
+  );
+}
+
+function extractRemoteFromUpstreamRef(upstreamRef: string): string {
+  const s = String(upstreamRef || "").trim();
+  if (!s) return "";
+  const idx = s.indexOf("/");
+  if (idx <= 0) return "";
+  return s.slice(0, idx).trim();
+}
+
+async function tryCurrentUpstreamRef(cwd: string): Promise<string> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  try {
+    return await gitOkStdout(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], {
+      cwd: dir,
+      timeoutMs: 2_500
+    });
+  } catch {
+    return "";
+  }
+}
+
+export async function pushCurrentBranch(
+  cwd: string
+): Promise<{ branch: string; upstreamRef: string; remote: string; setUpstream: boolean }> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const branch = await gitOkStdout(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: dir, timeoutMs: 2_500 });
+  if (!branch || branch === "HEAD") throw new Error("Cannot push from detached HEAD.");
+
+  const firstPush = await git(["push"], { cwd: dir, timeoutMs: 10 * 60_000 });
+  if (firstPush.ok) {
+    const upstreamRef = await tryCurrentUpstreamRef(dir);
+    return {
+      branch,
+      upstreamRef,
+      remote: extractRemoteFromUpstreamRef(upstreamRef),
+      setUpstream: false
+    };
+  }
+
+  const firstErrorText = `${String(firstPush.error || "")}\n${String(firstPush.stderr || "")}`;
+  if (!looksLikeMissingUpstreamPushError(firstErrorText)) throw new Error(firstPush.error);
+
+  const hasOrigin = (await git(["remote", "get-url", "origin"], { cwd: dir, timeoutMs: 4_000 })).ok;
+  if (!hasOrigin) throw new Error(firstPush.error);
+
+  const fallbackPush = await git(["push", "--set-upstream", "origin", "HEAD"], { cwd: dir, timeoutMs: 10 * 60_000 });
+  if (!fallbackPush.ok) {
+    const bits = [
+      String(firstPush.error || "").trim(),
+      String(fallbackPush.error || "").trim()
+    ].filter(Boolean);
+    throw new Error(bits.join("\n\n"));
+  }
+
+  const upstreamRef = await tryCurrentUpstreamRef(dir);
+  return {
+    branch,
+    upstreamRef,
+    remote: extractRemoteFromUpstreamRef(upstreamRef) || "origin",
+    setUpstream: true
+  };
+}
+
 export async function listRecentCommitSubjects(cwd: string, limit: number): Promise<string[]> {
   const dir = String(cwd || "").trim() || process.cwd();
   const n = Number.isFinite(Number(limit)) ? Math.max(0, Math.min(200, Math.trunc(Number(limit)))) : 0;
