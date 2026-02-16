@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
-import { guessTitleFromPrompt, isLowSignalTitleText, promptSummary } from "../core/prompt";
+import { promptSummary } from "../core/prompt";
 import { oneLine, truncateText } from "../core/text";
 import { addUsageTotals } from "../core/usage";
 import { newId } from "../core/id";
@@ -292,8 +292,9 @@ export class JobsManager {
   }
 
   private buildTitleSummarizerPrompt(userPrompt: string): string {
-    const summary = promptSummary(userPrompt) || String(userPrompt || "").trim();
-    const clipped = summary.length > 1200 ? summary.slice(0, 1200).trimEnd() : summary;
+    const rawPrompt = String(userPrompt || "").trim();
+    const MAX_PROMPT_CHARS = 6_000;
+    const clipped = rawPrompt.length > MAX_PROMPT_CHARS ? `${rawPrompt.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : rawPrompt;
 
     return [
       "Create a concise job card title summarizing the user's request.",
@@ -331,7 +332,6 @@ export class JobsManager {
     t = t.trim();
 
     if (!t) return "";
-    if (isLowSignalTitleText(t)) return "";
 
     // Hard cap (display uses a 3-line clamp; keep tooltip/search reasonable).
     return truncateText(t, 120);
@@ -963,7 +963,7 @@ export class JobsManager {
 
     const job: Job = {
       id: jobId,
-      title: guessTitleFromPrompt(prompt),
+      title: "",
       titleLlm: "",
       status: "running",
       box: "board",

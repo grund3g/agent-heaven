@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { guessTitleFromPrompt, isBoilerplatePromptLine, jobDisplayTitle, promptSummary } from "../src/core/prompt";
+import { isBoilerplatePromptLine, jobDisplayTitle, promptSummary } from "../src/core/prompt";
 
 describe("core/prompt", () => {
   it("detects boilerplate-ish lines", () => {
@@ -9,7 +9,7 @@ describe("core/prompt", () => {
     expect(isBoilerplatePromptLine("Fix store migration")).toBe(false);
   });
 
-  it("summarizes prompts and prefers the 'ask' near the end", () => {
+  it("summarizes prompts and prefers the ask near the end", () => {
     const s = `
       # AGENTS.md instructions
       <INSTRUCTIONS>
@@ -26,64 +26,6 @@ describe("core/prompt", () => {
     expect(promptSummary(s)).toBe("Please refactor and add tests");
   });
 
-  it("guesses stable titles", () => {
-    expect(guessTitleFromPrompt("")).toBe("Untitled");
-    expect(guessTitleFromPrompt("# Skills")).toBe("Untitled");
-    expect(guessTitleFromPrompt("Fix store migration bug")).toBe("Fix store migration bug");
-  });
-
-  it("creates compact titles for common prompts", () => {
-    expect(guessTitleFromPrompt("Title summaries are still broken; card titles show the first lines of my prompt")).toBe(
-      "Fix: Card title summaries"
-    );
-    expect(guessTitleFromPrompt("Can we implement search across old sessions and jobs?")).toBe("Session search");
-    expect(guessTitleFromPrompt("Please add a system option to dark/light mode")).toBe("Theme: system option");
-  });
-
-  it("drops low-signal intros (EN/DE)", () => {
-    expect(guessTitleFromPrompt("Ich habe jetzt mal versucht, Wispr Flow klaut beim Start den Fokus")).toBe(
-      "Wispr Flow klaut beim Start den Fokus"
-    );
-    expect(guessTitleFromPrompt("I just tried, the card title is useless")).toBe("the card title is useless");
-  });
-
-  it("skips low-signal lead-ins like 'kannst du mir kurzfristig, damit ich …' and keeps the actual ask", () => {
-    const p = [
-      'kannst du mir kurfristig, damit ich einen screenshot bzw. ein video für die landing page oder github machen kann,',
-      'eine möglichkeit bauen, einen "demo" modus in der app zu aktivieren wo wir mock jobs, mock projekte, etc. haben (alles englisch)',
-      'damit ich die app durchklicken kann mit screenredcording?'
-    ].join(" ");
-
-    const t = guessTitleFromPrompt(p).toLowerCase();
-    expect(t).toContain("demo");
-    expect(t).not.toMatch(/^kannst du\\b/);
-    expect(t).not.toMatch(/^mir\\b/);
-    expect(t).not.toMatch(/^damit\\b/);
-  });
-
-  it("strips stacked prefixes (e.g. 'Kannst du bitte …')", () => {
-    expect(guessTitleFromPrompt("Kannst du bitte Fix store migration bug")).toBe("Fix store migration bug");
-  });
-
-  it("drops generic outro questions/sign-offs", () => {
-    expect(guessTitleFromPrompt("Fix store migration bug. Any ideas?")).toBe("Fix store migration bug");
-    expect(guessTitleFromPrompt("Fix store migration bug. Thanks!")).toBe("Fix store migration bug");
-    expect(guessTitleFromPrompt("Fix store migration bug. Was könnte man da noch machen?")).toBe("Fix store migration bug");
-
-    // Same idea, but split across lines without punctuation between them.
-    expect(guessTitleFromPrompt(["Fix store migration bug", "Any ideas?"].join("\n"))).toBe("Fix store migration bug");
-    expect(guessTitleFromPrompt(["Fix store migration bug", "Was br\u00e4uchten wir?"].join("\n"))).toBe("Fix store migration bug");
-    expect(guessTitleFromPrompt(["Fix store migration bug", "Was wir machen k\u00f6nnten?"].join("\n"))).toBe("Fix store migration bug");
-  });
-
-  it("derives display titles from earliest meaningful prompt", () => {
-    const job = {
-      title: "Fallback title",
-      prompts: [{ ts: "t1", text: "AGENTS.md instructions" }, { ts: "t2", text: "Fix store migration bug" }]
-    };
-    expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
-  });
-
   it("prefers LLM titles when available", () => {
     const job = {
       title: "Fallback title",
@@ -93,12 +35,25 @@ describe("core/prompt", () => {
     expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
   });
 
-  it("ignores low-signal LLM titles", () => {
+  it("uses stored title when no LLM title exists", () => {
     const job = {
       title: "Fallback title",
-      titleLlm: "Was br\u00e4uchten wir?",
+      titleLlm: "",
       prompts: [{ ts: "t1", text: "Fix store migration bug" }]
     };
-    expect(jobDisplayTitle(job)).toBe("Fix store migration bug");
+    expect(jobDisplayTitle(job)).toBe("Fallback title");
+  });
+
+  it("does not apply extra heuristics to LLM output", () => {
+    const job = {
+      title: "Fallback title",
+      titleLlm: "Was braeuchten wir?",
+      prompts: [{ ts: "t1", text: "Fix store migration bug" }]
+    };
+    expect(jobDisplayTitle(job)).toBe("Was braeuchten wir?");
+  });
+
+  it("falls back to Untitled when no title information is available", () => {
+    expect(jobDisplayTitle({})).toBe("Untitled");
   });
 });

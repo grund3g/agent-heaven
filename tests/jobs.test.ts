@@ -17,6 +17,7 @@ describe("core/jobs", () => {
     const job: Job = {
       id: "j1",
       title: "",
+      titleLlm: "Fix store migration bug",
       status: "done",
       box: "board",
       archivedAt: "",
