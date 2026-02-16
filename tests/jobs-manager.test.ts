@@ -683,46 +683,6 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.messages[0].text.includes("AH_STATUS")).toBe(false);
   });
 
-  it("ignores non-actionable AH_STATUS needs_attention hints with no visible ask", async () => {
-    const store = {
-      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
-      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
-    };
-    const history = { loadAll: () => [], save: () => true, remove: () => true };
-
-    let execOnEvent: ((ev: any) => void) | null = null;
-    const execChild = new FakeChild();
-    const runCodexExec = (opts: any) => {
-      execOnEvent = opts.onEvent;
-      return execChild as any;
-    };
-
-    const jm = new JobsManager({
-      store,
-      history,
-      sendJobEvent: () => {},
-      runCodexExec,
-      runCodexResume: () => new FakeChild() as any,
-      needsAttentionHeuristic: () => false,
-      createId: () => "job1"
-    });
-
-    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
-    expect(execOnEvent).not.toBeNull();
-
-    execOnEvent!({
-      ts: "2020-01-01T00:00:01.000Z",
-      stream: "stdout",
-      kind: "codex",
-      data: { type: "item.completed", item: { type: "agent_message", text: "AH_STATUS: needs_attention\n" } }
-    });
-
-    execChild.emit("close", 0, null);
-    const snap = jm.getJob("job1") as any;
-    expect(snap.job.status).toBe("done");
-    expect(snap.job.messages.length).toBe(0);
-  });
-
   it("reclassifies successful runs with a final LLM pass", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),

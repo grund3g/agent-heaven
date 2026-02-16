@@ -114,6 +114,7 @@ export class JobsManager {
     { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
   >(); // keep latest requested title refresh while one is in flight
   private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
+  private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
   // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
@@ -298,6 +299,14 @@ export class JobsManager {
     this.titleLlmProcs.clear();
     this.pendingTitleSummaryByJobId.clear();
     this.titleSummaryRevByJobId.clear();
+    for (const child of this.attentionLlmProcs.values()) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+    this.attentionLlmProcs.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -1272,7 +1281,6 @@ export class JobsManager {
     // Clear per-run hints when a new run begins (prevents stale hints affecting resumed runs).
     if (status === "running") {
       this.attentionHintByJobId.delete(jobId);
-      this.finishedRunKeyByJobId.delete(jobId);
       const classifier = this.attentionLlmProcs.get(jobId);
       if (classifier) {
         try {
@@ -1345,30 +1353,6 @@ export class JobsManager {
     while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
 
     return { cleanText: out.join("\n"), hint };
-  }
-
-  private hasActionableNeedsAttentionText(text: unknown): boolean {
-    const raw = typeof text === "string" ? text : text == null ? "" : String(text);
-    const plain = raw.trim();
-    if (!plain) return false;
-
-    if (this.needsAttentionHeuristic(plain)) return true;
-
-    const fallbackSignals = [
-      /\b(sag|sage)\s+(einfach\s+)?["']?(ja|yes)["']?\b/i,
-      /\b(waiting for your|warte auf dein)\b/i,
-      /\b(please|bitte)\b.{0,80}\b(confirm|best[aä]tig|choose|select|pick|w[aä]hl|entscheide|run|execute|ausf(?:ue|ü)hr)\w*/i
-    ];
-
-    return fallbackSignals.some((re) => re.test(plain));
-  }
-
-  private normalizeStatusHint(
-    hint: "done" | "needs_attention" | null,
-    cleanText: string
-  ): "done" | "needs_attention" | null {
-    if (hint !== "needs_attention") return hint;
-    return this.hasActionableNeedsAttentionText(cleanText) ? "needs_attention" : null;
   }
 
   private buildAttentionClassifierPrompt(opts: { lastUserPrompt: string; lastAssistant: string }): string {
@@ -1615,13 +1599,7 @@ export class JobsManager {
     return "done";
   }
 
-  private kickoffAttentionClassification(
-    jobId: string,
-    finishedAt: string,
-    code: number | null,
-    hinted: "done" | "needs_attention" | null,
-    onResolved?: (status: "done" | "needs_attention") => void
-  ) {
+  private kickoffAttentionClassification(jobId: string, finishedAt: string, code: number | null, hinted: "done" | "needs_attention" | null) {
     const startJob = this.jobs.get(jobId);
     if (!startJob) return;
 
@@ -1639,7 +1617,6 @@ export class JobsManager {
       if (live.status !== status) {
         this.setJobStatus(jobId, status, { finishedAt, exitCode: code });
       }
-      if (typeof onResolved === "function") onResolved(status);
     })();
   }
 
@@ -1844,19 +1821,15 @@ export class JobsManager {
 
     const hinted = this.attentionHintByJobId.get(jobId) || null;
     const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
-    const exitCode = typeof code === "number" ? code : null;
 
     if (signal) {
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
       this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, exitCode);
     } else if (code !== 0) {
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
-      this.finalizeIntegrationRun(jobId, "failed", finishedAt, exitCode);
     } else {
       this.setJobStatus(jobId, provisionalStatus, { finishedAt, exitCode: code });
-      this.kickoffAttentionClassification(jobId, finishedAt, exitCode, hinted, (finalStatus) => {
-        this.finalizeIntegrationRun(jobId, finalStatus, finishedAt, exitCode);
-      });
+      this.kickoffAttentionClassification(jobId, finishedAt, typeof code === "number" ? code : null, hinted);
     }
   }
 
