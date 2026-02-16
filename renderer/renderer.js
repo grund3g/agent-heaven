@@ -9,6 +9,8 @@ const api = window.agentHeaven;
 	  openSettingsBtn: document.getElementById("openSettingsBtn"),
 	  openStatusBtn: document.getElementById("openStatusBtn"),
 	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
+  tableScopeCtl: document.getElementById("tableScopeCtl"),
+  tableScopeSelect: document.getElementById("tableScopeSelect"),
   sortSelect: document.getElementById("sortSelect"),
   projectFilterSelect: document.getElementById("projectFilterSelect"),
   searchInput: document.getElementById("searchInput"),
@@ -28,6 +30,10 @@ const api = window.agentHeaven;
   runBtn: document.getElementById("runBtn"),
   composerHint: document.getElementById("composerHint"),
 
+  boardSection: document.getElementById("boardSection"),
+  sessionsTableSection: document.getElementById("sessionsTableSection"),
+  sessionsTableMeta: document.getElementById("sessionsTableMeta"),
+  sessionsTableBody: document.getElementById("sessionsTableBody"),
   laneRunning: document.getElementById("laneRunning"),
   laneAttention: document.getElementById("laneAttention"),
   laneDone: document.getElementById("laneDone"),
@@ -212,6 +218,8 @@ const state = {
   activeTab: "chat",
   cardEls: new Map(), // jobId -> HTMLElement
   view: "board", // board | archive | trash
+  displayMode: "cards", // cards | table
+  tableScope: "view", // view | all (table mode only)
   focusLane: "", // running | attention | done (popout window)
   focusJobId: "", // jobId (popout window)
   showAllDone: false, // board view: show all Done cards (otherwise respect boardDoneLimit)
@@ -261,6 +269,8 @@ const STORAGE = {
   lastProjectId: "agentHeaven.lastProjectId",
   lastAgent: "agentHeaven.lastAgent",
   sortMode: "agentHeaven.sortMode",
+  displayMode: "agentHeaven.displayMode",
+  tableScope: "agentHeaven.tableScope",
   projectFilterId: "agentHeaven.projectFilterId",
   sidebarCollapsed: "agentHeaven.sidebarCollapsed",
   composerDraft: "agentHeaven.draft.composer",
@@ -1128,6 +1138,40 @@ function storeSortMode(mode) {
   try {
     if (!mode) return;
     window.localStorage.setItem(STORAGE.sortMode, mode);
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredDisplayMode() {
+  try {
+    return window.localStorage.getItem(STORAGE.displayMode) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storeDisplayMode(mode) {
+  try {
+    const v = normalizeDisplayMode(mode);
+    window.localStorage.setItem(STORAGE.displayMode, v);
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredTableScope() {
+  try {
+    return window.localStorage.getItem(STORAGE.tableScope) || "";
+  } catch {
+    return "";
+  }
+}
+
+function storeTableScope(scope) {
+  try {
+    const v = normalizeTableScope(scope);
+    window.localStorage.setItem(STORAGE.tableScope, v);
   } catch {
     // ignore
   }
@@ -2849,12 +2893,28 @@ function pickLane(status) {
 }
 
 const VIEWS = ["board", "archive", "trash"];
+const DISPLAY_MODES = ["cards", "table"];
+const TABLE_SCOPES = ["view", "all"];
 
 function normalizeView(value) {
   const v = String(value || "")
     .trim()
     .toLowerCase();
   return VIEWS.includes(v) ? v : "board";
+}
+
+function normalizeDisplayMode(value) {
+  const v = String(value || "")
+    .trim()
+    .toLowerCase();
+  return DISPLAY_MODES.includes(v) ? v : "cards";
+}
+
+function normalizeTableScope(value) {
+  const v = String(value || "")
+    .trim()
+    .toLowerCase();
+  return TABLE_SCOPES.includes(v) ? v : "view";
 }
 
 function normalizeSearchQuery(value) {
@@ -3354,6 +3414,10 @@ function jobVisibleInView(job, view) {
   return b === "board";
 }
 
+function tableScopeIncludesAllBoxes() {
+  return state.displayMode === "table" && state.tableScope === "all";
+}
+
 function jobVisibleInCurrentView(job) {
   if (isSearchActive()) {
     const ids = state.searchJobIds;
@@ -3367,7 +3431,7 @@ function jobVisibleInCurrentView(job) {
     const pid = job && typeof job.projectId === "string" ? job.projectId : "";
     if (pid !== filterId) return false;
   }
-  if (!jobVisibleInView(job, state.view)) return false;
+  if (!tableScopeIncludesAllBoxes() && !jobVisibleInView(job, state.view)) return false;
   if (state.view === "board" && state.focusLane) {
     return pickLane(job.status) === state.focusLane;
   }
@@ -3730,6 +3794,7 @@ function startFirstRunTour() {
 
   // Ensure cards are visible on a fresh start.
   setView("board");
+  setDisplayMode("cards");
   ensureDemoJobs();
 
   ensureTourDom();
@@ -4744,9 +4809,40 @@ function setLanePopoutsHidden(hidden) {
   });
 }
 
+function setDisplayModeButtons(mode) {
+  document.querySelectorAll(".seg__btn[data-display-mode]").forEach((btn) => {
+    const v = btn.getAttribute("data-display-mode") || "";
+    const active = v === mode;
+    btn.classList.toggle("seg__btn--active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
+function setViewButtons(view) {
+  document.querySelectorAll(".seg__btn[data-view]").forEach((btn) => {
+    const v = btn.getAttribute("data-view") || "";
+    const active = v === view;
+    btn.classList.toggle("seg__btn--active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  });
+}
+
 function applyViewLayout() {
   const v = normalizeView(state.view);
-  setLanePopoutsHidden(v !== "board" || !!state.focusLane);
+  const display = normalizeDisplayMode(state.displayMode);
+  const showCards = display === "cards";
+  const showTable = display === "table";
+
+  if (els.boardSection) els.boardSection.hidden = !showCards;
+  if (els.sessionsTableSection) els.sessionsTableSection.hidden = !showTable;
+  if (els.tableScopeCtl) els.tableScopeCtl.hidden = !showTable;
+  if (els.tableScopeSelect && els.tableScopeSelect.value !== state.tableScope) {
+    els.tableScopeSelect.value = state.tableScope;
+  }
+
+  setLanePopoutsHidden(!showCards || v !== "board" || !!state.focusLane);
+
+  if (!showCards) return;
 
   if (v === "archive") {
     setLaneHidden(els.laneRunning, false);
@@ -4786,17 +4882,35 @@ function setView(value) {
 
   if (next !== "board") state.showAllDone = false;
   state.view = next;
-
-  document.querySelectorAll(".seg__btn[data-view]").forEach((btn) => {
-    const v = btn.getAttribute("data-view") || "";
-    const active = v === next;
-    btn.classList.toggle("seg__btn--active", active);
-    btn.setAttribute("aria-selected", active ? "true" : "false");
-  });
+  setViewButtons(next);
 
   applyViewLayout();
   renderBoard();
   renderSearchUi();
+  scheduleStatusDialogRender();
+}
+
+function setDisplayMode(value) {
+  const next = normalizeDisplayMode(value);
+  if (state.displayMode === next) return;
+  state.displayMode = next;
+  storeDisplayMode(next);
+  setDisplayModeButtons(next);
+  applyViewLayout();
+  renderBoard();
+  renderSearchUi();
+  scheduleStatusDialogRender();
+}
+
+function setTableScope(value) {
+  const next = normalizeTableScope(value);
+  if (state.tableScope === next) return;
+  state.tableScope = next;
+  storeTableScope(next);
+  if (els.tableScopeSelect && els.tableScopeSelect.value !== next) els.tableScopeSelect.value = next;
+  renderBoard();
+  renderSearchUi();
+  scheduleStatusDialogRender();
 }
 
 function setSortMode(value) {
@@ -4806,6 +4920,7 @@ function setSortMode(value) {
   storeSortMode(next);
   if (els.sortSelect && els.sortSelect.value !== next) els.sortSelect.value = next;
   renderBoard();
+  scheduleStatusDialogRender();
 }
 
 function boardDoneLimitValue() {
@@ -4813,10 +4928,142 @@ function boardDoneLimitValue() {
   return clampNumber(s.boardDoneLimit, 0, 5000, 250);
 }
 
-function renderBoard() {
-  // Full render (used on initial load / project list changes). Incremental updates are done per-job.
-  const jobs = Array.from(state.jobs.values()).filter((j) => jobVisibleInCurrentView(j));
+function tableLaneKindForJob(job) {
+  if (tableScopeIncludesAllBoxes()) {
+    const box = jobBox(job);
+    if (box === "archive") return "archived";
+    if (box === "trash") return "trash";
+  } else if (state.view === "archive") {
+    return "archived";
+  } else if (state.view === "trash") {
+    return "trash";
+  }
+  return pickLane(job && job.status);
+}
 
+function tableLaneEnteredMs(job) {
+  return jobLaneEnteredMs(job, tableLaneKindForJob(job));
+}
+
+function cmpJobsForTable(a, b) {
+  const mode = normalizeSortMode(state.sortMode);
+  let d = 0;
+
+  if (mode === "duration_longest") {
+    d = cmpNumDir(jobDurationMs(a), jobDurationMs(b), "desc");
+  } else if (mode === "created_newest") {
+    d = cmpNumDir(jobCreatedMs(a), jobCreatedMs(b), "desc");
+  } else if (mode === "created_oldest") {
+    d = cmpNumDir(jobCreatedMs(a), jobCreatedMs(b), "asc");
+  } else if (mode === "lane_oldest") {
+    d = cmpNumDir(tableLaneEnteredMs(a), tableLaneEnteredMs(b), "asc");
+  } else {
+    d = cmpNumDir(tableLaneEnteredMs(a), tableLaneEnteredMs(b), "desc");
+  }
+
+  if (d) return d;
+
+  d = cmpNumDir(jobCreatedMs(a), jobCreatedMs(b), "desc");
+  if (d) return d;
+
+  const aid = String(a && a.id ? a.id : "");
+  const bid = String(b && b.id ? b.id : "");
+  return aid.localeCompare(bid);
+}
+
+function sortJobsForTable(jobs) {
+  const arr = Array.isArray(jobs) ? [...jobs] : [];
+  arr.sort((a, b) => cmpJobsForTable(a, b));
+  return arr;
+}
+
+function pad2(n) {
+  return String(Math.max(0, Number(n) || 0)).padStart(2, "0");
+}
+
+function fmtDateTimeShort(value) {
+  const ms = isoMs(value);
+  if (!Number.isFinite(ms)) return "—";
+  const d = new Date(ms);
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
+
+function middleEllipsis(value, { head = 8, tail = 8 } = {}) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  const h = Math.max(1, Math.trunc(head));
+  const t = Math.max(1, Math.trunc(tail));
+  if (s.length <= h + t + 1) return s;
+  return `${s.slice(0, h)}…${s.slice(-t)}`;
+}
+
+function tableBoxLabel(job) {
+  const box = jobBox(job);
+  if (box === "archive") return "archive";
+  if (box === "trash") return "trash";
+  return `board/${pickLane(job && job.status)}`;
+}
+
+function renderSessionsTable(jobs) {
+  if (!els.sessionsTableBody || !els.sessionsTableMeta) return;
+
+  const arr = sortJobsForTable(jobs);
+  const scopeLabel = tableScopeIncludesAllBoxes() ? "all sessions" : `view=${state.view}`;
+  els.sessionsTableMeta.textContent = `${arr.length} sessions · ${scopeLabel}`;
+
+  if (arr.length === 0) {
+    els.sessionsTableBody.innerHTML = `<tr><td colspan="13" class="sessiontable__mono sessiontable__mono--dim">No sessions.</td></tr>`;
+    return;
+  }
+
+  const rows = arr.map((j) => {
+    const title = jobDisplayTitle(j) || "Untitled";
+    const project = projectLabelById(j.projectId);
+    const projectTitle = projectNameById(j.projectId);
+    const agent = agentDisplayName(j.agent);
+    const model = String(j.model || "").trim() || "—";
+    const created = fmtDateTimeShort(j.createdAt);
+    const finished = j.status === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
+    const duration = jobDurationText(j);
+    const tok = jobTokensCardText(j);
+    const tokText = tok ? tok.text : "—";
+    const tokTitle = tok ? tok.title : "";
+    const thread = String(j.threadId || "").trim();
+    const threadShort = thread ? middleEllipsis(thread, { head: 10, tail: 8 }) : "—";
+    const exitText = j && j.exitCode == null ? "—" : String(j.exitCode);
+    const integrated = integratedBadgeForJob(j);
+    const integratedText = integrated ? integrated.text : "—";
+    const integratedTitle = integrated ? integrated.title : "";
+    const durationAttr = `data-session-duration="${escapeHtml(j.id)}"`;
+
+    return `
+      <tr class="sessionrow" data-job-id="${escapeHtml(j.id)}">
+        <td>${fmtStatusPill(j.status)}</td>
+        <td class="sessiontable__mono">${escapeHtml(tableBoxLabel(j))}</td>
+        <td class="sessiontable__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</td>
+        <td title="${escapeHtml(oneLine(projectTitle))}">${escapeHtml(project)}</td>
+        <td class="sessiontable__mono">${escapeHtml(agent)}</td>
+        <td class="sessiontable__mono" title="${escapeHtml(oneLine(model))}">${escapeHtml(model)}</td>
+        <td class="sessiontable__mono" title="${escapeHtml(String(j.createdAt || ""))}">${escapeHtml(created)}</td>
+        <td class="sessiontable__mono" title="${escapeHtml(String(j.finishedAt || ""))}">${escapeHtml(finished)}</td>
+        <td class="sessiontable__mono" ${durationAttr}>${escapeHtml(duration || "—")}</td>
+        <td class="sessiontable__mono sessiontable__tokens" title="${escapeHtml(oneLine(tokTitle))}">${escapeHtml(tokText)}</td>
+        <td class="sessiontable__mono" title="${escapeHtml(oneLine(thread))}">${escapeHtml(threadShort)}</td>
+        <td class="sessiontable__mono sessiontable__right">${escapeHtml(exitText)}</td>
+        <td class="sessiontable__mono" title="${escapeHtml(oneLine(integratedTitle))}">${escapeHtml(integratedText)}</td>
+      </tr>
+    `;
+  });
+
+  els.sessionsTableBody.innerHTML = rows.join("");
+}
+
+function renderCardsBoard(jobs) {
   let laneA = [];
   let laneB = [];
   let laneC = [];
@@ -4882,6 +5129,15 @@ function renderBoard() {
   }
 
   syncBoardLaneVisibility();
+}
+
+function renderBoard() {
+  const jobs = Array.from(state.jobs.values()).filter((j) => jobVisibleInCurrentView(j));
+  if (state.displayMode === "table") {
+    renderSessionsTable(jobs);
+    return;
+  }
+  renderCardsBoard(jobs);
 }
 
 function projectById(id) {
@@ -5326,6 +5582,15 @@ function tickRunningDurations() {
     if (durEl.hidden) durEl.hidden = false;
     const next = jobElapsedText(job, nowMs);
     if (durEl.textContent !== next) durEl.textContent = next;
+
+    if (els.sessionsTableBody && els.sessionsTableBody.querySelectorAll) {
+      const tableEls = els.sessionsTableBody.querySelectorAll(`[data-session-duration="${job.id}"]`);
+      for (const tableEl of tableEls) {
+        if (!tableEl) continue;
+        const nextTable = jobDurationText(job, nowMs);
+        if (tableEl.textContent !== nextTable) tableEl.textContent = nextTable;
+      }
+    }
   }
 
   // If a running job is open, refresh its meta row (includes elapsed).
@@ -7466,7 +7731,8 @@ function renderJobDialogPanels(job) {
 
 function upsertJob(job) {
   state.jobs.set(job.id, job);
-  updateCardEl(job);
+  if (state.displayMode === "cards") updateCardEl(job);
+  else renderBoard();
   if (state.selectedJobId === job.id && els.jobDialog.open) {
     const title = jobDisplayTitle(job);
     els.jobDialogTitle.textContent = title || "Job";
@@ -7492,7 +7758,8 @@ function removeJob(jobId) {
   if (!id) return;
   state.jobs.delete(id);
   unmountCard(id);
-  syncBoardLaneVisibility();
+  if (state.displayMode === "cards") syncBoardLaneVisibility();
+  else renderBoard();
   if (state.selectedJobId === id) {
     if (els.jobDialog && els.jobDialog.open) els.jobDialog.close();
     state.selectedJobId = null;
@@ -8157,6 +8424,12 @@ function wireUi() {
   document.querySelectorAll(".seg__btn[data-view]").forEach((btn) => {
     btn.addEventListener("click", () => setView(btn.getAttribute("data-view")));
   });
+  document.querySelectorAll(".seg__btn[data-display-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => setDisplayMode(btn.getAttribute("data-display-mode")));
+  });
+  if (els.tableScopeSelect) {
+    els.tableScopeSelect.addEventListener("change", () => setTableScope(els.tableScopeSelect.value));
+  }
 
   // Sidebar collapse/expand.
   if (els.toggleSidebarBtn) {
@@ -9572,12 +9845,12 @@ function wireUi() {
         return;
       }
 
-      const card = e.target && e.target.closest ? e.target.closest(".card[data-job-id]") : null;
-      if (!card) {
+      const row = e.target && e.target.closest ? e.target.closest(".card[data-job-id], .sessionrow[data-job-id]") : null;
+      if (!row) {
         hideCardContextMenu();
         return;
       }
-      const id = card.getAttribute("data-job-id");
+      const id = row.getAttribute("data-job-id");
       if (!id) return;
       e.preventDefault();
       openCardContextMenu(id, e.clientX, e.clientY);
@@ -9608,9 +9881,9 @@ function wireUi() {
   // Card clicks (event delegation) to avoid re-wiring listeners during live updates.
   document.addEventListener("click", (e) => {
     if (e.ctrlKey) return; // Ctrl+click is treated like a right-click on macOS.
-    const card = e.target && e.target.closest ? e.target.closest(".card[data-job-id]") : null;
-    if (!card) return;
-    const id = card.getAttribute("data-job-id");
+    const row = e.target && e.target.closest ? e.target.closest(".card[data-job-id], .sessionrow[data-job-id]") : null;
+    if (!row) return;
+    const id = row.getAttribute("data-job-id");
     if (!id) return;
     if (state.cardCtxJobId === id && Date.now() - state.cardCtxOpenedAt < 500) return;
     openJobDialog(id);
@@ -10881,6 +11154,14 @@ async function init() {
 
   wireUi();
   wireSystemColorSchemeListener();
+  state.sortMode = normalizeSortMode(getStoredSortMode());
+  if (els.sortSelect) els.sortSelect.value = state.sortMode;
+  state.projectFilterId = String(getStoredProjectFilterId() || "").trim();
+  state.displayMode = state.focusLane ? "cards" : normalizeDisplayMode(getStoredDisplayMode());
+  state.tableScope = normalizeTableScope(getStoredTableScope());
+  setViewButtons(state.view);
+  setDisplayModeButtons(state.displayMode);
+  if (els.tableScopeSelect) els.tableScopeSelect.value = state.tableScope;
   applyViewLayout();
 
   if (typeof api.onQuickPrompt === "function") {
@@ -10893,11 +11174,6 @@ async function init() {
   if (typeof api.onTermEvent === "function") {
     api.onTermEvent((payload) => onTermEvent(payload));
   }
-
-  state.sortMode = normalizeSortMode(getStoredSortMode());
-  if (els.sortSelect) els.sortSelect.value = state.sortMode;
-
-  state.projectFilterId = String(getStoredProjectFilterId() || "").trim();
 
   state.settings = await api.settingsGet();
   applyThemeFromSettings(state.settings);

@@ -930,6 +930,98 @@ body::before {
   border-radius: 10px;
 }
 
+.sessiontablewrap {
+  min-height: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--stroke);
+  background: var(--surface0);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessiontablemeta {
+  font-size: 12px;
+  color: var(--muted2);
+  min-height: 16px;
+}
+
+.sessiontablescroll {
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: var(--surface1);
+  overflow: auto;
+  min-height: 0;
+}
+
+.sessiontable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+.sessiontable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 10px;
+  color: var(--muted2);
+  background: var(--surface3);
+  border-bottom: 1px solid var(--stroke);
+  white-space: nowrap;
+}
+
+.sessiontable th,
+.sessiontable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--stroke-faint);
+  vertical-align: middle;
+}
+
+.sessiontable tbody tr {
+  cursor: pointer;
+}
+
+.sessiontable tbody tr:hover {
+  background: var(--hover-bg);
+}
+
+.sessiontable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sessiontable__title {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.sessiontable__mono {
+  font-family: var(--mono);
+  color: var(--ink-mono);
+  white-space: nowrap;
+}
+
+.sessiontable__mono--dim {
+  color: var(--muted2);
+}
+
+.sessiontable__right {
+  text-align: right;
+}
+
+.sessiontable__tokens {
+  min-width: 190px;
+}
+
 .card {
   --proj-color: transparent;
   position: relative;
@@ -2965,6 +3057,10 @@ body::before {
   }
   .composer__row {
     grid-template-columns: 1fr;
+  }
+  .sessiontable th,
+  .sessiontable td {
+    padding: 8px 10px;
   }
 }
 

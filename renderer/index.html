@@ -107,6 +107,19 @@
 	            <button type="button" class="seg__btn" data-view="archive" aria-selected="false">Archive</button>
 	            <button type="button" class="seg__btn" data-view="trash" aria-selected="false">Trash</button>
 	          </div>
+	          <div class="seg" role="tablist" aria-label="Display mode">
+	            <button type="button" class="seg__btn seg__btn--active" data-display-mode="cards" aria-selected="true">
+	              Cards
+	            </button>
+	            <button type="button" class="seg__btn" data-display-mode="table" aria-selected="false">Table</button>
+	          </div>
+	          <div id="tableScopeCtl" class="filterctl" aria-label="Table scope" hidden>
+	            <span class="filterctl__label">Scope</span>
+	            <select id="tableScopeSelect" class="select filterselect" title="Choose which sessions appear in table mode">
+	              <option value="view">Current view</option>
+	              <option value="all">All sessions</option>
+	            </select>
+	          </div>
 	          <div class="filterctl" aria-label="Filter jobs by project">
 	            <span class="filterctl__label">Project</span>
 	            <select id="projectFilterSelect" class="select filterselect" title="Filter jobs by project">
@@ -135,7 +148,7 @@
 	          </button>
 	        </div>
 
-        <section class="board">
+        <section id="boardSection" class="board">
 	          <div class="lane">
 	            <div class="lane__title">
 	              <span class="lane__titleText">Running</span>
@@ -215,6 +228,31 @@
 	            <div id="laneDone" class="cards"></div>
 	          </div>
 	        </section>
+        <section id="sessionsTableSection" class="sessiontablewrap" hidden>
+          <div id="sessionsTableMeta" class="sessiontablemeta"></div>
+          <div class="sessiontablescroll">
+            <table class="sessiontable" aria-label="Sessions">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Box</th>
+                  <th>Title</th>
+                  <th>Project</th>
+                  <th>Agent</th>
+                  <th>Model</th>
+                  <th>Created</th>
+                  <th>Finished</th>
+                  <th>Duration</th>
+                  <th>Tokens</th>
+                  <th>Thread</th>
+                  <th>Exit</th>
+                  <th>Integrated</th>
+                </tr>
+              </thead>
+              <tbody id="sessionsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
       </main>
     </div>
 
