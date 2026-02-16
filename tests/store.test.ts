@@ -163,7 +163,6 @@ describe("store", () => {
     expect(byId.get("ah_builtin_commit_and_push")?.command).toBe("ah:commit-and-push");
     expect(byId.get("ah_builtin_commit_only")?.command).toBe("ah:commit-only");
   });
-
   it("normalizes editorCommand to a trimmed string", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
     const storePath = path.join(tmpDir, "agent-heaven.store.json");
