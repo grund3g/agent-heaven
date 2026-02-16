@@ -7024,22 +7024,38 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     let res = null;
     try {
       res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
-	    } catch (err) {
-	      const msg = String(err && err.message ? err.message : err);
-	      if (msg.includes("Provide a commit message first")) {
-	        const entered = await promptText({
-	          title: "Commit message",
-	          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
-	          label: "Commit message",
-	          defaultValue: defaultIntegrateCommitMessage(job),
-	          okLabel: "Continue",
-	          cancelLabel: "Cancel"
-	        });
-	        const commitMessage = String(entered || "").trim();
-	        if (!commitMessage) {
-	          showToast("Integration cancelled.");
-	          return;
-	        }
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (msg.includes("Provide a commit message first")) {
+        setIntegrateDialogPhase("pending", {
+          status: "Commit message required",
+          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
+        });
+
+        let suggested = "";
+        try {
+          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
+            suggested = await api.checkoutsSuggestCommitMessage(id, { forceEnglish: true });
+          }
+        } catch {
+          suggested = "";
+        }
+
+        const entered = await promptText({
+          title: "Commit message",
+          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
+          label: "Commit message",
+          defaultValue: suggested || defaultIntegrateCommitMessage(job),
+          okLabel: "Continue",
+          cancelLabel: "Cancel"
+        });
+        const commitMessage = String(entered || "").trim();
+        if (!commitMessage) {
+          setIntegrateDialogPhase("confirm", { status: "Cancelled", message: "Integration cancelled." });
+          return;
+        }
+
+        setIntegrateDialogPhase("pending", { status: "Integrating…", message: "Committing and integrating…" });
         res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
       } else {
         showError(msg);
