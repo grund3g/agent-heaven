@@ -1875,7 +1875,7 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const suggestion = suggestCommitMessage({
+    const heuristicFallback = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",
@@ -1883,7 +1883,90 @@ export async function startApp(): Promise<void> {
       allowTaskContext: false
     });
 
+    let suggestion = heuristicFallback;
+    try {
+      const settings = store.getSettings();
+      const plan = await pickUiTextGenPlan(settings);
+      if (plan.ok) {
+        const prompt = buildCommitMessageGeneratorPrompt({ style, changedPaths, recentSubjects });
+        const raw = await runUiTextPrompt({
+          settings,
+          codexSettings: plan.codexSettings,
+          claudeSettings: plan.claudeSettings,
+          agent: plan.agent,
+          model: plan.model,
+          prompt
+        });
+        const llmSuggestion = normalizeGeneratedCommitSubject(raw);
+        if (llmSuggestion) suggestion = llmSuggestion;
+      }
+    } catch {
+      // Keep fallback suggestion.
+    }
+
     return { ok: true, suggestion };
+  });
+
+  ipcMain.handle("checkouts:commit", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const jobId = String(p.jobId || "").trim();
+    const commitMessage = typeof p.commitMessage === "string" ? p.commitMessage.trim() : "";
+    const push = !!p.push;
+    if (!jobId) return { ok: false, error: "Missing jobId" };
+    if (!commitMessage) return { ok: false, error: "Missing commit message" };
+
+    const got = jobsManager.getJob(jobId);
+    if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
+    const job = (got as any).job || {};
+
+    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!sourceDir) return { ok: false, error: "Job is missing projectPath" };
+    if (!fs.existsSync(sourceDir)) return { ok: false, error: `Checkout path does not exist: ${sourceDir}` };
+
+    const info = await getGitInfo(sourceDir);
+    if (!info.isGitRepo) return { ok: false, error: `Checkout is not a git repo: ${sourceDir}` };
+    if (!info.dirty) return { ok: false, error: "No local changes to commit." };
+    if (push && info.detached) return { ok: false, error: "Cannot push from detached HEAD. Switch to a branch first." };
+
+    let committedSha = "";
+    try {
+      await addAll(sourceDir);
+      committedSha = await commitWithMessage(sourceDir, commitMessage);
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+
+    if (!push) {
+      return {
+        ok: true,
+        committedSha,
+        pushed: false,
+        branch: info.branch || "",
+        remote: "",
+        upstreamRef: "",
+        setUpstream: false
+      };
+    }
+
+    try {
+      const pushRes = await pushCurrentBranch(sourceDir);
+      return {
+        ok: true,
+        committedSha,
+        pushed: true,
+        branch: pushRes.branch || info.branch || "",
+        remote: pushRes.remote || "",
+        upstreamRef: pushRes.upstreamRef || "",
+        setUpstream: !!pushRes.setUpstream
+      };
+    } catch (err: any) {
+      const msg = String(err && err.message ? err.message : err);
+      return {
+        ok: false,
+        error: `Committed ${committedSha}, but push failed.\n\n${msg}`
+      };
+    }
   });
 
   ipcMain.handle("checkouts:integrateToDefault", async (evt, payload) => {
