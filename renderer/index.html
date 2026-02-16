@@ -28,21 +28,32 @@
 		          </div>
 		        </div>
 
-	        <div class="sidebar__section">
-	          <div class="sidebar__titleRow">
-	            <div class="sidebar__title">Projects</div>
-	            <button
-	              id="addProjectBtn"
-	              class="iconbtn sidebar__titleIcon"
-	              type="button"
-	              title="Add project folder"
-	              aria-label="Add project folder"
-	            >
-	              +
-	            </button>
-	          </div>
-	          <div id="projectsList" class="projects"></div>
-	        </div>
+		        <div class="sidebar__section">
+		          <div class="sidebar__titleRow">
+		            <div class="sidebar__title">Projects</div>
+		            <div class="sidebar__titleActions">
+		              <button
+		                id="addTempProjectBtn"
+		                class="iconbtn sidebar__titleIcon sidebar__titleIcon--text"
+		                type="button"
+		                title="Create temporary project (new empty folder)"
+		                aria-label="Create temporary project (new empty folder)"
+		              >
+		                tmp
+		              </button>
+		              <button
+		                id="addProjectBtn"
+		                class="iconbtn sidebar__titleIcon"
+		                type="button"
+		                title="Add project folder"
+		                aria-label="Add project folder"
+		              >
+		                +
+		              </button>
+		            </div>
+		          </div>
+		          <div id="projectsList" class="projects"></div>
+		        </div>
 
 	        <div class="sidebar__section sidebar__section--bottom sidebar__footer">
 	          <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>

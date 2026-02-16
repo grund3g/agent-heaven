@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld("agentHeaven", {
 
   projectsList: () => ipcRenderer.invoke("projects:list"),
   projectsAddDialog: () => ipcRenderer.invoke("projects:addDialog"),
+  projectsAddTemporary: (opts) => ipcRenderer.invoke("projects:addTemporary", opts || {}),
   projectsRemove: (id) => ipcRenderer.invoke("projects:remove", id),
   projectsUpdate: (id, patch) => ipcRenderer.invoke("projects:update", { id, patch }),
   projectsGitInfo: async (projectId) => {

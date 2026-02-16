@@ -43,6 +43,27 @@ function isMenuBarMode(settings: any) {
   return process.platform === "darwin" && !!(settings && settings.menuBarMode);
 }
 
+function normalizeTemporaryProjectPrefix(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "temp";
+  const safe = raw
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return safe || "temp";
+}
+
+function temporaryProjectTimestamp(d: Date): string {
+  const yyyy = String(d.getFullYear());
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
+}
+
 function safeParseUrl(rawUrl: unknown): URL | null {
   const s = typeof rawUrl === "string" ? rawUrl.trim() : "";
   if (!s) return null;
@@ -792,6 +813,44 @@ export async function startApp(): Promise<void> {
       defaultBranch = "";
     }
     const project = store.addProject({ id: newId(), name, path: dirPath, defaultBranch, checkoutMode: "inplace" });
+    return project;
+  });
+  ipcMain.handle("projects:addTemporary", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const rawBaseDir = typeof p.baseDir === "string" ? p.baseDir.trim() : "";
+    const baseDir = rawBaseDir ? path.resolve(rawBaseDir) : path.join(app.getPath("userData"), "temp-projects");
+    const prefix = normalizeTemporaryProjectPrefix(p.prefix || p.name || "temp");
+    fs.mkdirSync(baseDir, { recursive: true });
+
+    let dirPath = "";
+    let name = "";
+    for (let i = 0; i < 25; i += 1) {
+      const ts = temporaryProjectTimestamp(new Date());
+      const suffix = randomUUID().slice(0, 8);
+      const candidateName = `${prefix}-${ts}-${suffix}`;
+      const candidatePath = path.join(baseDir, candidateName);
+      try {
+        fs.mkdirSync(candidatePath, { recursive: false });
+        dirPath = candidatePath;
+        name = candidateName;
+        break;
+      } catch (err: any) {
+        if (err && err.code === "EEXIST") continue;
+        throw err;
+      }
+    }
+    if (!dirPath || !name) throw new Error("Could not create temporary project folder");
+
+    const project = store.addProject({
+      id: newId(),
+      name,
+      path: dirPath,
+      checkoutMode: "inplace",
+      isTemporary: true,
+      temporaryCreatedAt: new Date().toISOString(),
+      temporaryBaseDir: baseDir
+    });
     return project;
   });
   ipcMain.handle("projects:gitInfo", async (evt, projectId) => {

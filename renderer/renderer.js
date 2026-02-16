@@ -1,8 +1,9 @@
 const api = window.agentHeaven;
 
-	const els = {
-	  projectsList: document.getElementById("projectsList"),
-	  addProjectBtn: document.getElementById("addProjectBtn"),
+		const els = {
+		  projectsList: document.getElementById("projectsList"),
+		  addTempProjectBtn: document.getElementById("addTempProjectBtn"),
+		  addProjectBtn: document.getElementById("addProjectBtn"),
 	  openActionsBtn: document.getElementById("openActionsBtn"),
 	  openShortcutsBtn: document.getElementById("openShortcutsBtn"),
 	  openSettingsBtn: document.getElementById("openSettingsBtn"),
@@ -259,6 +260,7 @@ const DEMO = {
 const TOUR_ROOT_ID = "ahTour";
 const DEFAULT_FOLLOWUP_PLACEHOLDER = "Follow-up… (⌘+Enter)";
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
+const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
 
 let followupAutosizeRaf = 0;
 
@@ -3827,6 +3829,28 @@ function formatProjectPathForDisplay(projectPath) {
   return raw;
 }
 
+async function createTemporaryProject(opts = {}) {
+  if (!api || typeof api.projectsAddTemporary !== "function") {
+    throw new Error("Temporary projects are not supported in this build.");
+  }
+  const created = await api.projectsAddTemporary(opts);
+  if (!created || typeof created !== "object" || !created.id) {
+    throw new Error("Could not create temporary project.");
+  }
+
+  state.projects = await api.projectsList();
+  renderProjects();
+  renderBoard();
+
+  const nextId = String(created.id || "").trim();
+  if (nextId) {
+    els.projectSelect.value = nextId;
+    storeProjectId(nextId);
+    syncComposerCheckoutModeUi();
+  }
+  return created;
+}
+
 async function promptEditProjectShortName(projectId, opts = {}) {
   const id = String(projectId || "");
   if (!id) return false;
@@ -4173,11 +4197,13 @@ function renderProjects() {
     .map((p) => {
       const color = normalizeHexColor(p.color) || "#64d8a3";
       const shortName = normalizeShortName(p.shortName);
+      const isTemporary = !!p.isTemporary;
       const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
       const dirty = !!p.gitDirty;
       const branchHtml = branch
         ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
         : "";
+      const tempHtml = isTemporary ? `<span class="project__tag" title="Temporary project">TMP</span>` : "";
       const fullPath = String(p.path || "");
       const displayPath = formatProjectPathForDisplay(fullPath);
       return `
@@ -4193,6 +4219,7 @@ function renderProjects() {
           <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
             <div class="project__name">
               <span class="project__nametext">${escapeHtml(p.name)}</span>
+              ${tempHtml}
               ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
             </div>
             <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
@@ -4207,10 +4234,12 @@ function renderProjects() {
   const current = els.projectSelect.value;
   const opts = [
     `<option value="">Select project…</option>`,
+    `<option value="${TEMP_PROJECT_OPTION_VALUE}">Temporary: new empty folder</option>`,
     state.projects.length > 0 ? `<option value="auto">Auto (match by name)</option>` : "",
     ...state.projects.map((p) => {
       const shortName = normalizeShortName(p.shortName);
-      const label = shortName ? `${shortName} · ${p.name}` : p.name;
+      const baseLabel = shortName ? `${shortName} · ${p.name}` : p.name;
+      const label = p && p.isTemporary ? `TMP · ${baseLabel}` : baseLabel;
       return `<option value="${escapeHtml(p.id)}">${escapeHtml(label)}</option>`;
     })
   ].filter(Boolean);
@@ -6971,6 +7000,12 @@ async function startJobFromComposer() {
       projectId = els.projectSelect.value;
     }
 
+    if (projectId === TEMP_PROJECT_OPTION_VALUE) {
+      const p = await createTemporaryProject();
+      projectId = p && p.id ? String(p.id) : "";
+      if (!projectId) return;
+    }
+
     // First-run convenience: if there are no projects yet, open the folder picker.
     if (!projectId && state.projects.length === 0) {
       const p = await api.projectsAddDialog();
@@ -7715,23 +7750,34 @@ function wireUi() {
 	    els.jobDialogMove.addEventListener("click", () => moveThisWindowToDisplay());
 	  }
 
+	  if (els.addTempProjectBtn) {
+	    els.addTempProjectBtn.addEventListener("click", async () => {
+	      try {
+	        await createTemporaryProject();
+	      } catch (err) {
+	        setHint(String(err && err.message ? err.message : err), "error");
+	      }
+	    });
+	  }
+
 	  els.addProjectBtn.addEventListener("click", async () => {
 	    const p = await api.projectsAddDialog();
 	    if (!p) return;
 
-    state.projects = await api.projectsList();
-    renderProjects();
-    renderBoard();
-    els.projectSelect.value = p.id;
-    storeProjectId(p.id);
+	    state.projects = await api.projectsList();
+	    renderProjects();
+	    renderBoard();
+	    els.projectSelect.value = p.id;
+	    storeProjectId(p.id);
+	    syncComposerCheckoutModeUi();
 
-    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
-    try {
-      await openProjectDialog(p.id);
-    } catch {
-      // ignore
-    }
-  });
+	    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
+	    try {
+	      await openProjectDialog(p.id);
+	    } catch {
+	      // ignore
+	    }
+	  });
 
   els.projectsList.addEventListener("change", async (e) => {
     const inp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
@@ -8094,11 +8140,21 @@ function wireUi() {
     });
   }
 
-  els.projectSelect.addEventListener("change", () => {
-    const v = els.projectSelect.value;
-    if (v && v !== "auto") storeProjectId(v);
-    syncComposerCheckoutModeUi();
-  });
+	  els.projectSelect.addEventListener("change", async () => {
+	    const v = String(els.projectSelect.value || "").trim();
+	    if (v === TEMP_PROJECT_OPTION_VALUE) {
+	      try {
+	        await createTemporaryProject();
+	      } catch (err) {
+	        setHint(String(err && err.message ? err.message : err), "error");
+	        els.projectSelect.value = "";
+	        syncComposerCheckoutModeUi();
+	      }
+	      return;
+	    }
+	    if (v && v !== "auto") storeProjectId(v);
+	    syncComposerCheckoutModeUi();
+	  });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
   if (els.modelInput) codexModelComboboxComposer = attachCodexModelCombobox(els.modelInput, { ariaLabel: "Show models" });
