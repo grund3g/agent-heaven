@@ -1684,6 +1684,11 @@ export async function startApp(): Promise<void> {
 
   ipcMain.handle("jobs:list", async (evt) => {
     assertTrustedIpcSender(evt);
+    try {
+      await jobsManager.reconcileIntegratedToDefault();
+    } catch {
+      // Best-effort only; stale flags should never break listing jobs.
+    }
     return jobsManager.listJobMetas();
   });
 
@@ -1700,6 +1705,11 @@ export async function startApp(): Promise<void> {
 
   ipcMain.handle("jobs:get", async (evt, jobId) => {
     assertTrustedIpcSender(evt);
+    try {
+      await jobsManager.reconcileIntegratedToDefault(jobId);
+    } catch {
+      // Best-effort only; stale flags should never break opening a job.
+    }
     return jobsManager.getJob(jobId);
   });
   ipcMain.handle("jobs:start", async (evt, params) => {
