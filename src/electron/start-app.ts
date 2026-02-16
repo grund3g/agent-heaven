@@ -1945,9 +1945,7 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const title = jobDisplayTitle(job);
-    const safeTitle = /^untitled$/i.test(title) ? "" : title;
-    const suggestion = suggestCommitMessage({
+    const heuristicFallback = suggestCommitMessage({
       style,
       changedPaths,
       taskText: lastJobPromptText(job),
