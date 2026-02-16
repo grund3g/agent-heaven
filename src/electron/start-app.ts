@@ -1196,16 +1196,6 @@ export async function startApp(): Promise<void> {
     return stripped.slice(0, 200);
   }
 
-  function lastJobPromptText(job: any): string {
-    const prompts = job && typeof job === "object" && Array.isArray((job as any).prompts) ? (job as any).prompts : [];
-    for (let i = prompts.length - 1; i >= 0; i -= 1) {
-      const p = prompts[i];
-      const t = p && typeof p === "object" && typeof (p as any).text === "string" ? String((p as any).text || "").trimEnd() : "";
-      if (t) return t;
-    }
-    return "";
-  }
-
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
@@ -1238,12 +1228,14 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
+    const title = jobDisplayTitle(job);
+    const safeTitle = /^untitled$/i.test(title) ? "" : title;
     const suggestion = suggestCommitMessage({
       style,
       changedPaths,
-      taskText: lastJobPromptText(job),
-      jobTitle: jobDisplayTitle(job),
-      allowTaskContext: false
+      taskText: "",
+      jobTitle: safeTitle,
+      allowTaskContext: true
     });
 
     return { ok: true, suggestion };

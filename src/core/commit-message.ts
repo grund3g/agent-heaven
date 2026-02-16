@@ -149,9 +149,28 @@ function isImagePath(p: string): boolean {
   );
 }
 
+function isNoisyTaskSummary(s: string): boolean {
+  const low = String(s || "").trim().toLowerCase();
+  if (!low) return false;
+
+  // Agent-runtime metadata lines are not meaningful commit subjects.
+  if (low === "-----") return true;
+  if (low.startsWith("ah_status:") || low.startsWith("ah status:")) return true;
+  if (low.includes("[agent heaven internal]")) return true;
+  if (low.includes("at the very end of your final reply")) return true;
+  if (low.includes("do not add any other text after the ah_status line")) return true;
+
+  // Example: "status=done box=board agent=codex ... thread=... model=..."
+  if (/^status=[^\s]+(?:\s+[a-z0-9_-]+=[^\s]+){3,}$/i.test(low)) return true;
+  if (low.includes("status=") && low.includes("thread=") && low.includes("model=")) return true;
+
+  return false;
+}
+
 function extractTypeHintFromSummary(summary: string): { typeHint: ConventionalType | ""; summary: string } {
   const s = oneLine(summary);
   if (!s) return { typeHint: "", summary: "" };
+  if (isNoisyTaskSummary(s)) return { typeHint: "", summary: "" };
 
   // e.g. "Fix: ..." from job titles.
   const m = s.match(/^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)\s*:\s*(.+)$/i);
@@ -254,6 +273,39 @@ function stripRedundantLeadingTypeVerb(subject: string, type: ConventionalType):
   return oneLine(s);
 }
 
+function topLevelAreaFromPath(p: string): string {
+  const n = String(p || "").replaceAll("\\", "/").replace(/^\.\/+/, "");
+  if (!n) return "";
+  const idx = n.indexOf("/");
+  if (idx === -1) return "root";
+  return n.slice(0, idx).trim().toLowerCase();
+}
+
+function summarizeAreas(paths: string[], scope: string): string {
+  const areas: string[] = [];
+  const seen = new Set<string>();
+
+  for (const p of paths) {
+    const a = topLevelAreaFromPath(p);
+    if (!a || seen.has(a)) continue;
+    seen.add(a);
+    areas.push(a);
+  }
+
+  if (areas.length === 0) return "update files";
+
+  if (areas.length === 1) {
+    const only = areas[0];
+    if (only === "root") return "update root files";
+    if (scope && only === String(scope || "").toLowerCase()) return "update files";
+    return `update ${only}`;
+  }
+
+  if (areas.length === 2) return `update ${areas[0]} and ${areas[1]}`;
+  if (areas.length === 3) return `update ${areas[0]}, ${areas[1]}, and ${areas[2]}`;
+  return "update project files";
+}
+
 function inferSubjectFromFiles(paths: string[], taskSummary: string, scope: string): string {
   const lowTask = String(taskSummary || "").toLowerCase();
   const hasReadme = paths.some(isReadmePath);
@@ -277,13 +329,33 @@ function inferSubjectFromFiles(paths: string[], taskSummary: string, scope: stri
   const depsOnly = paths.length > 0 && paths.every(isDepsPath);
   if (depsOnly) return "update dependencies";
 
+  const testsOnly = paths.length > 0 && paths.every(isTestPath);
+  if (testsOnly) return "update tests";
+
+  const ciOnly = paths.length > 0 && paths.every(isCiPath);
+  if (ciOnly) return "update github workflows";
+
   if (paths.length === 1) return `update ${basename(paths[0])}`;
-  return "";
+  if (paths.length > 1) return summarizeAreas(paths, scope);
+  return "update local changes";
+}
+
+function shouldPreferTaskSummaryForHint(hint: string): boolean {
+  const low = oneLine(hint).toLowerCase();
+  if (!low) return false;
+  if (!low.startsWith("update ")) return false;
+  if (low === "update dependencies") return false;
+  if (low === "update docs") return false;
+  if (low === "update readme") return false;
+  if (low === "update github workflows") return false;
+  return true;
 }
 
 function normalizeSubject(summary: string, style: CommitMessageStyle, type: ConventionalType | ""): string {
   let s = oneLine(summary);
   if (!s) return "";
+  if (isNoisyTaskSummary(s)) return "";
+  if (/^untitled$/i.test(s)) return "";
   s = s.replace(/[.!?]+$/, "").trim();
 
   if (type) s = stripRedundantLeadingTypeVerb(s, type);
@@ -318,16 +390,8 @@ export function suggestCommitMessage(opts: {
   let subject = "";
   if (fileHint) {
     const lowHint = fileHint.toLowerCase();
-    const isGenericSingleFileUpdate =
-      paths.length === 1 &&
-      lowHint.startsWith("update ") &&
-      !isDocsPath(paths[0]) &&
-      !isDepsPath(paths[0]) &&
-      !isCiPath(paths[0]) &&
-      !isTestPath(paths[0]);
-
-    // Prefer the task summary for "normal" code changes (it's usually more meaningful than "update foo.ts").
-    if (isGenericSingleFileUpdate && normalizedTask) {
+    // Prefer task context over generic "update <...>" file hints when we have it.
+    if (shouldPreferTaskSummaryForHint(lowHint) && normalizedTask) {
       subject = normalizedTask;
     } else if (lowHint === "update readme" && /\bscreenshot\b/i.test(summary)) {
       // Allow the prompt to upgrade a generic "update README" into "add screenshot" when appropriate.
@@ -338,9 +402,9 @@ export function suggestCommitMessage(opts: {
   } else if (normalizedTask) {
     subject = normalizedTask;
   } else if (paths.length > 0) {
-    subject = inferSubjectFromFiles(paths, "", scope) || "checkpoint changes";
+    subject = inferSubjectFromFiles(paths, "", scope) || "update local changes";
   } else {
-    subject = "checkpoint changes";
+    subject = "update local changes";
   }
 
   if (style === "conventional") {
