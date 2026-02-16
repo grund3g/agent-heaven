@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.8.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.7.0...agent-heaven-v0.8.0) (2026-02-16)
+
+
+### Features
+
+* **actions:** ship integrate-to-default built-in action ([29c715f](https://github.com/grund3g/agent-heaven/commit/29c715f88b5b83ce43c7dd7eff64d94c5fbf3700))
+* **actions:** suggest commit message for integrate-to-default ([ddb89dd](https://github.com/grund3g/agent-heaven/commit/ddb89dd5d70c5082a4d5caeb2ed42bdc28614f42))
+* checkpoint changes ([fab399c](https://github.com/grund3g/agent-heaven/commit/fab399ce5580b50b7ba5571420cca273cce6484b))
+* **composer:** add checkout strategy dropdown override ([a9fa79f](https://github.com/grund3g/agent-heaven/commit/a9fa79f101e915c31e2829b3731fe9dd7b68ba36))
+* **composer:** add file path autocomplete in prompt ([abaf5f4](https://github.com/grund3g/agent-heaven/commit/abaf5f4023a5edb8a22de533ad960548804dfd29))
+* **renderer:** button alignment ([e0f88ba](https://github.com/grund3g/agent-heaven/commit/e0f88bafe3eb03d88994ed2cb656cd758e2b1ec8))
+* **renderer:** show dropped files as attachment tiles ([7d90321](https://github.com/grund3g/agent-heaven/commit/7d90321e0426dbd49ea815c109bcc8ea6a965b26))
+* **renderer:** update styles.css ([544dbe5](https://github.com/grund3g/agent-heaven/commit/544dbe526c275d8f7bbd19ff41f97eb14a8c1ff0))
+* **ui:** add demo mode with mock projects + jobs ([4270ab2](https://github.com/grund3g/agent-heaven/commit/4270ab265b87fdb45dbc0ca82046c7e20fd559a5))
+* **ui:** add demo mode with mock projects + jobs ([6fd9bf3](https://github.com/grund3g/agent-heaven/commit/6fd9bf3f8a06d672e82a76c965b1988696ed07db))
+* **ui:** add demo mode with mock projects + jobs ([7cc3ce3](https://github.com/grund3g/agent-heaven/commit/7cc3ce35630c1ea69318bf041a03128edb860067))
+* **ui:** add demo mode with mock projects + jobs ([00bb8b1](https://github.com/grund3g/agent-heaven/commit/00bb8b1d3dd8d5dc20d9a3bb1ea828965ce4478d))
+* **ui:** add demo mode with mock projects + jobs ([3059ce4](https://github.com/grund3g/agent-heaven/commit/3059ce4c12e160314c397fc909a4a2ea315fd7ba))
+* **ui:** support file drag-drop paths and improve integrate commit suggestions ([330d365](https://github.com/grund3g/agent-heaven/commit/330d365911cee4aedafcd9392df31ba9d2b490f9))
+
+
+### Bug Fixes
+
+* **actions:** seed built-in actions into existing settings ([db5d7c0](https://github.com/grund3g/agent-heaven/commit/db5d7c06cf7474134fbd4b3a963c6bf6694f083e))
+* better job title guessing for low-signal lead-ins ([d1a12a1](https://github.com/grund3g/agent-heaven/commit/d1a12a10efc8037bbdd9087f0352c41d9eb86b72))
+* **integrate:** avoid unrelated commit message suggestions ([727fb80](https://github.com/grund3g/agent-heaven/commit/727fb8058ee46675a831f5b1b4917c4bad212faf))
+* **jobs:** derive Done vs Needs Attention from agent hint ([875d374](https://github.com/grund3g/agent-heaven/commit/875d374b7f5c68108abec3b06ab6d9f63f18ace2))
+* **renderer:** replace prompt() with dialog ([b933068](https://github.com/grund3g/agent-heaven/commit/b93306854f20267e78f90264d73f4d47207bdc77))
+
 ## [0.7.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.6.2...agent-heaven-v0.7.0) (2026-02-15)
 
 
