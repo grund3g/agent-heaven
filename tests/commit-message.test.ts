@@ -29,6 +29,15 @@ describe("commit-message", () => {
     expect(msg).toBe("chore: update dependencies");
   });
 
+  test("does not overfit to README when code files are also changed", () => {
+    const msg = suggestCommitMessage({
+      style: "conventional",
+      changedPaths: ["README.md", "renderer/styles.css"],
+      taskText: "adjust theme action integration dialog"
+    });
+    expect(msg).toBe("feat: adjust theme action integration dialog");
+  });
+
   test("plain style returns sentence-cased subject", () => {
     const msg = suggestCommitMessage({
       style: "plain",
@@ -38,4 +47,3 @@ describe("commit-message", () => {
     expect(msg).toBe("Fix crash on startup");
   });
 });
-

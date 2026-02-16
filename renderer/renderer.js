@@ -1402,7 +1402,7 @@ function looksLikeImageFileName(name) {
   return false;
 }
 
-function normalizeImageList(list) {
+function normalizePathList(list) {
   const arr = Array.isArray(list) ? list : [];
   const out = [];
   for (const v of arr) {
@@ -1411,6 +1411,10 @@ function normalizeImageList(list) {
     out.push(p);
   }
   return [...new Set(out)];
+}
+
+function normalizeImageList(list) {
+  return normalizePathList(list);
 }
 
 function mergeImages(existing, added, maxCount = 8) {
@@ -1433,10 +1437,10 @@ function dataTransferHasFiles(dt) {
   }
 }
 
-function droppedImagePaths(e) {
+function droppedFileEntries(e) {
   const dt = e && e.dataTransfer ? e.dataTransfer : null;
   const files = dt && dt.files ? Array.from(dt.files) : [];
-  const out = [];
+  const out = new Map();
 
   for (const f of files) {
     // Electron 35 + sandboxed renderers: File.path may be empty; ask preload via webUtils.
@@ -1451,10 +1455,57 @@ function droppedImagePaths(e) {
     const name = typeof f.name === "string" ? f.name : p;
     const type = typeof f.type === "string" ? f.type : "";
     if (!p) continue;
-    if (type.startsWith("image/") || looksLikeImageFileName(name)) out.push(p);
+    const normalizedPath = String(p || "").trim();
+    if (!normalizedPath) continue;
+    const isImage = type.startsWith("image/") || looksLikeImageFileName(name);
+    if (out.has(normalizedPath)) {
+      const prev = out.get(normalizedPath);
+      prev.isImage = prev.isImage || isImage;
+      continue;
+    }
+    out.set(normalizedPath, { path: normalizedPath, isImage });
   }
 
-  return normalizeImageList(out);
+  return Array.from(out.values());
+}
+
+function imagePathsFromDroppedEntries(entries) {
+  const arr = Array.isArray(entries) ? entries : [];
+  return normalizeImageList(
+    arr
+      .filter((f) => f && f.isImage)
+      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
+  );
+}
+
+function nonImagePathsFromDroppedEntries(entries) {
+  const arr = Array.isArray(entries) ? entries : [];
+  return normalizePathList(
+    arr
+      .filter((f) => f && !f.isImage)
+      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
+  );
+}
+
+function appendPathsToTextarea(inputEl, paths) {
+  if (!inputEl || typeof inputEl.value !== "string") return;
+  const arr = normalizePathList(paths);
+  if (arr.length === 0) return;
+
+  const block = `Files:\n${arr.join("\n")}`;
+  const prev = inputEl.value || "";
+  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
+  inputEl.value = next;
+
+  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
+  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
+
+  try {
+    inputEl.focus();
+    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+  } catch {
+    // ignore
+  }
 }
 
 function renderAttachmentBadge(badgeEl, images) {
@@ -8027,7 +8078,7 @@ function wireUi() {
   els.promptInput.addEventListener("input", () => storeComposerDraft(els.promptInput.value || ""));
   restoreComposerDraft();
 
-  // Attach images via drag&drop.
+  // Attach images via drag&drop and append non-image files as paths to the prompt/follow-up text.
   document.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
     if (!dataTransferHasFiles(dt)) return;
@@ -8084,10 +8135,12 @@ function wireUi() {
     e.preventDefault();
     e.stopPropagation();
     els.promptDropwrap.classList.remove("dropwrap--dragover");
-    const imgs = droppedImagePaths(e);
-    if (imgs.length === 0) return;
-    setComposerImages(mergeImages(state.composerImages, imgs));
-    els.promptInput.focus();
+    const dropped = droppedFileEntries(e);
+    const imgs = imagePathsFromDroppedEntries(dropped);
+    const files = nonImagePathsFromDroppedEntries(dropped);
+    if (imgs.length > 0) setComposerImages(mergeImages(state.composerImages, imgs));
+    if (files.length > 0) appendPathsToTextarea(els.promptInput, files);
+    else if (imgs.length > 0) els.promptInput.focus();
   });
 
   els.followupDropwrap.addEventListener("dragover", (e) => {
@@ -8103,10 +8156,12 @@ function wireUi() {
     e.preventDefault();
     e.stopPropagation();
     els.followupDropwrap.classList.remove("dropwrap--dragover");
-    const imgs = droppedImagePaths(e);
-    if (imgs.length === 0) return;
-    setFollowupImages(mergeImages(state.followupImages, imgs));
-    els.followupInput.focus();
+    const dropped = droppedFileEntries(e);
+    const imgs = imagePathsFromDroppedEntries(dropped);
+    const files = nonImagePathsFromDroppedEntries(dropped);
+    if (imgs.length > 0) setFollowupImages(mergeImages(state.followupImages, imgs));
+    if (files.length > 0) appendPathsToTextarea(els.followupInput, files);
+    else if (imgs.length > 0) els.followupInput.focus();
   });
 
   els.jobDialogClose.addEventListener("click", () => {

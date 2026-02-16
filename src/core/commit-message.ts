@@ -221,9 +221,12 @@ function inferConventionalType(paths: string[], typeHint: ConventionalType | "",
 }
 
 function inferScope(paths: string[]): string {
-  if (paths.some(isReadmePath)) return "readme";
-
   const has = paths.length > 0;
+  // Keep `readme` scope for documentation-ish updates (README/docs + supporting images).
+  // Mixed code+README changes should not be scoped to readme.
+  const readmeDocsLikeOnly = has && paths.some(isReadmePath) && paths.every((p) => isDocsPath(p) || isImagePath(p));
+  if (readmeDocsLikeOnly) return "readme";
+
   const allInGithub = has && paths.every((p) => String(p || "").replaceAll("\\", "/").startsWith(".github/"));
   if (allInGithub) return "github";
 
@@ -255,7 +258,8 @@ function inferSubjectFromFiles(paths: string[], taskSummary: string, scope: stri
   const lowTask = String(taskSummary || "").toLowerCase();
   const hasReadme = paths.some(isReadmePath);
   const imgCount = paths.filter(isImagePath).length;
-  if (hasReadme) {
+  const readmeDocsLikeOnly = hasReadme && paths.every((p) => isDocsPath(p) || isImagePath(p));
+  if (readmeDocsLikeOnly) {
     const mentionsScreenshot = /\bscreenshot\b/.test(lowTask) || /\bscreen\s*shot\b/.test(lowTask) || /\bbild\b/.test(lowTask);
     if (imgCount > 0 || mentionsScreenshot) {
       // If scope already narrows to README, avoid repeating it.
