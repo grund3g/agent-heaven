@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.9.0...agent-heaven-v0.9.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* **tests:** normalize EOLs in git cherry-pick test ([694bdf6](https://github.com/grund3g/agent-heaven/commit/694bdf6174f962d096665d10d05ebe593ce32501))
+
 ## [0.9.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.8.0...agent-heaven-v0.9.0) (2026-02-16)
 
 
