@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     await invokeOk("shell:openPath", filePath);
     return true;
   },
+  editorOpenPath: async (filePath) => {
+    await invokeOk("editor:openPath", filePath);
+    return true;
+  },
 
   agentsCheckBinaries: async () => {
     const res = await invokeOk("agents:checkBinaries");

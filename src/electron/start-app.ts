@@ -24,6 +24,7 @@ import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPa
 import { installAgentCli } from "../agent-install";
 import { inferCommitMessageStyleFromSubjects, suggestCommitMessage } from "../core/commit-message";
 import { jobDisplayTitle } from "../core/prompt";
+import { spawnPlatform } from "../platform-spawn";
 import {
   addAll,
   cherryPick,
@@ -479,6 +480,29 @@ function applyNativeThemeFromSettings(settings: any) {
   }
 }
 
+function pickCwdForEditorTarget(targetPath: string): string {
+  const p = String(targetPath || "").trim();
+  if (!p) return process.cwd();
+
+  try {
+    const st = fs.statSync(p);
+    if (st.isDirectory()) return p;
+  } catch {
+    // ignore
+  }
+
+  const dir = path.dirname(p);
+  if (!dir || dir === ".") return process.cwd();
+  try {
+    const st = fs.statSync(dir);
+    if (st.isDirectory()) return dir;
+  } catch {
+    // ignore
+  }
+
+  return process.cwd();
+}
+
 export async function startApp(): Promise<void> {
   await app.whenReady();
 
@@ -836,6 +860,50 @@ export async function startApp(): Promise<void> {
       const errMsg = await shell.openPath(p);
       if (errMsg) return { ok: false, error: errMsg };
       return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  });
+
+  ipcMain.handle("editor:openPath", async (evt, rawPath) => {
+    assertTrustedIpcSender(evt);
+    const targetPath = String(rawPath || "").trim();
+    if (!targetPath) return { ok: false, error: "Missing path" };
+
+    const settings = store.getSettings();
+    const editorCommand = settings && typeof settings === "object" ? String((settings as any).editorCommand || "").trim() : "";
+    if (!editorCommand) {
+      return { ok: false, error: "No editor configured. Set one in Settings -> UI -> Editor command." };
+    }
+
+    try {
+      const child = spawnPlatform(editorCommand, [targetPath], {
+        cwd: pickCwdForEditorTarget(targetPath),
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true
+      });
+
+      return await new Promise((resolve) => {
+        let settled = false;
+        const finish = (payload: any) => {
+          if (settled) return;
+          settled = true;
+          resolve(payload);
+        };
+
+        child.once("error", (err: any) => {
+          finish({ ok: false, error: String(err && err.message ? err.message : err) });
+        });
+
+        try {
+          child.unref();
+        } catch {
+          // ignore
+        }
+
+        setTimeout(() => finish({ ok: true }), 80);
+      });
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }

@@ -118,6 +118,7 @@ const api = window.agentHeaven;
 			  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
 		  settingsTheme: document.getElementById("settingsTheme"),
 		  settingsColorScheme: document.getElementById("settingsColorScheme"),
+		  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -4911,6 +4912,26 @@ function projectColorById(id) {
   return p ? normalizeHexColor(p.color) : "";
 }
 
+function editorCommandFromSettings() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return typeof s.editorCommand === "string" ? s.editorCommand.trim() : "";
+}
+
+function hasConfiguredEditorCommand() {
+  return !!editorCommandFromSettings();
+}
+
+function jobPathForEditor(job) {
+  if (!job || typeof job !== "object") return "";
+
+  const cwdPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+  if (cwdPath) return cwdPath;
+
+  const project = projectById(job.projectId);
+  const basePath = project && typeof project.path === "string" ? project.path.trim() : "";
+  return basePath || "";
+}
+
 function integratedBadgeForJob(job) {
   if (!job || typeof job !== "object") return null;
   const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
@@ -6448,6 +6469,35 @@ function updateJobDialogActions(job) {
   hideJobActionsMenu();
 }
 
+async function openJobInEditor(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+
+  const targetPath = jobPathForEditor(job);
+  if (!targetPath) {
+    showToast("No project path available for this task.");
+    return;
+  }
+
+  if (!hasConfiguredEditorCommand()) {
+    showToast('Set "Editor command" in Settings first.');
+    return;
+  }
+
+  if (!api || typeof api.editorOpenPath !== "function") {
+    showToast("Open in editor is not supported in this build.");
+    return;
+  }
+
+  try {
+    await api.editorOpenPath(targetPath);
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err) || "Failed to open editor.");
+  }
+}
+
 function updateCardContextMenuActions(job) {
   if (!els.cardContextMenu) return;
   const menu = els.cardContextMenu;
@@ -6458,6 +6508,7 @@ function updateCardContextMenuActions(job) {
   const canTrash = !running && b !== "trash";
   const canDelete = b === "trash" && !running;
   const canRestore = b === "archive" || b === "trash";
+  const canOpenInEditor = !!jobPathForEditor(job) && hasConfiguredEditorCommand();
 
   const byAction = (name) => menu.querySelector(`[data-ctx-action="${name}"]`);
   const setActionHidden = (name, hidden) => {
@@ -6466,12 +6517,13 @@ function updateCardContextMenuActions(job) {
   };
 
   if (isDemoJob(job)) {
-    for (const a of ["rerun", "stop", "restore", "archive", "trash", "delete"]) setActionHidden(a, true);
+    for (const a of ["open_in_editor", "rerun", "stop", "restore", "archive", "trash", "delete"]) setActionHidden(a, true);
     const sep = menu.querySelector('[data-ctx-sep="main"]');
     if (sep) sep.hidden = true;
     return;
   }
 
+  setActionHidden("open_in_editor", !canOpenInEditor);
   setActionHidden("rerun", running);
   setActionHidden("stop", !running);
   setActionHidden("restore", !canRestore);
@@ -9271,6 +9323,7 @@ function wireUi() {
 						      uiModel: getUiModelFromControls(),
 						      uiTheme: els.settingsTheme.value,
 						      uiColorScheme: els.settingsColorScheme.value,
+					      editorCommand: els.settingsEditorCommand ? els.settingsEditorCommand.value.trim() : "",
 					      menuBarMode: !!els.settingsMenuBarMode.checked,
 					      startAtLogin: !!els.settingsStartAtLogin.checked,
 					      openOnAllDisplays: !!els.settingsOpenOnAllDisplays.checked,
@@ -9353,6 +9406,10 @@ function wireUi() {
 
       if (action === "open") {
         openJobDialog(jobId);
+        return;
+      }
+      if (action === "open_in_editor") {
+        await openJobInEditor(jobId);
         return;
       }
       if (action === "rerun") {
@@ -10027,6 +10084,7 @@ function maybeShowMissingAgentBinariesToast(res) {
 				  setUiModelControls(s.uiModel || "");
 				  els.settingsTheme.value = normalizeTheme(s.uiTheme);
 				  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+		  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
 				  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
 				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
 	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
