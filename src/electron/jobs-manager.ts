@@ -925,13 +925,10 @@ export class JobsManager {
     return { agent: fallback.agent, model: fallback.model };
   }
 
-  private buildTitleSummarizerPrompt(opts: { userPrompt: string; currentTitle?: string }): string {
-    const rawPrompt = String(opts && opts.userPrompt ? opts.userPrompt : "").trim();
-    const rawCurrentTitle =
-      opts && typeof opts.currentTitle === "string" ? truncateText(oneLine(opts.currentTitle).trim(), 120) : "";
+  private buildTitleSummarizerPrompt(userPrompt: string): string {
+    const rawPrompt = String(userPrompt || "").trim();
     const MAX_PROMPT_CHARS = 6_000;
     const clipped = rawPrompt.length > MAX_PROMPT_CHARS ? `${rawPrompt.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : rawPrompt;
-    const currentTitleSection = rawCurrentTitle || "(none)";
 
     return [
       "Create a concise job card title summarizing the user's request.",
