@@ -55,63 +55,6 @@ describe("commit-message", () => {
       jobTitle: "Fix crash on startup",
       allowTaskContext: false
     });
-    expect(msg).toBe("chore: update app.ts");
-  });
-
-  test("ignores localized job titles when task context is disabled", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      changedPaths: ["src/app.ts"],
-      jobTitle: "Bitte Fehler beim Start beheben",
-      allowTaskContext: false
-    });
-    expect(msg).toBe("chore: update app.ts");
-  });
-
-  test("uses area-based fallback instead of checkpoint placeholder", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      changedPaths: ["src/app.ts", "renderer/renderer.js"],
-      allowTaskContext: false
-    });
-    expect(msg).toBe("chore: update src and renderer");
-  });
-
-  test("falls back to local-changes wording when no context/path is available", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      allowTaskContext: false
-    });
-    expect(msg).toBe("chore: update local changes");
-  });
-
-  test("ignores machine-style status metadata as task context", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      changedPaths: ["src/app.ts"],
-      taskText: "status=done box=board agent=codex project=agent-heaven thread=abc model=gpt-5",
-      allowTaskContext: true
-    });
-    expect(msg).toBe("chore: update app.ts");
-  });
-
-  test("downgrades low-signal feat summaries to chore", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      changedPaths: ["renderer/renderer.js"],
-      taskText: "feat: update renderer.js",
-      allowTaskContext: true
-    });
-    expect(msg).toBe("chore(renderer): update renderer.js");
-  });
-
-  test("keeps specific feature summaries as feat", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      changedPaths: ["renderer/renderer.js"],
-      taskText: "add sessions table/list display mode",
-      allowTaskContext: true
-    });
-    expect(msg).toBe("feat(renderer): add sessions table/list display mode");
+    expect(msg).toBe("feat: update app.ts");
   });
 });

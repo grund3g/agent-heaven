@@ -2457,24 +2457,16 @@ export async function startApp(): Promise<void> {
       };
     }
 
-    try {
-      const pushRes = await pushCurrentBranch(sourceDir);
-      return {
-        ok: true,
-        committedSha,
-        pushed: true,
-        branch: pushRes.branch || info.branch || "",
-        remote: pushRes.remote || "",
-        upstreamRef: pushRes.upstreamRef || "",
-        setUpstream: !!pushRes.setUpstream
-      };
-    } catch (err: any) {
-      const msg = String(err && err.message ? err.message : err);
-      return {
-        ok: false,
-        error: `Committed ${committedSha}, but push failed.\n\n${msg}`
-      };
-    }
+    const style = inferCommitMessageStyleFromSubjects(recentSubjects);
+    const suggestion = suggestCommitMessage({
+      style,
+      changedPaths,
+      taskText: lastJobPromptText(job),
+      jobTitle: jobDisplayTitle(job),
+      allowTaskContext: false
+    });
+
+    return { ok: true, suggestion };
   });
 
   ipcMain.handle("checkouts:integrateToDefault", async (evt, payload) => {
