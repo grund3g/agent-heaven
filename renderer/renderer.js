@@ -5833,7 +5833,7 @@ async function startIntegrateToDefaultFromDialog() {
         let suggested = "";
         try {
           if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-            suggested = await api.checkoutsSuggestCommitMessage(id);
+            suggested = await api.checkoutsSuggestCommitMessage(id, { forceEnglish: true });
           }
         } catch {
           suggested = "";
