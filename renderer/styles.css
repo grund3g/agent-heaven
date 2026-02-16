@@ -1031,6 +1031,7 @@ body::before {
 
 .sessiontablewrap {
   min-height: 0;
+  min-width: 0;
   border-radius: var(--radius);
   border: 1px solid var(--stroke);
   background: var(--surface0);
@@ -1052,6 +1053,7 @@ body::before {
   background: var(--surface1);
   overflow: auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .sessiontable {
