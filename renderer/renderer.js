@@ -3655,7 +3655,6 @@ function jobSearchablePanelForActiveTab() {
   if (state.activeTab === "chat") return els.jobDialogChat;
   if (state.activeTab === "live") return els.jobDialogLive;
   if (state.activeTab === "logs") return els.jobDialogLogs;
-  if (state.activeTab === "diff") return els.jobDialogDiff;
   return null;
 }
 
@@ -3680,7 +3679,6 @@ function clearJobSearchMarks() {
   clearJobSearchMarksInPanel(els.jobDialogChat);
   clearJobSearchMarksInPanel(els.jobDialogLive);
   clearJobSearchMarksInPanel(els.jobDialogLogs);
-  clearJobSearchMarksInPanel(els.jobDialogDiff);
 }
 
 function collectJobSearchTextNodes(rootEl) {
@@ -6576,8 +6574,8 @@ function builtInActionKindFromCommand(command) {
   return "";
 }
 
-function defaultIntegrateCommitMessage(job) {
-  const msg = "Update local changes";
+function defaultIntegrateCommitMessage() {
+  const msg = "Checkpoint changes";
   return msg.slice(0, 72);
 }
 
@@ -8232,14 +8230,12 @@ function setActiveTab(tab) {
   document.querySelectorAll(".tab").forEach((t) => {
     t.classList.toggle("tab--active", t.getAttribute("data-tab") === nextTab);
   });
-  els.jobDialogChat.classList.toggle("panel--active", nextTab === "chat");
-  els.jobDialogLive.classList.toggle("panel--active", nextTab === "live");
-  els.jobDialogLogs.classList.toggle("panel--active", nextTab === "logs");
-  if (els.jobDialogDiff) els.jobDialogDiff.classList.toggle("panel--active", nextTab === "diff");
-  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", nextTab === "term");
+  els.jobDialogChat.classList.toggle("panel--active", tab === "chat");
+  els.jobDialogLive.classList.toggle("panel--active", tab === "live");
+  els.jobDialogLogs.classList.toggle("panel--active", tab === "logs");
+  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", tab === "term");
   if (els.jobDialog && els.jobDialog.open) applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
-  if (nextTab === "term") maybeEnsureTerminalForSelectedJob();
-  if (nextTab === "diff") loadSelectedJobDiff({ force: false }).catch(() => {});
+  if (tab === "term") maybeEnsureTerminalForSelectedJob();
 }
 
 function isNearBottom(el) {
@@ -10732,7 +10728,6 @@ function wireUi() {
   els.jobDialog.addEventListener("close", () => {
     hideJobMoreMenu();
     clearJobSearch();
-    jobDiffReqSeq += 1; // cancel in-flight diff requests
 
     const jobId = state.selectedJobId;
     if (!jobId) return;

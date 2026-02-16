@@ -2152,8 +2152,8 @@ export async function startApp(): Promise<void> {
     const heuristicFallback = suggestCommitMessage({
       style,
       changedPaths,
-      taskText: "",
-      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
+      taskText: lastJobPromptText(job),
+      jobTitle: jobDisplayTitle(job),
       allowTaskContext: false
     });
 

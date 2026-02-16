@@ -46,4 +46,15 @@ describe("commit-message", () => {
     });
     expect(msg).toBe("Fix crash on startup");
   });
+
+  test("can ignore task context when requested", () => {
+    const msg = suggestCommitMessage({
+      style: "conventional",
+      changedPaths: ["src/app.ts"],
+      taskText: "fix crash on startup",
+      jobTitle: "Fix crash on startup",
+      allowTaskContext: false
+    });
+    expect(msg).toBe("feat: update app.ts");
+  });
 });
