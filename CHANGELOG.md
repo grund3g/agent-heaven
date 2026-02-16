@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.9.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.8.0...agent-heaven-v0.9.0) (2026-02-16)
+
+
+### Features
+
+* add default commit & push actions ([6e5665d](https://github.com/grund3g/agent-heaven/commit/6e5665dde685ab88e4484cf8d9d467bcefcd1516))
+* auto update card titles on context change ([d580c57](https://github.com/grund3g/agent-heaven/commit/d580c570e9339f03d5f67b99cb7651c2d37b4e18))
+* better auto title handling ([38c8c24](https://github.com/grund3g/agent-heaven/commit/38c8c2480f6ffe3b0e6a581c063be4aff1815e17))
+* better commit defaults ([916e4c8](https://github.com/grund3g/agent-heaven/commit/916e4c820ed1028cff0b7d6e0d273585d480c279))
+* better commit messages ([67ce7cd](https://github.com/grund3g/agent-heaven/commit/67ce7cda5a3d5a7e57cbdd74f4cebe9d328e24d8))
+* better Needs Attention vs Done classification ([5b7e5c0](https://github.com/grund3g/agent-heaven/commit/5b7e5c08d5e9160783660d18ef60b07a2e1bf780))
+* include merged flag / label ([1138047](https://github.com/grund3g/agent-heaven/commit/113804775faeb8ab2ef89e5f159c69670415d796))
+* open-in-Code-Button in Tasks ([6cd9a9a](https://github.com/grund3g/agent-heaven/commit/6cd9a9a2ab88c83e949c53ee45cb59612e25233f))
+* option to auto archive tasks after work tree action ([8818f50](https://github.com/grund3g/agent-heaven/commit/8818f50dc40d70602fd9ceaba10e1b9a4c062984))
+* optional temp folder delete ([d912cf1](https://github.com/grund3g/agent-heaven/commit/d912cf1872c1302527ab55135458deee1690a521))
+* **renderer:** checkpoint changes ([5171b1c](https://github.com/grund3g/agent-heaven/commit/5171b1cfa768b1ea9b1177b13883dd8a5eafd774))
+* **ui:** improve integrate-to-default action feedback ([684f577](https://github.com/grund3g/agent-heaven/commit/684f577a15f3c6b783cfd3b60080e62f1d6715e4))
+
+
+### Bug Fixes
+
+* **git:** skip empty cherry-pick steps during batch integration ([4f31449](https://github.com/grund3g/agent-heaven/commit/4f314495567a1bed1030d8d61f53fc7aa844eaac))
+* improve session commit message suggestions ([7c7bd80](https://github.com/grund3g/agent-heaven/commit/7c7bd8043c52cbdf3631572cd72fc9a7b441bd21))
+* **integrate:** clear stale merged marker ([3243c22](https://github.com/grund3g/agent-heaven/commit/3243c226f991806042320922941fa23af7f85b0f))
+* remove merged label from non merged tasks ([f7db773](https://github.com/grund3g/agent-heaven/commit/f7db7737a04eb614a29f27759ceedc96a4ab3772))
+* **renderer:** allow app-wide file drops with focused composer highlight ([453db70](https://github.com/grund3g/agent-heaven/commit/453db708163261aaead2691a7dc51556f19f0da8))
+* **renderer:** fix markdown in chat view ([c06abb2](https://github.com/grund3g/agent-heaven/commit/c06abb270166a7dd969c2c9b654c38b4456ec167))
+
 ## [0.8.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.7.0...agent-heaven-v0.8.0) (2026-02-16)
 
 
