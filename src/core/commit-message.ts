@@ -297,12 +297,14 @@ export function suggestCommitMessage(opts: {
   changedPaths?: unknown;
   taskText?: unknown;
   jobTitle?: unknown;
+  allowTaskContext?: boolean;
 }): string {
   const style: CommitMessageStyle = opts && opts.style === "conventional" ? "conventional" : "plain";
   const paths = normalizeChangedPaths(opts && "changedPaths" in opts ? (opts as any).changedPaths : []);
+  const allowTaskContext = !(opts && (opts as any).allowTaskContext === false);
 
-  const rawTask = typeof opts.taskText === "string" ? opts.taskText : "";
-  const jobTitle = typeof opts.jobTitle === "string" ? opts.jobTitle : "";
+  const rawTask = allowTaskContext && typeof opts.taskText === "string" ? opts.taskText : "";
+  const jobTitle = allowTaskContext && typeof opts.jobTitle === "string" ? opts.jobTitle : "";
 
   const taskSummary = oneLine(promptSummary(rawTask) || jobTitle);
   const { typeHint, summary } = extractTypeHintFromSummary(taskSummary);

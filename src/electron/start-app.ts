@@ -1200,7 +1200,8 @@ export async function startApp(): Promise<void> {
       style,
       changedPaths,
       taskText: lastJobPromptText(job),
-      jobTitle: jobDisplayTitle(job)
+      jobTitle: jobDisplayTitle(job),
+      allowTaskContext: false
     });
 
     return { ok: true, suggestion };

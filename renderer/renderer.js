@@ -5442,8 +5442,7 @@ function builtInActionKindFromCommand(command) {
 }
 
 function defaultIntegrateCommitMessage(job) {
-  const title = jobDisplayTitle(job) || "";
-  const msg = title || "Checkpoint changes";
+  const msg = "Checkpoint changes";
   return msg.slice(0, 72);
 }
 
