@@ -1833,160 +1833,6 @@ export async function startApp(): Promise<void> {
     return stripped.slice(0, 200);
   }
 
-  type ManagedCheckoutKind = "worktree" | "clone";
-
-  function resolveManagedCheckoutPath(opts: { projectId: string; jobId: string; kind: ManagedCheckoutKind }): string {
-    const root = path.resolve(checkoutsDir);
-    const sub = opts.kind === "worktree" ? "worktrees" : "clones";
-    return path.resolve(root, sub, opts.projectId, opts.jobId);
-  }
-
-  async function removeManagedCheckout(opts: {
-    projectId: string;
-    jobId: string;
-    kind: ManagedCheckoutKind;
-    projectPath: string;
-  }): Promise<void> {
-    const projectId = String(opts && opts.projectId ? opts.projectId : "").trim();
-    const jobId = String(opts && opts.jobId ? opts.jobId : "").trim();
-    const kind = opts && opts.kind === "clone" ? "clone" : "worktree";
-    const projectPath = String(opts && opts.projectPath ? opts.projectPath : "").trim();
-    if (!projectId) throw new Error("Missing projectId");
-    if (!jobId) throw new Error("Missing jobId");
-    if (!projectPath) throw new Error("Missing project path");
-
-    const root = path.resolve(checkoutsDir);
-    const target = resolveManagedCheckoutPath({ projectId, jobId, kind });
-    if (!isPathWithinRoot(root, target)) throw new Error("Invalid checkout path");
-
-    if (kind === "clone") {
-      fs.rmSync(target, { recursive: true, force: true });
-      return;
-    }
-
-    // worktree: remove via git to keep metadata consistent
-    try {
-      if (fs.existsSync(target)) await removeWorktree({ repoDir: projectPath, worktreeDir: target });
-    } catch (err: any) {
-      if (fs.existsSync(target)) throw err;
-    }
-
-    // Best-effort: ensure the dir is gone.
-    try {
-      fs.rmSync(target, { recursive: true, force: true });
-    } catch {
-      // ignore
-    }
-  }
-
-  function findManagedCheckoutForJob(opts: {
-    projectId: string;
-    jobId: string;
-    preferredPath?: string;
-  }): { kind: ManagedCheckoutKind; path: string } | null {
-    const projectId = String(opts && opts.projectId ? opts.projectId : "").trim();
-    const jobId = String(opts && opts.jobId ? opts.jobId : "").trim();
-    const preferredPath = String(opts && opts.preferredPath ? opts.preferredPath : "").trim();
-    if (!projectId || !jobId) return null;
-
-    const root = path.resolve(checkoutsDir);
-    const candidates: Array<{ kind: ManagedCheckoutKind; path: string }> = [
-      { kind: "worktree", path: resolveManagedCheckoutPath({ projectId, jobId, kind: "worktree" }) },
-      { kind: "clone", path: resolveManagedCheckoutPath({ projectId, jobId, kind: "clone" }) }
-    ];
-
-    const preferred = preferredPath ? path.resolve(preferredPath) : "";
-    if (preferred) {
-      const exact = candidates.find((c) => c.path === preferred && isPathWithinRoot(root, c.path) && fs.existsSync(c.path));
-      if (exact) return exact;
-    }
-
-    for (const c of candidates) {
-      if (!isPathWithinRoot(root, c.path)) continue;
-      if (!fs.existsSync(c.path)) continue;
-      return c;
-    }
-    return null;
-  }
-
-  async function checkoutHasLocalWork(opts: {
-    checkoutPath: string;
-    projectPath: string;
-    configuredDefaultBranch?: string;
-  }): Promise<boolean> {
-    const checkoutPath = String(opts && opts.checkoutPath ? opts.checkoutPath : "").trim();
-    const projectPath = String(opts && opts.projectPath ? opts.projectPath : "").trim();
-    const configuredDefaultBranch = String(opts && opts.configuredDefaultBranch ? opts.configuredDefaultBranch : "").trim();
-    if (!checkoutPath) return true;
-    if (!projectPath) return true;
-
-    let info: any = null;
-    try {
-      info = await getGitInfo(checkoutPath);
-    } catch {
-      info = null;
-    }
-    if (!info || !info.isGitRepo) return true;
-    if (info.dirty) return true;
-
-    let baseBranch = normalizeBranchName(configuredDefaultBranch);
-    if (!baseBranch) {
-      try {
-        baseBranch = normalizeBranchName(await detectDefaultBranch(projectPath));
-      } catch {
-        baseBranch = "";
-      }
-    }
-    if (!baseBranch) {
-      try {
-        baseBranch = normalizeBranchName(await detectDefaultBranch(checkoutPath));
-      } catch {
-        baseBranch = "";
-      }
-    }
-    if (!baseBranch) return true;
-
-    try {
-      const ahead = await listCommitsInRange(checkoutPath, `${baseBranch}..HEAD`, { noMerges: false });
-      return Array.isArray(ahead) && ahead.length > 0;
-    } catch {
-      return true;
-    }
-  }
-
-  async function maybeAutoRemoveCleanCheckoutForJob(jobId: unknown): Promise<void> {
-    const id = String(jobId || "").trim();
-    if (!id) return;
-
-    const got = jobsManager.getJob(id);
-    if (!got || typeof got !== "object" || (got as any).ok !== true) return;
-    const job = (got as any).job || {};
-
-    const projectId = String(job && job.projectId ? job.projectId : "").trim();
-    if (!projectId) return;
-
-    const project = store.listProjects().find((x: any) => x && String(x.id || "").trim() === projectId) || null;
-    if (!project) return;
-    const projectPath = typeof project.path === "string" ? project.path.trim() : "";
-    if (!projectPath) return;
-
-    const checkoutPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
-    if (!checkoutPath) return;
-    if (path.resolve(checkoutPath) === path.resolve(projectPath)) return; // in-place checkout
-
-    const managed = findManagedCheckoutForJob({ projectId, jobId: id, preferredPath: checkoutPath });
-    if (!managed) return;
-
-    const hasWork = await checkoutHasLocalWork({
-      checkoutPath: managed.path,
-      projectPath,
-      configuredDefaultBranch: typeof project.defaultBranch === "string" ? project.defaultBranch : ""
-    });
-    if (hasWork) return;
-
-    await removeManagedCheckout({ projectId, jobId: id, kind: managed.kind, projectPath });
-  }
-
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
@@ -2099,12 +1945,14 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const heuristicFallback = suggestCommitMessage({
+    const title = jobDisplayTitle(job);
+    const safeTitle = /^untitled$/i.test(title) ? "" : title;
+    const suggestion = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",
-      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
-      allowTaskContext: false
+      jobTitle: safeTitle,
+      allowTaskContext: true
     });
 
     let suggestion = heuristicFallback;

@@ -3086,8 +3086,222 @@ function jobTokensCardText(job) {
   return { text, title };
 }
 
-function oneLine(s) {
-  return stripAnsi(String(s || "")).replaceAll(/\s+/g, " ").trim();
+	function oneLine(s) {
+	  return stripAnsi(String(s || "")).replaceAll(/\s+/g, " ").trim();
+	}
+
+	function isFixLikePrompt(summary) {
+	  const low = String(summary || "").toLowerCase();
+	  if (!low) return false;
+	  if (/\bfix\b/.test(low)) return true;
+	  if (/\bbug\b/.test(low)) return true;
+	  if (/\bbroken\b/.test(low)) return true;
+	  if (/\bnot\s+working\b/.test(low)) return true;
+	  if (/\bdoesn['’]?t\b/.test(low)) return true;
+	  if (low.includes("geht") && low.includes("nicht")) return true;
+	  if (low.includes("funktioniert") && low.includes("nicht")) return true;
+	  if (low.includes("immer") && low.includes("gleich") && low.includes("sound")) return true;
+	  return false;
+	}
+
+		function topicTitleFromPromptSummary(summary) {
+		  const s = oneLine(summary);
+		  const low = s.toLowerCase();
+		  if (!low) return "";
+
+	  if (/\btitle(s)?\b/.test(low) && /\b(summary|summaries|summarize|zusammenfassung)\b/.test(low))
+	    return "Card title summaries";
+
+	  if (/\b(search|suche|volltext)\b/.test(low) && /\b(session(s)?|jobs?|history)\b/.test(low)) return "Session search";
+
+	  if (/\b(theme|dark|light|mode)\b/.test(low) && /\bsystem\b/.test(low)) return "Theme: system option";
+	  if (/\b(theme|dark|light|mode)\b/.test(low)) return "Theme";
+
+	  if (/\b(hot\s*key|hotkey|shortcut|tastenkomb[iy]|accelerator)\b/.test(low)) return "Global hotkey";
+
+	  if (/(sound|sounds|notification)/.test(low)) {
+	    if (/\b(easter\s*egg|easteregg|goat|zieg)\b/.test(low)) return "Goat sound easter egg";
+	    if (/\b(volume|leise|loud)\b/.test(low) || /\b[0-9]{1,3}\s*%\b/.test(low)) return "Sound volume";
+	    if (/\b(select|ausw\u00e4hl|auswahl|preset)\b/.test(low)) return "Sound selection";
+	    return "Sounds";
+	  }
+
+	  if (/\bmarkdown\b/.test(low)) return "Markdown rendering";
+
+	  if (/\b(layout|verschoben|shift(ed)?|textarea|button)\b/.test(low)) return "Layout alignment";
+
+	  if (/\b(preview|vorschau)\b/.test(low) && /\b(image|bild)\b/.test(low)) return "Image preview";
+
+	  const hasMainTs = /\bmain\.ts\b/.test(low) || /\b1000\s*zeilen\b/.test(low);
+	  const hasTests = /\btests?\b/.test(low);
+	  if (hasMainTs && hasTests) return "Refactor main.ts + tests";
+	  if (hasMainTs) return "Refactor main.ts";
+	  if (hasTests) return "Tests";
+
+	  if (/\byour\s+codex\b/.test(low) || /\byour\s+agents\b/.test(low)) return "Branding copy";
+
+		  return "";
+		}
+
+			function looksLikeLowSignalIntro(s) {
+			  const t = oneLine(s).toLowerCase();
+			  if (!t) return false;
+			  if (/^(can|could|would|will|may)\\s+you\\b/.test(t)) return true;
+			  if (/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b/.test(t)) return true;
+			  if (/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b/.test(t)) return true;
+			  if (/^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b/.test(t))
+			    return true;
+			  if (/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend)\\b/.test(t)) return true;
+			  if (/^(bitte\\s+)?(kurz?fristig|schnell|dringend|asap|quick(ly)?|soon)\\b$/.test(t)) return true;
+			  return false;
+			}
+
+			function looksLikeLowSignalOutro(s) {
+			  const t = oneLine(s).toLowerCase();
+			  if (!t) return false;
+			  if (
+			    /^(any(\\s+(other|more))?\\s+ideas|any\\s+ideas|any\\s+thoughts|anything\\s+else|what\\s+else|what\\s+can\\s+we\\s+do)\\b/.test(t)
+			  )
+			    return true;
+			  if (/^(what\\s+do\\s+we\\s+need|what\\s+should\\s+we\\s+do|what\\s+could\\s+we\\s+do)\\b/.test(t)) return true;
+			  if (/^(was\\s+kann\\s+man|was\\s+k\\u00f6nnte\\s+man|was\\s+meinst\\s+du|irgendwelche\\s+ideen)\\b/.test(t))
+			    return true;
+			  if (/^was\\s+br\\u00e4uchten\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+braeuchten\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+brauchen\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+wir\\s+machen\\s+k\\u00f6nnten(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+wir\\s+machen\\s+koennten(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+k\\u00f6nnten\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+koennten\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+k\\u00f6nnen\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^was\\s+koennen\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
+			  if (/^(danke|thanks|thx)\\b/.test(t)) return true;
+			  return false;
+			}
+
+			function looksLikeLowSignalLeadInChunk(s) {
+			  const t = oneLine(s).toLowerCase();
+			  if (!t) return true;
+			  if (/^(damit|so\\s+that|so\\s+i\\s+can|so\\s+we\\s+can|to\\s+(be\\s+)?able\\s+to)\\b/.test(t)) return true;
+			  if (/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap|quick(ly)?|soon)\\b/.test(t)) return true;
+			  if (/^(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap|quick(ly)?|soon)\\b$/.test(t)) return true;
+			  if (/^(eine|einen|ein|a|an)\\s+(m\\u00f6glichkeit|option|way|possibility)\\b/.test(t)) return true;
+			  return false;
+			}
+
+			function titlePartSignalScore(s) {
+			  const low = oneLine(s).toLowerCase();
+			  if (!low) return -1e9;
+
+			  let score = 0;
+			  if (looksLikeLowSignalIntro(low)) score -= 8;
+			  if (looksLikeLowSignalLeadInChunk(low)) score -= 8;
+			  if (looksLikeLowSignalOutro(low)) score -= 8;
+
+			  if (/\\b(fix|add|implement|refactor|create|build|enable|allow|investigate|debug)\\b/.test(low)) score += 5;
+			  if (/\\b(fixen|hinzuf\\u00fcg|hinzufueg|implementier|refaktor|erstell|bau|aktivier|erlaub)\\w*\\b/.test(low)) score += 5;
+			  if (/\\b(demo|mock|job|jobs|project|projects|session|history|theme|hotkey|shortcut)\\b/.test(low)) score += 4;
+
+			  score += Math.min(160, low.length) / 40;
+			  return score;
+			}
+
+			function stripLowSignalLeadIn(s) {
+			  let t = String(s || "");
+			  for (let i = 0; i < 4; i += 1) {
+			    const prev = t;
+
+			    t = t.replace(/^(title|titel|summary|zusammenfassung)\\s*[:\\-]\\s*/i, "");
+
+			    t = t.replace(/^(and|und|also|so|ok|okay)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(hi|hey|hello|hallo)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(please|pls|plz|bitte)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(can|could|would|will|may)\\s+you\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(can|could)\\s+we\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(kann\\s+man)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(das\\s+bitte)\\b[\\s,:-]*/i, "");
+
+			    t = t.replace(/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap)\\b[\\s,:-]*/i, "");
+			    t = t.replace(/^(bitte\\s+)?(kurz?fristig|schnell|dringend|asap|quick(ly)?|soon)\\b[\\s,:-]*/i, "");
+
+			    t = t.replace(/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b[\\s,:-]*/i, "");
+			    t = t.replace(
+			      /^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b[\\s,:-]*/i,
+			      ""
+			    );
+
+			    t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\\b[\\s,:-]*/i, "");
+
+			    if (t === prev) break;
+			  }
+			  return t;
+			}
+
+		function compactTitleFromPromptSummary(summary) {
+		  const s = oneLine(summary);
+		  if (!s) return "";
+
+	  const topic = topicTitleFromPromptSummary(s);
+	  if (topic) {
+	    if (isFixLikePrompt(s)) return `Fix: ${topic}`;
+	    return topic;
+			  }
+
+			  let t = stripLowSignalLeadIn(s);
+			  for (let i = 0; i < 4; i += 1) {
+			    const commaIdx = t.indexOf(",");
+			    if (commaIdx <= 12) break;
+			    const head = t.slice(0, commaIdx).trim();
+			    const tail = t.slice(commaIdx + 1).trim();
+			    if (!tail) break;
+
+			    const headScore = titlePartSignalScore(head);
+			    const tailScore = titlePartSignalScore(tail);
+
+			    if (head.length < 8 || looksLikeLowSignalIntro(head) || looksLikeLowSignalLeadInChunk(head) || headScore + 1.2 < tailScore) {
+			      t = tail;
+			      continue;
+			    }
+
+			    t = head;
+			    break;
+			  }
+
+			  t = t.replace(/[!?]+$/, "");
+			  t = oneLine(t);
+			  return t || s;
+			}
+
+	function isBoilerplatePromptLine(s) {
+	  const t = String(s || "").trim();
+	  if (!t) return true;
+
+  const low = t.toLowerCase();
+  // Avoid showing prompt section labels as a "title" in cards/dialogs.
+  if (low === "mined-prompt" || low === "mined prompt") return true;
+  if (low === "mined_prompt") return true;
+  if (low.startsWith("mined-prompt:") || low.startsWith("mined prompt:") || low.startsWith("mined_prompt:")) return true;
+  if (low.includes("agents.md") && low.includes("instructions")) return true;
+  if (low.includes("skill.md")) return true;
+  if (low.includes("available skills")) return true;
+  if (low.includes("how to use skills")) return true;
+  if (low.includes("trigger rules")) return true;
+  if (low.includes("context hygiene")) return true;
+  if (low.includes("safety and fallback")) return true;
+  if (low.includes("environment_context")) return true;
+  if (low === "instructions" || low === "skills") return true;
+  if (low.startsWith("cwd>") || low.startsWith("shell>")) return true;
+  if (low.startsWith("cwd ") || low.startsWith("shell ")) return true;
+  if (low.startsWith("cwd:") || low.startsWith("shell:")) return true;
+  if (low === "-----") return true;
+  if (low.includes("[agent heaven internal]")) return true;
+  if (low.startsWith("ah_status:") || low.startsWith("ah status:")) return true;
+  if (low.includes("at the very end of your final reply")) return true;
+  if (low.includes("do not add any other text after the ah_status line")) return true;
+  if (/^status=[^\s]+(?:\s+[a-z0-9_-]+=[^\s]+){3,}$/i.test(low)) return true;
+  if (low.includes("status=") && low.includes("thread=") && low.includes("model=")) return true;
+  return false;
 }
 
 function jobDisplayTitle(job) {
