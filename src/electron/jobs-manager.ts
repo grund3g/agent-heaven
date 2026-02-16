@@ -306,96 +306,6 @@ export class JobsManager {
     return true;
   }
 
-  private projectById(projectId: unknown): any | null {
-    const id = String(projectId || "").trim();
-    if (!id) return null;
-    const projects = this.store && typeof this.store.listProjects === "function" ? this.store.listProjects() : [];
-    if (!Array.isArray(projects)) return null;
-    return projects.find((p: any) => p && String(p.id || "").trim() === id) || null;
-  }
-
-  private async shouldClearIntegratedToDefault(job: Job): Promise<boolean> {
-    if (!job || typeof job !== "object") return false;
-    const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
-    if (!atRaw) return false;
-
-    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
-    if (!sourceDir) return false;
-
-    let srcInfo: any = null;
-    try {
-      srcInfo = await getGitInfo(sourceDir);
-    } catch {
-      srcInfo = null;
-    }
-    if (!srcInfo || !srcInfo.isGitRepo) return false;
-    // If new work exists in the checkout, it is no longer fully integrated.
-    if (srcInfo.dirty) return true;
-
-    const project = this.projectById(job.projectId);
-    const projectPath = project && typeof project.path === "string" ? String(project.path).trim() : "";
-    if (!projectPath) return false;
-
-    let srcCommon = "";
-    let projectCommon = "";
-    try {
-      srcCommon = await getGitCommonDir(sourceDir);
-      projectCommon = await getGitCommonDir(projectPath);
-    } catch {
-      srcCommon = "";
-      projectCommon = "";
-    }
-    // Revalidation is reliable only for shared-object worktrees (same repo).
-    if (!srcCommon || !projectCommon || srcCommon !== projectCommon) return false;
-
-    let targetBranch = this.normalizeBranchName(job.integratedToDefaultBranch);
-    if (!targetBranch) {
-      targetBranch = this.normalizeBranchName(project && typeof project === "object" ? (project as any).defaultBranch : "");
-    }
-    if (!targetBranch) {
-      try {
-        targetBranch = this.normalizeBranchName(await detectDefaultBranch(projectPath));
-      } catch {
-        targetBranch = "";
-      }
-    }
-    if (!targetBranch) return false;
-
-    try {
-      const ahead = await listCommitsInRange(sourceDir, `${targetBranch}..HEAD`, { noMerges: false });
-      return Array.isArray(ahead) && ahead.length > 0;
-    } catch {
-      return false;
-    }
-  }
-
-  async reconcileIntegratedToDefault(jobId?: unknown): Promise<void> {
-    const id = String(jobId || "").trim();
-    const targets: Job[] = id ? ([this.jobs.get(id)].filter((j): j is Job => !!j) as Job[]) : Array.from(this.jobs.values());
-
-    for (const job of targets) {
-      const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
-      if (!atRaw) continue;
-
-      let shouldClear = false;
-      try {
-        shouldClear = await this.shouldClearIntegratedToDefault(job);
-      } catch {
-        shouldClear = false;
-      }
-      if (!shouldClear) continue;
-      if (!this.clearIntegratedToDefault(job)) continue;
-
-      this.sendJobEvent({
-        jobId: job.id,
-        kind: "meta",
-        patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-      });
-      this.markJobDirty(job.id);
-      this.tryPersistJobNow(job);
-    }
-  }
-
   private loadPersistedJobs() {
     // Load persisted jobs into memory (so renderer can list history).
     const now = new Date().toISOString();
@@ -505,6 +415,31 @@ export class JobsManager {
       jobId: id,
       kind: "meta",
       patch: { prompts: job.prompts, promptPreview: meta.promptPreview }
+    });
+    this.markJobDirty(id);
+    this.tryPersistJobNow(job);
+    return { ok: true };
+  }
+
+  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
+    const id = String(jobId || "").trim();
+    if (!id) return { ok: false, error: "Missing jobId" };
+    const job = this.jobs.get(id);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const p = payload && typeof payload === "object" ? payload : {};
+    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
+    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
+    const branch = this.normalizeBranchName((p as any).branch);
+
+    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
+
+    job.integratedToDefaultAt = at;
+    job.integratedToDefaultBranch = branch;
+    this.sendJobEvent({
+      jobId: id,
+      kind: "meta",
+      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
     });
     this.markJobDirty(id);
     this.tryPersistJobNow(job);
