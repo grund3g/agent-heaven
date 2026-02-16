@@ -74,6 +74,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   projectsAddTemporary: (opts) => ipcRenderer.invoke("projects:addTemporary", opts || {}),
   projectsRemove: (id) => ipcRenderer.invoke("projects:remove", id),
   projectsUpdate: (id, patch) => ipcRenderer.invoke("projects:update", { id, patch }),
+  projectsSuggestPaths: async (projectId, query, limit) => {
+    const res = await invokeOk("projects:suggestPaths", { projectId, query, limit });
+    return Array.isArray(res.items) ? res.items : [];
+  },
   projectsGitInfo: async (projectId) => {
     const res = await invokeOk("projects:gitInfo", projectId);
     return res.info;

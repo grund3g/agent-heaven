@@ -1384,6 +1384,18 @@ body::before {
   color: var(--muted2);
 }
 
+.pathsuggest {
+  z-index: 10005;
+}
+
+.pathsuggest .combo__itemValue {
+  font-size: 12px;
+}
+
+.pathsuggest .combo__itemLabel {
+  font-size: 11px;
+}
+
 .textarea {
   margin-top: 10px;
   resize: vertical;

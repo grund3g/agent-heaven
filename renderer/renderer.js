@@ -22,6 +22,7 @@ const api = window.agentHeaven;
 		  modelInput: document.getElementById("modelInput"),
 		  promptDropwrap: document.getElementById("promptDropwrap"),
 		  promptInput: document.getElementById("promptInput"),
+  promptPathSuggest: document.getElementById("promptPathSuggest"),
 	  promptBadge: document.getElementById("promptBadge"),
 	  promptAttachments: document.getElementById("promptAttachments"),
   runBtn: document.getElementById("runBtn"),
@@ -259,6 +260,17 @@ const DEMO = {
 
 const TOUR_ROOT_ID = "ahTour";
 const DEFAULT_FOLLOWUP_PLACEHOLDER = "Follow-up… (⌘+Enter)";
+const PROMPT_PATH_SUGGEST_LIMIT = 24;
+const PROMPT_PATH_SUGGEST_DEBOUNCE_MS = 90;
+const PROMPT_PATH_SUGGEST_CURSOR_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+let promptPathSuggestTimer = null;
+let promptPathSuggestReqSeq = 0;
+const promptPathSuggestState = {
+  open: false,
+  mode: "insert", // insert | attach
+  items: [],
+  activeIndex: 0
+};
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
 
@@ -1518,6 +1530,334 @@ function buildPromptWithFileAttachments(promptText, files) {
   if (arr.length === 0) return base;
   const block = `Attached files:\n${arr.map((p) => `- ${p}`).join("\n")}`;
   return base ? `${base}\n\n${block}` : block;
+}
+
+function normalizePromptPathSuggestQuery(raw) {
+  let q = String(raw || "").trim();
+  if (!q) return "";
+  q = q.replaceAll("\\", "/");
+  while (q.startsWith("./")) q = q.slice(2);
+  while (q.startsWith("/")) q = q.slice(1);
+  while (q.startsWith("~/")) q = q.slice(2);
+  while (q.startsWith("../")) q = q.slice(3);
+  q = q.replaceAll(/\/{2,}/g, "/");
+  return q;
+}
+
+function selectedComposerProjectForPathSuggest() {
+  if (!els.projectSelect) return null;
+  const projectId = String(els.projectSelect.value || "").trim();
+  if (!projectId || projectId === "auto") return null;
+  const project = state.projects.find((p) => p && p.id === projectId) || null;
+  if (!project || typeof project.path !== "string" || !project.path.trim()) return null;
+  return { id: projectId, path: project.path.trim() };
+}
+
+function promptPathTokenAtCursor(inputEl) {
+  if (!inputEl) return null;
+  const value = String(inputEl.value || "");
+  const cursorStart = Number.isFinite(inputEl.selectionStart) ? inputEl.selectionStart : value.length;
+  const cursorEnd = Number.isFinite(inputEl.selectionEnd) ? inputEl.selectionEnd : cursorStart;
+  if (cursorStart !== cursorEnd) return null;
+
+  const end = Math.max(0, Math.min(value.length, cursorStart));
+  let start = end;
+  while (start > 0) {
+    const ch = value[start - 1];
+    if (
+      ch === " " ||
+      ch === "\n" ||
+      ch === "\t" ||
+      ch === '"' ||
+      ch === "'" ||
+      ch === "`" ||
+      ch === "(" ||
+      ch === ")" ||
+      ch === "[" ||
+      ch === "]" ||
+      ch === "{" ||
+      ch === "}" ||
+      ch === "," ||
+      ch === ";"
+    ) {
+      break;
+    }
+    start -= 1;
+  }
+
+  const rawToken = value.slice(start, end);
+  if (!rawToken) return null;
+
+  const low = rawToken.toLowerCase();
+  if (/^[a-z][a-z0-9+.-]*:\/\//.test(low)) return null;
+
+  if (rawToken.startsWith("@")) {
+    return {
+      start,
+      end,
+      mode: "attach",
+      rawToken,
+      query: normalizePromptPathSuggestQuery(rawToken.slice(1))
+    };
+  }
+
+  const looksPathLike =
+    rawToken.includes("/") ||
+    rawToken.includes("\\") ||
+    rawToken.startsWith("./") ||
+    rawToken.startsWith("../") ||
+    rawToken.startsWith("~/") ||
+    rawToken.startsWith("/");
+  if (!looksPathLike) return null;
+
+  return {
+    start,
+    end,
+    mode: "insert",
+    rawToken,
+    query: normalizePromptPathSuggestQuery(rawToken)
+  };
+}
+
+function normalizePromptPathSuggestItems(items) {
+  const arr = Array.isArray(items) ? items : [];
+  const out = [];
+  const seen = new Set();
+
+  for (const it of arr) {
+    if (!it || typeof it !== "object") continue;
+    const pathText = String(it.path || "").trim().replaceAll("\\", "/").replaceAll(/^\.\//g, "");
+    const absPath = String(it.absPath || "").trim();
+    if (!pathText || !absPath || seen.has(pathText)) continue;
+    seen.add(pathText);
+    out.push({ path: pathText, absPath });
+  }
+  return out;
+}
+
+function closePromptPathSuggest() {
+  if (promptPathSuggestTimer) {
+    clearTimeout(promptPathSuggestTimer);
+    promptPathSuggestTimer = null;
+  }
+  promptPathSuggestState.open = false;
+  promptPathSuggestState.mode = "insert";
+  promptPathSuggestState.items = [];
+  promptPathSuggestState.activeIndex = 0;
+
+  if (!els.promptPathSuggest) return;
+  els.promptPathSuggest.hidden = true;
+  els.promptPathSuggest.innerHTML = "";
+}
+
+function renderPromptPathSuggest() {
+  const menuEl = els.promptPathSuggest;
+  if (!menuEl) return;
+
+  const items = Array.isArray(promptPathSuggestState.items) ? promptPathSuggestState.items : [];
+  if (!promptPathSuggestState.open || items.length === 0) {
+    menuEl.hidden = true;
+    menuEl.innerHTML = "";
+    return;
+  }
+
+  const activeIndex = Math.max(0, Math.min(items.length - 1, Number(promptPathSuggestState.activeIndex) || 0));
+  promptPathSuggestState.activeIndex = activeIndex;
+  const modeBadge = promptPathSuggestState.mode === "attach" ? "attach" : "insert";
+
+  menuEl.innerHTML = items
+    .map((it, idx) => {
+      const p = String(it && it.path ? it.path : "");
+      const base = pathBaseName(p);
+      const secondary = base && base !== p ? base : "";
+      const activeCls = idx === activeIndex ? " combo__item--active" : "";
+      return `
+        <button type="button" class="combo__item${activeCls}" data-idx="${idx}">
+          <span class="combo__itemMain">
+            <span class="combo__itemValue">${escapeHtml(p)}</span>
+            ${secondary ? `<span class="combo__itemLabel">${escapeHtml(secondary)}</span>` : ""}
+          </span>
+          <span class="combo__badge combo__badge--recent">${modeBadge}</span>
+        </button>
+      `.trim();
+    })
+    .join("");
+  menuEl.hidden = false;
+
+  const activeEl = menuEl.querySelector(`.combo__item[data-idx="${activeIndex}"]`);
+  if (activeEl && typeof activeEl.scrollIntoView === "function") {
+    try {
+      activeEl.scrollIntoView({ block: "nearest" });
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function movePromptPathSuggestSelection(delta) {
+  if (!promptPathSuggestState.open) return;
+  const items = Array.isArray(promptPathSuggestState.items) ? promptPathSuggestState.items : [];
+  if (items.length === 0) return;
+  const cur = Math.max(0, Math.min(items.length - 1, Number(promptPathSuggestState.activeIndex) || 0));
+  const next = Math.max(0, Math.min(items.length - 1, cur + Number(delta || 0)));
+  if (next === cur) return;
+  promptPathSuggestState.activeIndex = next;
+  renderPromptPathSuggest();
+}
+
+function applyPromptPathSuggestSelection(indexOverride) {
+  const inputEl = els.promptInput;
+  if (!inputEl || !promptPathSuggestState.open) return false;
+
+  const items = Array.isArray(promptPathSuggestState.items) ? promptPathSuggestState.items : [];
+  if (items.length === 0) return false;
+
+  const idxRaw = Number.isFinite(indexOverride) ? Number(indexOverride) : promptPathSuggestState.activeIndex;
+  const idx = Math.max(0, Math.min(items.length - 1, Number.isFinite(idxRaw) ? idxRaw : 0));
+  const item = items[idx];
+  if (!item) return false;
+
+  const token = promptPathTokenAtCursor(inputEl);
+  if (!token) {
+    closePromptPathSuggest();
+    return false;
+  }
+
+  const before = String(inputEl.value || "").slice(0, token.start);
+  const after = String(inputEl.value || "").slice(token.end);
+  const insert = `${item.path} `;
+  inputEl.value = `${before}${insert}${after}`;
+  const nextCursor = before.length + insert.length;
+
+  try {
+    inputEl.focus();
+    inputEl.selectionStart = inputEl.selectionEnd = nextCursor;
+  } catch {
+    // ignore
+  }
+
+  if (token.mode === "attach" && item.absPath) {
+    setComposerFiles(mergeFiles(state.composerFiles, [item.absPath]));
+  }
+
+  try {
+    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+  } catch {
+    storeComposerDraft(inputEl.value || "");
+  }
+
+  closePromptPathSuggest();
+  return true;
+}
+
+async function refreshPromptPathSuggest() {
+  const inputEl = els.promptInput;
+  if (!inputEl || !api || typeof api.projectsSuggestPaths !== "function") {
+    closePromptPathSuggest();
+    return;
+  }
+
+  const token = promptPathTokenAtCursor(inputEl);
+  if (!token) {
+    closePromptPathSuggest();
+    return;
+  }
+
+  const project = selectedComposerProjectForPathSuggest();
+  if (!project) {
+    closePromptPathSuggest();
+    return;
+  }
+
+  const reqSeq = ++promptPathSuggestReqSeq;
+  let rawItems = [];
+  try {
+    rawItems = await api.projectsSuggestPaths(project.id, token.query, PROMPT_PATH_SUGGEST_LIMIT);
+  } catch {
+    rawItems = [];
+  }
+  if (reqSeq !== promptPathSuggestReqSeq) return;
+
+  const currentToken = promptPathTokenAtCursor(inputEl);
+  if (!currentToken) {
+    closePromptPathSuggest();
+    return;
+  }
+  if (currentToken.start !== token.start || currentToken.end !== token.end || currentToken.mode !== token.mode || currentToken.query !== token.query) {
+    return;
+  }
+
+  const items = normalizePromptPathSuggestItems(rawItems);
+  if (items.length === 0) {
+    closePromptPathSuggest();
+    return;
+  }
+
+  const prevPath =
+    promptPathSuggestState.items &&
+    promptPathSuggestState.items[promptPathSuggestState.activeIndex] &&
+    promptPathSuggestState.items[promptPathSuggestState.activeIndex].path
+      ? promptPathSuggestState.items[promptPathSuggestState.activeIndex].path
+      : "";
+
+  let activeIndex = 0;
+  if (prevPath) {
+    const prevIdx = items.findIndex((it) => it && it.path === prevPath);
+    if (prevIdx >= 0) activeIndex = prevIdx;
+  }
+
+  promptPathSuggestState.open = true;
+  promptPathSuggestState.mode = currentToken.mode;
+  promptPathSuggestState.items = items;
+  promptPathSuggestState.activeIndex = activeIndex;
+  renderPromptPathSuggest();
+}
+
+function schedulePromptPathSuggestRefresh(opts = {}) {
+  const immediate = !!(opts && opts.immediate);
+  if (promptPathSuggestTimer) {
+    clearTimeout(promptPathSuggestTimer);
+    promptPathSuggestTimer = null;
+  }
+  if (immediate) {
+    void refreshPromptPathSuggest();
+    return;
+  }
+  promptPathSuggestTimer = window.setTimeout(() => {
+    promptPathSuggestTimer = null;
+    void refreshPromptPathSuggest();
+  }, PROMPT_PATH_SUGGEST_DEBOUNCE_MS);
+}
+
+function handlePromptPathSuggestKeyDown(e) {
+  if (!promptPathSuggestState.open) return false;
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    movePromptPathSuggestSelection(1);
+    return true;
+  }
+
+  if (e.key === "ArrowUp") {
+    e.preventDefault();
+    movePromptPathSuggestSelection(-1);
+    return true;
+  }
+
+  if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+    e.preventDefault();
+    applyPromptPathSuggestSelection();
+    return true;
+  }
+
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closePromptPathSuggest();
+    return true;
+  }
+
+  return false;
 }
 
 function renderAttachmentBadge(badgeEl, { images, files } = {}) {
@@ -7029,6 +7369,7 @@ async function startJobFromComposer() {
     if (checkoutMode) payload.checkoutMode = checkoutMode;
     await api.jobsStart(payload);
     els.promptInput.value = "";
+    closePromptPathSuggest();
     clearStoredComposerDraft();
     setComposerImages([]);
     setComposerFiles([]);
@@ -8140,21 +8481,23 @@ function wireUi() {
     });
   }
 
-	  els.projectSelect.addEventListener("change", async () => {
-	    const v = String(els.projectSelect.value || "").trim();
-	    if (v === TEMP_PROJECT_OPTION_VALUE) {
-	      try {
-	        await createTemporaryProject();
-	      } catch (err) {
-	        setHint(String(err && err.message ? err.message : err), "error");
-	        els.projectSelect.value = "";
-	        syncComposerCheckoutModeUi();
-	      }
-	      return;
-	    }
-	    if (v && v !== "auto") storeProjectId(v);
-	    syncComposerCheckoutModeUi();
-	  });
+  els.projectSelect.addEventListener("change", async () => {
+    const v = String(els.projectSelect.value || "").trim();
+    if (v === TEMP_PROJECT_OPTION_VALUE) {
+      try {
+        await createTemporaryProject();
+      } catch (err) {
+        setHint(String(err && err.message ? err.message : err), "error");
+        els.projectSelect.value = "";
+        syncComposerCheckoutModeUi();
+      }
+      schedulePromptPathSuggestRefresh({ immediate: true });
+      return;
+    }
+    if (v && v !== "auto") storeProjectId(v);
+    syncComposerCheckoutModeUi();
+    schedulePromptPathSuggestRefresh({ immediate: true });
+  });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
   if (els.modelInput) codexModelComboboxComposer = attachCodexModelCombobox(els.modelInput, { ariaLabel: "Show models" });
@@ -8196,6 +8539,7 @@ function wireUi() {
   });
 
   els.promptInput.addEventListener("keydown", (e) => {
+    if (handlePromptPathSuggestKeyDown(e)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       startJobFromComposer();
@@ -8203,7 +8547,43 @@ function wireUi() {
   });
 
   // Avoid losing the current prompt during dev live reloads (or accidental reloads).
-  els.promptInput.addEventListener("input", () => storeComposerDraft(els.promptInput.value || ""));
+  els.promptInput.addEventListener("input", () => {
+    storeComposerDraft(els.promptInput.value || "");
+    schedulePromptPathSuggestRefresh();
+  });
+  els.promptInput.addEventListener("focus", () => schedulePromptPathSuggestRefresh({ immediate: true }));
+  els.promptInput.addEventListener("click", () => schedulePromptPathSuggestRefresh({ immediate: true }));
+  els.promptInput.addEventListener("keyup", (e) => {
+    if (!PROMPT_PATH_SUGGEST_CURSOR_KEYS.has(e.key)) return;
+    if (promptPathSuggestState.open && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;
+    schedulePromptPathSuggestRefresh({ immediate: true });
+  });
+
+  if (els.promptPathSuggest) {
+    els.promptPathSuggest.addEventListener("pointerdown", (e) => {
+      // Keep focus in textarea so selection/cursor stays stable when picking a suggestion.
+      e.preventDefault();
+    });
+
+    els.promptPathSuggest.addEventListener("click", (e) => {
+      const row = e.target && e.target.closest ? e.target.closest(".combo__item[data-idx]") : null;
+      if (!row) return;
+      const idx = Number(row.getAttribute("data-idx"));
+      if (!Number.isFinite(idx)) return;
+      applyPromptPathSuggestSelection(idx);
+    });
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (!promptPathSuggestState.open) return;
+      const t = e && e.target ? e.target : null;
+      if (t && els.promptDropwrap && els.promptDropwrap.contains(t)) return;
+      closePromptPathSuggest();
+    },
+    true
+  );
   restoreComposerDraft();
 
   // Attach images/files via drag&drop and render them as removable preview tiles.

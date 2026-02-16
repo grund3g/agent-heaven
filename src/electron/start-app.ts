@@ -572,6 +572,133 @@ export async function startApp(): Promise<void> {
     return resolveCodexCliPathFromSettings(store.getSettings());
   }
 
+  type ProjectPathIndexCacheEntry = { root: string; builtAt: number; relPaths: string[] };
+  const projectPathIndexCache = new Map<string, ProjectPathIndexCacheEntry>();
+  const PROJECT_PATH_CACHE_TTL_MS = 45_000;
+  const PROJECT_PATH_SCAN_MAX_FILES = 40_000;
+  const PROJECT_PATH_SCAN_MAX_DEPTH = 14;
+  const PROJECT_PATH_SUGGEST_DEFAULT_LIMIT = 24;
+  const PROJECT_PATH_SUGGEST_MAX_LIMIT = 100;
+  const PATH_SUGGEST_SKIP_DIRS = new Set([
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".cache",
+    ".idea",
+    ".vscode",
+    "tmp",
+    "temp",
+    "out"
+  ]);
+
+  function normalizePathSuggestQuery(raw: unknown): string {
+    let q = typeof raw === "string" ? raw.trim() : "";
+    if (!q) return "";
+    q = q.replaceAll("\\", "/");
+    while (q.startsWith("./")) q = q.slice(2);
+    while (q.startsWith("/")) q = q.slice(1);
+    while (q.startsWith("~/")) q = q.slice(2);
+    while (q.startsWith("../")) q = q.slice(3);
+    q = q.replaceAll(/\/{2,}/g, "/");
+    return q;
+  }
+
+  function buildProjectPathIndex(projectRoot: string): string[] {
+    const root = path.resolve(projectRoot);
+    const out: string[] = [];
+    const stack: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }];
+
+    while (stack.length > 0 && out.length < PROJECT_PATH_SCAN_MAX_FILES) {
+      const next = stack.pop();
+      if (!next) break;
+
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(next.dir, { withFileTypes: true });
+      } catch {
+        entries = [];
+      }
+      if (entries.length === 0) continue;
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+
+      for (const de of entries) {
+        if (!de || typeof de.name !== "string" || !de.name) continue;
+        const lowName = de.name.toLowerCase();
+        if (de.isDirectory() && PATH_SUGGEST_SKIP_DIRS.has(lowName)) continue;
+
+        const absPath = path.join(next.dir, de.name);
+        const relRaw = path.relative(root, absPath);
+        if (!relRaw || relRaw.startsWith("..")) continue;
+        const relPath = relRaw.split(path.sep).join("/");
+
+        if (de.isDirectory()) {
+          if (next.depth + 1 <= PROJECT_PATH_SCAN_MAX_DEPTH) {
+            stack.push({ dir: absPath, depth: next.depth + 1 });
+          }
+          continue;
+        }
+
+        if (!de.isFile()) continue;
+        out.push(relPath);
+        if (out.length >= PROJECT_PATH_SCAN_MAX_FILES) break;
+      }
+    }
+
+    return out;
+  }
+
+  function getProjectPathIndex(projectId: string, projectRoot: string): string[] {
+    const id = String(projectId || "").trim();
+    if (!id) return [];
+    const root = path.resolve(projectRoot);
+    const now = Date.now();
+    const cached = projectPathIndexCache.get(id);
+    if (cached && cached.root === root && now - cached.builtAt < PROJECT_PATH_CACHE_TTL_MS) return cached.relPaths;
+    const relPaths = buildProjectPathIndex(root);
+    projectPathIndexCache.set(id, { root, builtAt: now, relPaths });
+    return relPaths;
+  }
+
+  function suggestProjectPaths(relPaths: string[], rawQuery: string, rawLimit: unknown): string[] {
+    const limitNum = Number(rawLimit);
+    const limitBase = Number.isFinite(limitNum) ? Math.floor(limitNum) : PROJECT_PATH_SUGGEST_DEFAULT_LIMIT;
+    const limit = Math.max(1, Math.min(PROJECT_PATH_SUGGEST_MAX_LIMIT, limitBase || PROJECT_PATH_SUGGEST_DEFAULT_LIMIT));
+    const q = normalizePathSuggestQuery(rawQuery).toLowerCase();
+
+    const scored: Array<{ path: string; score: number }> = [];
+    for (const relPath of relPaths) {
+      const p = String(relPath || "");
+      if (!p) continue;
+
+      const low = p.toLowerCase();
+      const base = low.slice(low.lastIndexOf("/") + 1);
+
+      let score = -1;
+      if (!q) score = 0;
+      else if (low.startsWith(q)) score = 0;
+      else if (base.startsWith(q)) score = 1;
+      else if (low.includes(`/${q}`)) score = 2;
+      else if (low.includes(q)) score = 3;
+      if (score < 0) continue;
+
+      scored.push({ path: p, score });
+    }
+
+    scored.sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      if (a.path.length !== b.path.length) return a.path.length - b.path.length;
+      return a.path.localeCompare(b.path);
+    });
+
+    return scored.slice(0, limit).map((it) => it.path);
+  }
+
   ipcMain.handle("settings:get", async (evt) => {
     assertTrustedIpcSender(evt);
     return store.getSettings();
@@ -883,11 +1010,41 @@ export async function startApp(): Promise<void> {
   });
   ipcMain.handle("projects:remove", async (evt, id) => {
     assertTrustedIpcSender(evt);
-    return store.removeProject(id);
+    const projectId = String(id || "").trim();
+    if (projectId) projectPathIndexCache.delete(projectId);
+    return store.removeProject(projectId || id);
   });
   ipcMain.handle("projects:update", async (evt, { id, patch }) => {
     assertTrustedIpcSender(evt);
-    return store.updateProject(id, patch || {});
+    const projectId = String(id || "").trim();
+    if (projectId) projectPathIndexCache.delete(projectId);
+    return store.updateProject(projectId || id, patch || {});
+  });
+  ipcMain.handle("projects:suggestPaths", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const projectId = String(p.projectId || "").trim();
+    if (!projectId || projectId === "auto") return { ok: true, items: [] };
+
+    const project = store.listProjects().find((x: any) => x && x.id === projectId) || null;
+    if (!project) return { ok: false, error: "Project not found" };
+    const projectRoot = typeof project.path === "string" ? project.path.trim() : "";
+    if (!projectRoot) return { ok: true, items: [] };
+    if (!fs.existsSync(projectRoot)) return { ok: true, items: [] };
+
+    try {
+      const relPaths = getProjectPathIndex(projectId, projectRoot);
+      const matched = suggestProjectPaths(relPaths, p.query, p.limit);
+      const items: Array<{ path: string; absPath: string }> = [];
+      for (const relPath of matched) {
+        const absPath = path.resolve(projectRoot, relPath);
+        if (!isPathWithinRoot(projectRoot, absPath)) continue;
+        items.push({ path: relPath, absPath });
+      }
+      return { ok: true, items };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
   });
 
   function isPathWithinRoot(root: string, target: string): boolean {
