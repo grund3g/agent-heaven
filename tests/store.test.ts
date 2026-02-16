@@ -60,5 +60,31 @@ describe("store", () => {
     expect(projects[0].color).toBe("#aabbcc");
     expect(Object.prototype.hasOwnProperty.call(projects[0], "shortName")).toBe(false);
   });
-});
 
+  it("defaults integrateAutoArchive to true and normalizes invalid values", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify(
+        {
+          settings: {
+            integrateAutoArchive: "yes please"
+          },
+          projects: []
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect(s.getSettings().integrateAutoArchive).toBe(true);
+
+    const updated = s.updateSettings({ integrateAutoArchive: false });
+    expect(updated.integrateAutoArchive).toBe(false);
+  });
+});

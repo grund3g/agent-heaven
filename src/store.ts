@@ -43,6 +43,7 @@ export const DEFAULT_STATE = {
     soundVolume: 35, // 0..100
     boardDoneLimit: 250, // 0 = unlimited (limits Done lane rendering on Board)
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
+    integrateAutoArchive: true, // auto-archive ticket after "Integrate to default branch"
 
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
     // Versioned seeding for built-in actions (so existing installs can pick up new defaults once).
@@ -557,6 +558,11 @@ function ensureSettings(settings) {
   // Branding is fixed; drop the old selector if it exists.
   if (Object.prototype.hasOwnProperty.call(next, "uiLogoVariant")) {
     delete next.uiLogoVariant;
+    changed = true;
+  }
+
+  if (typeof (next as any).integrateAutoArchive !== "boolean") {
+    (next as any).integrateAutoArchive = true;
     changed = true;
   }
 

@@ -141,6 +141,7 @@ const api = window.agentHeaven;
 			  settingsTestSoundDone: document.getElementById("settingsTestSoundDone"),
 	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
+	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -5525,6 +5526,11 @@ function defaultIntegrateCommitMessage(job) {
   return msg.slice(0, 72);
 }
 
+function isIntegrateAutoArchiveEnabled() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return s.integrateAutoArchive !== false;
+}
+
 let integrateDialogJobId = "";
 let integrateDialogPhase = ""; // confirm | pending | success | error
 let integrateDialogStatusText = "";
@@ -5609,6 +5615,7 @@ function syncIntegrateDialogUi() {
   if (els.integrateDialogClose) els.integrateDialogClose.disabled = isPending;
 
   const canArchive = isSuccess && !integrateDialogArchived && job && job.status !== "running" && jobBox(job) === "board";
+  const showArchiveButton = canArchive && !isIntegrateAutoArchiveEnabled();
   if (els.integrateDialogCancelBtn) {
     els.integrateDialogCancelBtn.hidden = !isConfirm;
     els.integrateDialogCancelBtn.disabled = isPending;
@@ -5619,7 +5626,7 @@ function syncIntegrateDialogUi() {
     els.integrateDialogStartBtn.textContent = "Integrate";
   }
   if (els.integrateDialogArchiveBtn) {
-    els.integrateDialogArchiveBtn.hidden = !canArchive;
+    els.integrateDialogArchiveBtn.hidden = !showArchiveButton;
     els.integrateDialogArchiveBtn.disabled = isPending;
   }
 
@@ -5793,6 +5800,7 @@ async function startIntegrateToDefaultFromDialog() {
     integrateDialogTargetBranch = targetBranch;
 
     const canArchive = jobBox(job) === "board";
+    const autoArchive = canArchive && isIntegrateAutoArchiveEnabled();
     const details = [
       targetBranch ? `Target branch: ${targetBranch}` : "",
       targetPath ? `Target path: ${targetPath}` : "",
@@ -5805,11 +5813,15 @@ async function startIntegrateToDefaultFromDialog() {
 
     setIntegrateDialogPhase("success", {
       status: applied <= 0 ? "Nothing to integrate" : "Integrated",
-      message: canArchive ? `${msg}\n\nArchive this ticket now?` : msg,
+      message: autoArchive ? `${msg}\n\nArchiving ticket automatically…` : canArchive ? `${msg}\n\nArchive this ticket now?` : msg,
       details,
       targetPath,
       targetBranch
     });
+
+    if (autoArchive) {
+      await archiveIntegrateDialogJob();
+    }
   } catch (err) {
     const full = String(err && err.message ? err.message : err).trim() || "Integration failed.";
     const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
@@ -9225,6 +9237,7 @@ function wireUi() {
 					      soundVolume: clampNumber(els.settingsSoundVolume.value, 0, 100, 35),
 					      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
 					      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
+					      integrateAutoArchive: !!els.settingsIntegrateAutoArchive.checked,
 					      agents: {
 				        codex: {
 				          path: els.settingsCodexPath.value.trim(),
@@ -9992,6 +10005,7 @@ function maybeShowMissingAgentBinariesToast(res) {
 					  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
 					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
 					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
+					  els.settingsIntegrateAutoArchive.checked = s.integrateAutoArchive !== false;
 
 		  refreshCodexModelsDatalist({ showErrors: true });
 
