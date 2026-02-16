@@ -1945,7 +1945,7 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const suggestion = suggestCommitMessage({
+    const heuristicFallback = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",

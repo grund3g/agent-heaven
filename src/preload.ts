@@ -132,6 +132,15 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     });
     return res;
   },
+  checkoutsCommit: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:commit", {
+      jobId,
+      commitMessage: p.commitMessage,
+      push: !!p.push
+    });
+    return res;
+  },
   checkoutsSuggestCommitMessage: async (jobId) => {
     const res = await invokeOk("checkouts:suggestCommitMessage", { jobId });
     return res && typeof res.suggestion === "string" ? res.suggestion : "";
