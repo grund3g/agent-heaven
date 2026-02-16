@@ -878,17 +878,6 @@ function ensureSettings(settings) {
     changed = true;
   }
 
-  if (typeof (next as any).editorCommand !== "string") {
-    (next as any).editorCommand = "";
-    changed = true;
-  } else {
-    const trimmed = String((next as any).editorCommand).trim();
-    if ((next as any).editorCommand !== trimmed) {
-      (next as any).editorCommand = trimmed;
-      changed = true;
-    }
-  }
-
   const agentRes = ensureAgentSettings(next);
   next = agentRes.settings;
   if (agentRes.changed) changed = true;
