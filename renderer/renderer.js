@@ -6856,15 +6856,14 @@ function openJobActionsMenu(anchorEl) {
   menu.style.top = `${Math.round(y)}px`;
 }
 
-function isIntegrateToDefaultAction(action) {
-  const a = action && typeof action === "object" ? action : {};
-  const name = typeof a.name === "string" ? a.name.trim().toLowerCase() : "";
-  const cmd = typeof a.command === "string" ? a.command.trim().toLowerCase() : "";
-  if (!name && !cmd) return false;
-  if (name === "integrate to default branch" || name === "integrate-to-default") return true;
-  if (name.includes("integrate") && name.includes("default branch")) return true;
-  if (cmd === "__integrate_to_default_branch__" || cmd === "integrate-to-default") return true;
-  return false;
+function builtInActionKindFromCommand(command) {
+  const raw = String(command || "").replaceAll("\r\n", "\n");
+  const first = (raw.split("\n")[0] || "").trim();
+  if (!first) return "";
+  if (first === "ah:integrate-to-default" || first === "ah:integrate") return "integrate_to_default";
+  if (first === "ah:commit-and-push" || first === "ah:commit+push" || first === "ah:commit-push") return "commit_and_push";
+  if (first === "ah:commit-only" || first === "ah:commit") return "commit_only";
+  return "";
 }
 
 function defaultIntegrateCommitMessage() {
@@ -6872,10 +6871,14 @@ function defaultIntegrateCommitMessage() {
   return msg.slice(0, 72);
 }
 
-function shortCommitSha(value) {
-  const s = String(value || "").trim();
-  if (!s) return "";
-  return s.slice(0, 12);
+function defaultCheckoutCommitMessage(job) {
+  const msg = "Update local changes";
+  return msg.slice(0, 72);
+}
+
+function isIntegrateAutoArchiveEnabled() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return s.integrateAutoArchive !== false;
 }
 
 async function runIntegrateToDefaultAction(job) {
@@ -6936,6 +6939,84 @@ async function runIntegrateToDefaultAction(job) {
   }
 }
 
+let checkoutCommitActionInFlight = false;
+async function runCheckoutCommitAction(jobId, opts = {}) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+
+  const o = opts && typeof opts === "object" ? opts : {};
+  const push = !!o.push;
+
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+
+  if (!api || typeof api.checkoutsCommit !== "function") {
+    showToast("Commit actions are not supported in this build.");
+    return;
+  }
+
+  if (checkoutCommitActionInFlight) {
+    showToast("A commit action is already running.");
+    return;
+  }
+
+  if (job.status === "running") {
+    const label = push ? "Commit + push" : "Commit only";
+    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
+    if (!ok) return;
+  }
+
+  let suggested = "";
+  try {
+    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
+      suggested = await api.checkoutsSuggestCommitMessage(id);
+    }
+  } catch {
+    suggested = "";
+  }
+
+  const entered = await promptText({
+    title: push ? "Commit + push" : "Commit only",
+    message: push
+      ? "Create a commit from local checkout changes and push the current branch."
+      : "Create a commit from local checkout changes.",
+    label: "Commit message",
+    defaultValue: suggested || defaultCheckoutCommitMessage(job),
+    okLabel: push ? "Commit + push" : "Commit",
+    cancelLabel: "Cancel"
+  });
+
+  if (entered == null) return;
+  const commitMessage = String(entered || "").trim();
+  if (!commitMessage) {
+    showToast("Commit message is required.");
+    return;
+  }
+
+  checkoutCommitActionInFlight = true;
+  try {
+    const res = await api.checkoutsCommit(id, { commitMessage, push });
+    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
+    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
+    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
+    const pushed = !!(res && res.pushed === true);
+
+    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
+    if (push && pushed) {
+      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
+      else if (branch) msg += ` and pushed ${branch}.`;
+      else msg += " and pushed.";
+    } else {
+      msg += ".";
+    }
+    showToast(msg);
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
+  } finally {
+    checkoutCommitActionInFlight = false;
+  }
+}
+
 async function runJobActionById(actionId) {
   const jobId = state.selectedJobId;
   if (!jobId) return;
@@ -6951,7 +7032,25 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  const integrateToDefault = isIntegrateToDefaultAction(action);
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
+  }
+
+  const builtIn = builtInActionKindFromCommand(cmd);
+  if (builtIn === "integrate_to_default") {
+    await runIntegrateToDefaultAction(jobId);
+    return;
+  }
+  if (builtIn === "commit_and_push") {
+    await runCheckoutCommitAction(jobId, { push: true });
+    return;
+  }
+  if (builtIn === "commit_only") {
+    await runCheckoutCommitAction(jobId, { push: false });
+    return;
+  }
 
   if (job && job.status === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
