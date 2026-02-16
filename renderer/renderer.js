@@ -5872,46 +5872,6 @@ function projectColorById(id) {
   return p ? normalizeHexColor(p.color) : "";
 }
 
-function editorCommandFromSettings() {
-  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
-  return typeof s.editorCommand === "string" ? s.editorCommand.trim() : "";
-}
-
-function editorPresetFromCommand(command) {
-  const cmd = String(command || "").trim();
-  if (!cmd) return "";
-  if (EDITOR_PRESET_VALUES.has(cmd)) return cmd;
-  return EDITOR_PRESET_CUSTOM_VALUE;
-}
-
-function syncEditorPresetFromCommandInput() {
-  if (!els.settingsEditorPreset || !els.settingsEditorCommand) return;
-  const cmd = String(els.settingsEditorCommand.value || "").trim();
-  els.settingsEditorPreset.value = editorPresetFromCommand(cmd);
-}
-
-function applyEditorPresetToCommandInput() {
-  if (!els.settingsEditorPreset || !els.settingsEditorCommand) return;
-  const preset = String(els.settingsEditorPreset.value || "").trim();
-  if (!preset || preset === EDITOR_PRESET_CUSTOM_VALUE) return;
-  els.settingsEditorCommand.value = preset;
-}
-
-function hasConfiguredEditorCommand() {
-  return !!editorCommandFromSettings();
-}
-
-function jobPathForEditor(job) {
-  if (!job || typeof job !== "object") return "";
-
-  const cwdPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
-  if (cwdPath) return cwdPath;
-
-  const project = projectById(job.projectId);
-  const basePath = project && typeof project.path === "string" ? project.path.trim() : "";
-  return basePath || "";
-}
-
 function integratedBadgeForJob(job) {
   if (!job || typeof job !== "object") return null;
   const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";

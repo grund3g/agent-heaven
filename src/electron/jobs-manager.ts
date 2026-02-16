@@ -744,6 +744,31 @@ export class JobsManager {
     return { ok: true };
   }
 
+  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
+    const id = String(jobId || "").trim();
+    if (!id) return { ok: false, error: "Missing jobId" };
+    const job = this.jobs.get(id);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const p = payload && typeof payload === "object" ? payload : {};
+    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
+    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
+    const branch = this.normalizeBranchName((p as any).branch);
+
+    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
+
+    job.integratedToDefaultAt = at;
+    job.integratedToDefaultBranch = branch;
+    this.sendJobEvent({
+      jobId: id,
+      kind: "meta",
+      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
+    });
+    this.markJobDirty(id);
+    this.tryPersistJobNow(job);
+    return { ok: true };
+  }
+
   private getCodexSettingsFrom(settings: any) {
     const s = settings && typeof settings === "object" ? settings : {};
     const agents = s.agents && typeof s.agents === "object" ? s.agents : null;
