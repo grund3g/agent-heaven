@@ -120,19 +120,14 @@ const api = window.agentHeaven;
 
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
-	  settingsSection: document.getElementById("settingsSection"),
-	  saveSettingsPageBtn: document.getElementById("saveSettingsPageBtn"),
-	  mcpStatusBadge: document.getElementById("mcpStatusBadge"),
-	  settingsCodexPath: document.getElementById("settingsCodexPath"),
-	  settingsCodexModel: document.getElementById("settingsCodexModel"),
-	  settingsCodexTransport: document.getElementById("settingsCodexTransport"),
-	  settingsUiModel: document.getElementById("settingsUiModel"),
-	  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
-	  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-	  settingsTheme: document.getElementById("settingsTheme"),
-	  settingsColorScheme: document.getElementById("settingsColorScheme"),
-	  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
-	  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
+		  settingsCodexPath: document.getElementById("settingsCodexPath"),
+		  settingsCodexModel: document.getElementById("settingsCodexModel"),
+		  settingsUiModel: document.getElementById("settingsUiModel"),
+			  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
+			  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
+		  settingsTheme: document.getElementById("settingsTheme"),
+		  settingsColorScheme: document.getElementById("settingsColorScheme"),
+		  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -6033,6 +6028,26 @@ function projectColorById(id) {
   if (pid === DEMO.projectId) return "#5b9ef5";
   const p = projectById(id);
   return p ? normalizeHexColor(p.color) : "";
+}
+
+function editorCommandFromSettings() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return typeof s.editorCommand === "string" ? s.editorCommand.trim() : "";
+}
+
+function hasConfiguredEditorCommand() {
+  return !!editorCommandFromSettings();
+}
+
+function jobPathForEditor(job) {
+  if (!job || typeof job !== "object") return "";
+
+  const cwdPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+  if (cwdPath) return cwdPath;
+
+  const project = projectById(job.projectId);
+  const basePath = project && typeof project.path === "string" ? project.path.trim() : "";
+  return basePath || "";
 }
 
 function integratedBadgeForJob(job) {
@@ -13058,13 +13073,11 @@ function closeSettings() {
 
 		  els.settingsCodexPath.value = codex.path || "";
 		  els.settingsCodexModel.value = codex.model || "";
-	  if (els.settingsCodexTransport) els.settingsCodexTransport.value = codex.transport || "exec_json";
-		  setUiModelControls(s.uiModel || "");
-		  els.settingsTheme.value = normalizeTheme(s.uiTheme);
-		  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
-	  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
-	  syncEditorPresetFromCommandInput();
-		  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
+				  setUiModelControls(s.uiModel || "");
+				  els.settingsTheme.value = normalizeTheme(s.uiTheme);
+				  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+		  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
+				  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
 				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
 	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
 	  els.settingsCodexColor.value = codex.color || "auto";

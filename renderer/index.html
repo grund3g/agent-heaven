@@ -541,18 +541,23 @@
 	                <option value="ocean">Ocean</option>
 	              </select>
 	            </label>
-		            <label class="field">
-			            <div class="field__label">Color scheme</div>
-			              <select id="settingsColorScheme" class="select">
-			                <option value="system">System</option>
-			                <option value="dark">Dark</option>
-			                <option value="light">Light</option>
-			              </select>
-			            </label>
-			            <label class="field field--row">
-			              <input id="settingsMenuBarMode" type="checkbox" />
-			              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>
-			            </label>
+	            <label class="field">
+		            <div class="field__label">Color scheme</div>
+		              <select id="settingsColorScheme" class="select">
+		                <option value="system">System</option>
+		                <option value="dark">Dark</option>
+		                <option value="light">Light</option>
+		              </select>
+		            </label>
+	            <label class="field">
+	              <div class="field__label">Editor command (task: Open in editor)</div>
+	              <input id="settingsEditorCommand" class="input" placeholder="e.g. code, cursor, zed" />
+	            </label>
+	            <div class="settings__note">The task path is passed as one argument. This action is hidden when empty.</div>
+	            <label class="field field--row">
+	              <input id="settingsMenuBarMode" type="checkbox" />
+	              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>
+	            </label>
 	            <label class="field field--row">
 	              <input id="settingsStartAtLogin" type="checkbox" />
 	              <div class="field__label field__label--inline">macOS: Start at login (best in packaged apps)</div>
