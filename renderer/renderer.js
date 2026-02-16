@@ -1303,46 +1303,37 @@ function renderMarkdownInlineTextSafeHtml(text) {
 
   // Support Markdown links: [label](https://example.com)
   // Keep it strict (http/https) to avoid navigation/XSS issues.
+  // Parse links as complete tokens so literal '[' / ']' does not split emphasis spans.
   const out = [];
+  const linkRe = /\[([^\]]*)\]\(([^)]*)\)/g;
   let i = 0;
+  let m = null;
 
-  while (i < s.length) {
-    const open = s.indexOf("[", i);
-    if (open === -1) {
-      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i))));
-      break;
+  while ((m = linkRe.exec(s)) !== null) {
+    const whole = m[0];
+    const label = m[1];
+    const urlRaw = m[2];
+    const at = typeof m.index === "number" ? m.index : -1;
+    if (at < i) continue;
+
+    if (at > i) {
+      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i, at))));
     }
 
-    if (open > i) out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i, open))));
-
-    const close = s.indexOf("]", open + 1);
-    if (close === -1 || s[close + 1] !== "(") {
-      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(open, open + 1))));
-      i = open + 1;
-      continue;
-    }
-
-    const end = s.indexOf(")", close + 2);
-    if (end === -1) {
-      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(open))));
-      break;
-    }
-
-    const label = s.slice(open + 1, close);
-    const urlRaw = s.slice(close + 2, end);
     const url = sanitizeExternalUrl(urlRaw);
     if (!url) {
-      out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(open, end + 1))));
-      i = end + 1;
+      out.push(applyMarkdownInlineFormatting(escapeHtml(whole)));
+      i = at + whole.length;
       continue;
     }
 
     const labelHtml = applyMarkdownInlineFormatting(escapeHtml(label));
     const href = escapeHtml(url);
     out.push(`<a class="md-link" href="${href}" rel="noreferrer noopener">${labelHtml}</a>`);
-    i = end + 1;
+    i = at + whole.length;
   }
 
+  if (i < s.length) out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i))));
   return out.join("");
 }
 
@@ -1350,30 +1341,51 @@ function renderMarkdownInlineSafeHtml(text) {
   const s = String(text || "");
   if (!s) return "";
 
-  // Parse inline code first so we don't run emphasis rules inside code spans.
-  const out = [];
+  // Extract inline code spans into placeholders so emphasis can span across code,
+  // then restore the code HTML afterwards.
+  let textWithPlaceholders = "";
+  const codeSpans = [];
   let i = 0;
+  let tokenIdx = 0;
+
+  const nextToken = () => {
+    let token = "";
+    do {
+      token = `AHCODESPAN${tokenIdx}TOKEN`;
+      tokenIdx += 1;
+    } while (s.includes(token));
+    return token;
+  };
 
   while (i < s.length) {
     const start = s.indexOf("`", i);
     if (start === -1) {
-      out.push(renderMarkdownInlineTextSafeHtml(s.slice(i)));
+      textWithPlaceholders += s.slice(i);
       break;
     }
 
-    out.push(renderMarkdownInlineTextSafeHtml(s.slice(i, start)));
+    textWithPlaceholders += s.slice(i, start);
 
     const end = s.indexOf("`", start + 1);
     if (end === -1) {
-      out.push(renderMarkdownInlineTextSafeHtml(s.slice(start)));
+      textWithPlaceholders += s.slice(start);
       break;
     }
 
-    out.push(`<code class="md-inline">${escapeHtml(s.slice(start + 1, end))}</code>`);
+    const token = nextToken();
+    codeSpans.push({
+      token,
+      html: `<code class="md-inline">${escapeHtml(s.slice(start + 1, end))}</code>`
+    });
+    textWithPlaceholders += token;
     i = end + 1;
   }
 
-  return out.join("");
+  let out = renderMarkdownInlineTextSafeHtml(textWithPlaceholders);
+  for (const span of codeSpans) {
+    out = out.replaceAll(span.token, span.html);
+  }
+  return out;
 }
 
 function renderMarkdownCodeBlockHtml(code, info) {
