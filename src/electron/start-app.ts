@@ -2055,10 +2055,9 @@ export async function startApp(): Promise<void> {
     assertTrustedIpcSender(evt);
     const parsed = parseProjectRemovePayload(payload);
     const projectId = parsed.id;
-    if (projectId) invalidateProjectPathIndex(projectId);
+    if (projectId) projectPathIndexCache.delete(projectId);
 
     const project = store.listProjects().find((p: any) => p && p.id === projectId) || null;
-    if (project && typeof project.path === "string") invalidateProjectGitInfoCache(project.path);
     const removed = store.removeProject(projectId || payload);
     if (removed && parsed.deleteFolder && project && project.isTemporary) {
       tryDeleteTemporaryProjectFolder(project);
