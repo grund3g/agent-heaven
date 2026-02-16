@@ -1031,7 +1031,6 @@ body::before {
 
 .sessiontablewrap {
   min-height: 0;
-  min-width: 0;
   border-radius: var(--radius);
   border: 1px solid var(--stroke);
   background: var(--surface0);
@@ -1053,7 +1052,6 @@ body::before {
   background: var(--surface1);
   overflow: auto;
   min-height: 0;
-  min-width: 0;
 }
 
 .sessiontable {
@@ -3974,24 +3972,6 @@ body::before {
   .sessiontable td {
     padding: 8px 10px;
   }
-}
-
-@media (max-width: 1500px) and (min-width: 1101px) {
-  .searchmeta {
-    display: none;
-  }
-}
-
-:root[data-sidebar="collapsed"] #openStatusBtn {
-  display: inline-flex;
-}
-
-:root[data-sidebar="collapsed"] .viewbar__toggle {
-  display: grid;
-}
-
-:root[data-sidebar="collapsed"] #openStatusSidebarBtn {
-  display: none;
 }
 
 .ctxmenu {

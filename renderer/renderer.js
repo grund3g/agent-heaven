@@ -10,7 +10,6 @@ const api = window.agentHeaven;
 	  openStatusBtn: document.getElementById("openStatusBtn"),
 	  openStatusSidebarBtn: document.getElementById("openStatusSidebarBtn"),
 	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
-	  toggleSidebarCollapsedBtn: document.getElementById("toggleSidebarCollapsedBtn"),
   tableScopeCtl: document.getElementById("tableScopeCtl"),
   tableScopeSelect: document.getElementById("tableScopeSelect"),
   sortSelect: document.getElementById("sortSelect"),
@@ -260,7 +259,6 @@ const state = {
   activeTab: "chat",
   cardEls: new Map(), // jobId -> HTMLElement
   view: "board", // board | archive | trash
-  lastMainView: "board", // last non-settings view
   displayMode: "cards", // cards | table
   tableScope: "view", // view | all (table mode only)
   focusLane: "", // running | attention | done (popout window)
@@ -3445,7 +3443,7 @@ function pickLane(status) {
   return "attention";
 }
 
-const VIEWS = ["board", "archive", "trash", "settings"];
+const VIEWS = ["board", "archive", "trash"];
 const DISPLAY_MODES = ["cards", "table"];
 const TABLE_SCOPES = ["view", "all"];
 
@@ -5597,23 +5595,13 @@ function setViewButtons(view) {
 
 function applyViewLayout() {
   const v = normalizeView(state.view);
-  const isSettings = v === "settings";
   const display = normalizeDisplayMode(state.displayMode);
-  const showCards = !isSettings && display === "cards";
-  const showTable = !isSettings && display === "table";
+  const showCards = display === "cards";
+  const showTable = display === "table";
 
-  if (els.settingsSection) els.settingsSection.hidden = !isSettings;
   if (els.boardSection) els.boardSection.hidden = !showCards;
   if (els.sessionsTableSection) els.sessionsTableSection.hidden = !showTable;
   if (els.tableScopeCtl) els.tableScopeCtl.hidden = !showTable;
-
-  // Hide composer and viewbar controls when showing settings
-  const composer = document.querySelector(".composer");
-  const viewbar = document.querySelector(".viewbar");
-  if (composer) composer.hidden = isSettings;
-  if (viewbar) viewbar.hidden = isSettings;
-
-  if (isSettings) return;
   if (els.tableScopeSelect && els.tableScopeSelect.value !== state.tableScope) {
     els.tableScopeSelect.value = state.tableScope;
   }
@@ -5723,7 +5711,7 @@ function tableLaneKindForJob(job) {
   } else if (state.view === "trash") {
     return "trash";
   }
-  return pickLane(job);
+  return pickLane(job && job.status);
 }
 
 function tableLaneEnteredMs(job) {
@@ -5791,7 +5779,7 @@ function tableBoxLabel(job) {
   const box = jobBox(job);
   if (box === "archive") return "archive";
   if (box === "trash") return "trash";
-  return `board/${pickLane(job)}`;
+  return `board/${pickLane(job && job.status)}`;
 }
 
 function renderSessionsTable(jobs) {
@@ -5813,7 +5801,7 @@ function renderSessionsTable(jobs) {
     const agent = agentDisplayName(j.agent);
     const model = String(j.model || "").trim() || "—";
     const created = fmtDateTimeShort(j.createdAt);
-    const finished = jobStatusForUi(j) === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
+    const finished = j.status === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
     const duration = jobDurationText(j);
     const tok = jobTokensCardText(j);
     const tokText = tok ? tok.text : "—";
@@ -5828,7 +5816,7 @@ function renderSessionsTable(jobs) {
 
     return `
       <tr class="sessionrow" data-job-id="${escapeHtml(j.id)}">
-        <td>${fmtStatusPill(j)}</td>
+        <td>${fmtStatusPill(j.status)}</td>
         <td class="sessiontable__mono">${escapeHtml(tableBoxLabel(j))}</td>
         <td class="sessiontable__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</td>
         <td title="${escapeHtml(oneLine(projectTitle))}">${escapeHtml(project)}</td>
@@ -5923,24 +5911,6 @@ function renderBoard() {
     return;
   }
   renderCardsBoard(jobs);
-}
-
-function projectListSignature(projects) {
-  const arr = Array.isArray(projects) ? projects : [];
-  return arr
-    .map((p) =>
-      [
-        String(p && p.id ? p.id : ""),
-        String(p && p.name ? p.name : ""),
-        String(p && p.path ? p.path : ""),
-        String(p && p.gitBranch ? p.gitBranch : ""),
-        String(p && p.gitSha ? p.gitSha : ""),
-        p && p.gitDirty ? "1" : "0",
-        p && p.gitDetached ? "1" : "0",
-        String(p && p.gitError ? p.gitError : "")
-      ].join("|")
-    )
-    .join("\n");
 }
 
 function projectById(id) {
