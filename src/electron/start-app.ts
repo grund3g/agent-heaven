@@ -1946,14 +1946,12 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const title = jobDisplayTitle(job);
-    const safeTitle = /^untitled$/i.test(title) ? "" : title;
     const suggestion = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",
-      jobTitle: safeTitle,
-      allowTaskContext: true
+      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
+      allowTaskContext: false
     });
 
     return { ok: true, suggestion };
