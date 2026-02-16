@@ -2412,9 +2412,9 @@ body::before {
 }
 
 .queued {
-  margin-bottom: 14px;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed var(--stroke-faint);
+  margin-top: 14px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--stroke-faint);
 }
 
 .queued__head {

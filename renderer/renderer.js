@@ -7510,7 +7510,8 @@ function renderJobDialogPanels(job) {
 		      </div>
 		    `;
 		  });
-  const chatHtml = `${queuedHtml}${items.join("")}`;
+  // Keep queued follow-ups at the end so they stay visible with sticky bottom scroll.
+  const chatHtml = `${items.join("")}${queuedHtml}`;
   els.jobDialogChat.innerHTML = chatHtml || `<div class="logline">No messages yet.</div>`;
   wireAttachmentThumbs(els.jobDialogChat);
 
