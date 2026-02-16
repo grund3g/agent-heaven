@@ -6757,11 +6757,6 @@ function defaultIntegrateCommitMessage(job) {
   return msg.slice(0, 72);
 }
 
-function defaultCheckoutCommitMessage(job) {
-  const msg = "Update local changes";
-  return msg.slice(0, 72);
-}
-
 function isIntegrateAutoArchiveEnabled() {
   const s = state.settings && typeof state.settings === "object" ? state.settings : {};
   return s.integrateAutoArchive !== false;
