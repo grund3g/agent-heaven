@@ -375,18 +375,6 @@ const promptPathSuggestState = {
 };
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
-const HELPER_CONTEXT_GLOBAL_VALUE = "global";
-const HELPER_CONTEXT_PROJECT_PREFIX = "project:";
-const HELPER_SESSION_MAX = 12;
-const HELPER_SESSION_MESSAGES_MAX = 80;
-const HELPER_SESSION_TEXT_MAX = 4000;
-const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
-const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
-const JOB_DIFF_CACHE_TTL_MS = 25_000;
-const JOB_DIFF_MAX_CHARS = 180_000;
-const jobDiffCache = new Map(); // jobId -> { sig, fetchedAt, payload }
-const jobDiffUiState = new Map(); // jobId -> { filterText, selectedFileId }
-let jobDiffReqSeq = 0;
 
 let followupAutosizeRaf = 0;
 
@@ -5178,36 +5166,6 @@ async function createTemporaryProject(opts = {}) {
     syncComposerCheckoutModeUi();
   }
   return created;
-}
-
-async function removeProjectWithConfirm(projectId, opts = {}) {
-  const id = String(projectId || "").trim();
-  if (!id) return false;
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const closeDialog = !!o.closeDialog;
-
-  const project = state.projects.find((p) => p && p.id === id) || null;
-  const confirmRes = await promptProjectRemove(project);
-  if (!confirmRes || !confirmRes.confirmed) return false;
-
-  try {
-    setHint("");
-    const removed = await api.projectsRemove(id, { deleteFolder: !!confirmRes.deleteFolder });
-    if (!removed) return false;
-
-    if (getStoredProjectId() === id) clearStoredProjectId();
-
-    state.projects = await api.projectsList();
-    renderProjects();
-    renderBoard();
-
-    if (closeDialog) closeProjectDialog();
-    return true;
-  } catch (err) {
-    setHint(String(err && err.message ? err.message : err), "error");
-    return false;
-  }
 }
 
 async function promptEditProjectShortName(projectId, opts = {}) {
@@ -11624,92 +11582,21 @@ function wireUi() {
     });
   }
 
-  if (els.helperBubbleBtn) {
-    els.helperBubbleBtn.addEventListener("click", () => toggleHelperPanel({ focus: true }));
-  }
-  if (els.helperThinkingIndicator) {
-    els.helperThinkingIndicator.addEventListener("click", () => toggleHelperPanel({ open: true, focus: true }));
-  }
-  if (els.helperPanelClose) {
-    els.helperPanelClose.addEventListener("click", () => toggleHelperPanel({ open: false }));
-  }
-  if (els.helperAgentSelect) {
-    els.helperAgentSelect.addEventListener("change", () => {
-      const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
-      els.helperAgentSelect.value = next;
-      renderHelperPanel();
-    });
-  }
-  if (els.helperContextScopeSelect) {
-    els.helperContextScopeSelect.addEventListener("change", () => {
-      const fallbackProjectId = helperDefaultProjectIdForContext();
-      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value, { defaultProjectId: fallbackProjectId });
-      if (!selectHasOptionValue(els.helperContextScopeSelect, next)) {
-        renderHelperContextScopeOptions({ skipStore: true });
-        helperSetMeta(helperCurrentMetaStatusText());
-        renderHelperPanel();
-        return;
-      }
-      els.helperContextScopeSelect.value = next;
-      storeHelperContextScope(next);
-      helperSetMeta(helperCurrentMetaStatusText());
-      renderHelperPanel();
-    });
-  }
-  if (els.helperSessionSelect) {
-    els.helperSessionSelect.addEventListener("change", () => {
-      const next = String(els.helperSessionSelect.value || "").trim();
-      if (!helperSelectSession(next, { focus: true })) renderHelperPanel();
-    });
-  }
-  if (els.helperNewSessionBtn) {
-    els.helperNewSessionBtn.addEventListener("click", () => helperNewSessionNow({ focus: true }));
-  }
-  if (els.helperClearSessionBtn) {
-    els.helperClearSessionBtn.addEventListener("click", () => clearHelperCurrentSessionNow());
-  }
-  if (els.helperInput) {
-    els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
-    els.helperInput.addEventListener("keydown", (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        e.preventDefault();
-        askHelperFromInput();
-        return;
-      }
-      if (e.key === "Escape" && state.helperOpen) {
-        e.preventDefault();
-        toggleHelperPanel({ open: false });
-      }
-    });
-  }
-  if (els.helperSendBtn) {
-    els.helperSendBtn.addEventListener("click", () => askHelperFromInput());
-  }
-  if (els.helperToPromptBtn) {
-    els.helperToPromptBtn.addEventListener("click", () => appendHelperContextToComposer());
-  }
-  if (els.settingsHelperClearHistoryBtn) {
-    els.settingsHelperClearHistoryBtn.addEventListener("click", () => clearHelperHistoryNow());
-  }
-
-  els.projectSelect.addEventListener("change", async () => {
-    const v = String(els.projectSelect.value || "").trim();
-    if (v === TEMP_PROJECT_OPTION_VALUE) {
-      try {
-        await createTemporaryProject();
-      } catch (err) {
-        setHint(String(err && err.message ? err.message : err), "error");
-        els.projectSelect.value = "";
-        syncComposerCheckoutModeUi();
-      }
-      schedulePromptPathSuggestRefresh({ immediate: true });
-      return;
-    }
-    if (v && v !== "auto") storeProjectId(v);
-    syncComposerCheckoutModeUi();
-    schedulePromptPathSuggestRefresh({ immediate: true });
-    helperSetMeta(helperCurrentMetaStatusText());
-  });
+	  els.projectSelect.addEventListener("change", async () => {
+	    const v = String(els.projectSelect.value || "").trim();
+	    if (v === TEMP_PROJECT_OPTION_VALUE) {
+	      try {
+	        await createTemporaryProject();
+	      } catch (err) {
+	        setHint(String(err && err.message ? err.message : err), "error");
+	        els.projectSelect.value = "";
+	        syncComposerCheckoutModeUi();
+	      }
+	      return;
+	    }
+	    if (v && v !== "auto") storeProjectId(v);
+	    syncComposerCheckoutModeUi();
+	  });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
   if (els.modelInput) codexModelComboboxComposer = attachCodexModelCombobox(els.modelInput, { ariaLabel: "Show models" });
