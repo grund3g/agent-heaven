@@ -1512,6 +1512,73 @@ body::before {
   background: var(--card2);
 }
 
+.attachfile {
+  --file-w: 240px;
+  flex: 1 1 var(--file-w);
+  min-width: min(100%, 220px);
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke-soft);
+  background: linear-gradient(160deg, var(--surface3), var(--surface4));
+}
+
+.attachments--sm .attachfile {
+  --file-w: 190px;
+  padding: 7px 8px;
+}
+
+.attachfile__kind {
+  flex: 0 0 auto;
+  min-width: 36px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ink-mono);
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface5);
+}
+
+.attachfile__meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attachfile__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-mid);
+}
+
+.attachfile__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.attachfile .attachthumb__x {
+  flex: 0 0 auto;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

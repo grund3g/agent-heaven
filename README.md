@@ -21,7 +21,7 @@ Agent Heaven is a local Electron desktop app that runs AI coding agents (OpenAI 
 - Kanban board (Running / Needs Attention / Done)
 - Live streaming output (terminal view + raw JSON logs)
 - Multi-project: each run is tied to a project folder
-- Drag & drop support: images become attachments, other files are inserted as paths into prompts / follow-ups
+- Drag & drop support: images and files become attachment tiles; file paths are appended to the sent prompt/follow-up automatically
 - Persistent history (incl. Codex thread IDs / Claude session IDs for resume)
 - Multi-window / multi-display support
 - Themes, sounds, and global hotkey (optional)

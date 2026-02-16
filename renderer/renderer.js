@@ -227,7 +227,9 @@ const state = {
   searchSeq: 0,
 
   composerImages: [],
-  followupImages: []
+  composerFiles: [],
+  followupImages: [],
+  followupFiles: []
 };
 
 const audio = {
@@ -1417,8 +1419,17 @@ function normalizeImageList(list) {
   return normalizePathList(list);
 }
 
+function normalizeFileList(list) {
+  return normalizePathList(list);
+}
+
 function mergeImages(existing, added, maxCount = 8) {
   const out = normalizeImageList([...(existing || []), ...(added || [])]);
+  return out.slice(0, Math.max(0, maxCount));
+}
+
+function mergeFiles(existing, added, maxCount = 24) {
+  const out = normalizeFileList([...(existing || []), ...(added || [])]);
   return out.slice(0, Math.max(0, maxCount));
 }
 
@@ -1480,44 +1491,47 @@ function imagePathsFromDroppedEntries(entries) {
 
 function nonImagePathsFromDroppedEntries(entries) {
   const arr = Array.isArray(entries) ? entries : [];
-  return normalizePathList(
+  return normalizeFileList(
     arr
       .filter((f) => f && !f.isImage)
       .map((f) => (f && typeof f.path === "string" ? f.path : ""))
   );
 }
 
-function appendPathsToTextarea(inputEl, paths) {
-  if (!inputEl || typeof inputEl.value !== "string") return;
-  const arr = normalizePathList(paths);
-  if (arr.length === 0) return;
-
-  const block = `Files:\n${arr.join("\n")}`;
-  const prev = inputEl.value || "";
-  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
-  inputEl.value = next;
-
-  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
-  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
-
-  try {
-    inputEl.focus();
-    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
-  } catch {
-    // ignore
-  }
+function fileAttachmentTypeLabel(path) {
+  const base = pathBaseName(path);
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0 || dot >= base.length - 1) return "FILE";
+  const ext = base
+    .slice(dot + 1)
+    .replaceAll(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  if (!ext) return "FILE";
+  return ext.length <= 4 ? ext : ext.slice(0, 4);
 }
 
-function renderAttachmentBadge(badgeEl, images) {
+function buildPromptWithFileAttachments(promptText, files) {
+  const base = String(promptText || "").trim();
+  const arr = normalizeFileList(files);
+  if (arr.length === 0) return base;
+  const block = `Attached files:\n${arr.map((p) => `- ${p}`).join("\n")}`;
+  return base ? `${base}\n\n${block}` : block;
+}
+
+function renderAttachmentBadge(badgeEl, { images, files } = {}) {
   if (!badgeEl) return;
-  const n = Array.isArray(images) ? images.length : 0;
-  if (n <= 0) {
+  const imageCount = Array.isArray(images) ? images.length : 0;
+  const fileCount = Array.isArray(files) ? files.length : 0;
+  if (imageCount <= 0 && fileCount <= 0) {
     badgeEl.hidden = true;
     badgeEl.textContent = "";
     return;
   }
+  const parts = [];
+  if (imageCount > 0) parts.push(`IMG ${imageCount}`);
+  if (fileCount > 0) parts.push(`FILE ${fileCount}`);
   badgeEl.hidden = false;
-  badgeEl.textContent = `[IMG ${n}]`;
+  badgeEl.textContent = `[${parts.join(" | ")}]`;
 }
 
 function wireAttachmentThumbs(rootEl) {
@@ -1564,25 +1578,28 @@ function openImageDialogForThumbEl(targetEl) {
   openImageDialogForSrc(src, title);
 }
 
-function renderAttachmentChips(containerEl, images, opts = {}) {
+function renderAttachmentChips(containerEl, images, files, opts = {}) {
   if (!containerEl) return;
-  const arr = Array.isArray(images) ? images : [];
-  if (arr.length === 0) {
+  const imageArr = Array.isArray(images) ? images : [];
+  const fileArr = Array.isArray(files) ? files : [];
+  if (imageArr.length === 0 && fileArr.length === 0) {
     containerEl.innerHTML = "";
     return;
   }
 
   const removable = !!opts.removable;
-  const removeAttr = typeof opts.removeAttr === "string" ? opts.removeAttr : "";
-  const removeLabel = typeof opts.removeLabel === "string" ? opts.removeLabel : "Remove image";
+  const imageRemoveAttr = typeof opts.imageRemoveAttr === "string" ? opts.imageRemoveAttr : "";
+  const imageRemoveLabel = typeof opts.imageRemoveLabel === "string" ? opts.imageRemoveLabel : "Remove image";
+  const fileRemoveAttr = typeof opts.fileRemoveAttr === "string" ? opts.fileRemoveAttr : "";
+  const fileRemoveLabel = typeof opts.fileRemoveLabel === "string" ? opts.fileRemoveLabel : "Remove file";
 
-  containerEl.innerHTML = arr
+  const imageHtml = imageArr
     .map((p, idx) => {
       const name = pathBaseName(p);
       const src = fileUrlForPath(p);
       const rm =
-        removable && removeAttr
-          ? `<button type="button" class="attachthumb__x" data-${removeAttr}="${idx}" aria-label="${escapeHtml(removeLabel)}">&times;</button>`
+        removable && imageRemoveAttr
+          ? `<button type="button" class="attachthumb__x" data-${imageRemoveAttr}="${idx}" aria-label="${escapeHtml(imageRemoveLabel)}">&times;</button>`
           : "";
       return `
         <div class="attachthumb">
@@ -1595,27 +1612,73 @@ function renderAttachmentChips(containerEl, images, opts = {}) {
       `.trim();
     })
     .join("");
+
+  const fileHtml = fileArr
+    .map((p, idx) => {
+      const name = pathBaseName(p);
+      const kind = fileAttachmentTypeLabel(p);
+      const rm =
+        removable && fileRemoveAttr
+          ? `<button type="button" class="attachthumb__x" data-${fileRemoveAttr}="${idx}" aria-label="${escapeHtml(fileRemoveLabel)}">&times;</button>`
+          : "";
+      return `
+        <div class="attachfile">
+          <div class="attachfile__kind" aria-hidden="true">${escapeHtml(kind)}</div>
+          <div class="attachfile__meta">
+            <span class="attachfile__name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+            <span class="attachfile__path" title="${escapeHtml(p)}">${escapeHtml(p)}</span>
+          </div>
+          ${rm}
+        </div>
+      `.trim();
+    })
+    .join("");
+
+  containerEl.innerHTML = `${imageHtml}${fileHtml}`;
   wireAttachmentThumbs(containerEl);
+}
+
+function renderComposerAttachments() {
+  renderAttachmentBadge(els.promptBadge, { images: state.composerImages, files: state.composerFiles });
+  renderAttachmentChips(els.promptAttachments, state.composerImages, state.composerFiles, {
+    removable: true,
+    imageRemoveAttr: "remove-composer-image",
+    imageRemoveLabel: "Remove attached image",
+    fileRemoveAttr: "remove-composer-file",
+    fileRemoveLabel: "Remove attached file"
+  });
+}
+
+function renderFollowupAttachments() {
+  renderAttachmentBadge(els.followupBadge, { images: state.followupImages, files: state.followupFiles });
+  renderAttachmentChips(els.followupAttachments, state.followupImages, state.followupFiles, {
+    removable: true,
+    imageRemoveAttr: "remove-followup-image",
+    imageRemoveLabel: "Remove attached image",
+    fileRemoveAttr: "remove-followup-file",
+    fileRemoveLabel: "Remove attached file"
+  });
 }
 
 function setComposerImages(images) {
   state.composerImages = normalizeImageList(images);
-  renderAttachmentBadge(els.promptBadge, state.composerImages);
-  renderAttachmentChips(els.promptAttachments, state.composerImages, {
-    removable: true,
-    removeAttr: "remove-composer",
-    removeLabel: "Remove attached image"
-  });
+  renderComposerAttachments();
+}
+
+function setComposerFiles(files) {
+  state.composerFiles = normalizeFileList(files);
+  renderComposerAttachments();
 }
 
 function setFollowupImages(images) {
   state.followupImages = normalizeImageList(images);
-  renderAttachmentBadge(els.followupBadge, state.followupImages);
-  renderAttachmentChips(els.followupAttachments, state.followupImages, {
-    removable: true,
-    removeAttr: "remove-followup",
-    removeLabel: "Remove attached image"
-  });
+  renderFollowupAttachments();
+  scheduleAutosizeFollowupInput();
+}
+
+function setFollowupFiles(files) {
+  state.followupFiles = normalizeFileList(files);
+  renderFollowupAttachments();
   scheduleAutosizeFollowupInput();
 }
 
@@ -6396,6 +6459,7 @@ async function openJobDialog(jobId) {
 
   els.followupInput.value = "";
   setFollowupImages([]);
+  setFollowupFiles([]);
   els.jobDialog.showModal();
   scheduleAutosizeFollowupInput();
 
@@ -6883,8 +6947,8 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverrid
 }
 
 async function startJobFromComposer() {
-  const prompt = (els.promptInput.value || "").trim();
-  if (!prompt) return;
+  const promptText = (els.promptInput.value || "").trim();
+  if (!promptText) return;
 
   // If the user starts a real job during onboarding, clean up demo UI.
   if (tour.active) stopFirstRunTour();
@@ -6897,6 +6961,7 @@ async function startJobFromComposer() {
   const agent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
   const model = (els.modelInput.value || "").trim();
   const images = [...(state.composerImages || [])];
+  const files = [...(state.composerFiles || [])];
 
   try {
     setHint("");
@@ -6924,12 +6989,14 @@ async function startJobFromComposer() {
     const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId, checkoutMode);
     if (!okBranch) return;
 
+    const prompt = buildPromptWithFileAttachments(promptText, files);
     const payload = { prompt, projectId, agent, model, images };
     if (checkoutMode) payload.checkoutMode = checkoutMode;
     await api.jobsStart(payload);
     els.promptInput.value = "";
     clearStoredComposerDraft();
     setComposerImages([]);
+    setComposerFiles([]);
   } catch (err) {
     setHint(String(err && err.message ? err.message : err), "error");
   }
@@ -6978,6 +7045,7 @@ async function sendFollowup() {
     els.followupInput.value = "";
     scheduleAutosizeFollowupInput();
     setFollowupImages([]);
+    setFollowupFiles([]);
     await cancelJob(jobId, { closeDialog: true });
     return;
   }
@@ -6985,6 +7053,7 @@ async function sendFollowup() {
     els.followupInput.value = "";
     scheduleAutosizeFollowupInput();
     setFollowupImages([]);
+    setFollowupFiles([]);
     await openRerunDialog(jobId);
     return;
   }
@@ -7002,13 +7071,16 @@ async function sendFollowup() {
   const text = cmd;
   if (!text) return;
   const images = [...(state.followupImages || [])];
+  const files = [...(state.followupFiles || [])];
+  const prompt = buildPromptWithFileAttachments(text, files);
   try {
     setHint("");
     setView("board");
     els.followupInput.value = "";
     scheduleAutosizeFollowupInput();
-    await api.jobsSend(jobId, text, images);
+    await api.jobsSend(jobId, prompt, images);
     setFollowupImages([]);
+    setFollowupFiles([]);
     if (running) showToast("Queued follow-up.");
   } catch (err) {
     setHint(String(err && err.message ? err.message : err), "error");
@@ -8078,7 +8150,7 @@ function wireUi() {
   els.promptInput.addEventListener("input", () => storeComposerDraft(els.promptInput.value || ""));
   restoreComposerDraft();
 
-  // Attach images via drag&drop and append non-image files as paths to the prompt/follow-up text.
+  // Attach images/files via drag&drop and render them as removable preview tiles.
   document.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
     if (!dataTransferHasFiles(dt)) return;
@@ -8091,13 +8163,23 @@ function wireUi() {
   });
 
   els.promptAttachments.addEventListener("click", (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest("[data-remove-composer]") : null;
-    if (btn) {
-      const idx = Number(btn.getAttribute("data-remove-composer"));
+    const removeImgBtn = e.target && e.target.closest ? e.target.closest("[data-remove-composer-image]") : null;
+    if (removeImgBtn) {
+      const idx = Number(removeImgBtn.getAttribute("data-remove-composer-image"));
       if (!Number.isFinite(idx)) return;
       const next = [...(state.composerImages || [])];
       next.splice(idx, 1);
       setComposerImages(next);
+      return;
+    }
+
+    const removeFileBtn = e.target && e.target.closest ? e.target.closest("[data-remove-composer-file]") : null;
+    if (removeFileBtn) {
+      const idx = Number(removeFileBtn.getAttribute("data-remove-composer-file"));
+      if (!Number.isFinite(idx)) return;
+      const next = [...(state.composerFiles || [])];
+      next.splice(idx, 1);
+      setComposerFiles(next);
       return;
     }
 
@@ -8107,13 +8189,23 @@ function wireUi() {
   });
 
   els.followupAttachments.addEventListener("click", (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest("[data-remove-followup]") : null;
-    if (btn) {
-      const idx = Number(btn.getAttribute("data-remove-followup"));
+    const removeImgBtn = e.target && e.target.closest ? e.target.closest("[data-remove-followup-image]") : null;
+    if (removeImgBtn) {
+      const idx = Number(removeImgBtn.getAttribute("data-remove-followup-image"));
       if (!Number.isFinite(idx)) return;
       const next = [...(state.followupImages || [])];
       next.splice(idx, 1);
       setFollowupImages(next);
+      return;
+    }
+
+    const removeFileBtn = e.target && e.target.closest ? e.target.closest("[data-remove-followup-file]") : null;
+    if (removeFileBtn) {
+      const idx = Number(removeFileBtn.getAttribute("data-remove-followup-file"));
+      if (!Number.isFinite(idx)) return;
+      const next = [...(state.followupFiles || [])];
+      next.splice(idx, 1);
+      setFollowupFiles(next);
       return;
     }
 
@@ -8139,8 +8231,8 @@ function wireUi() {
     const imgs = imagePathsFromDroppedEntries(dropped);
     const files = nonImagePathsFromDroppedEntries(dropped);
     if (imgs.length > 0) setComposerImages(mergeImages(state.composerImages, imgs));
-    if (files.length > 0) appendPathsToTextarea(els.promptInput, files);
-    else if (imgs.length > 0) els.promptInput.focus();
+    if (files.length > 0) setComposerFiles(mergeFiles(state.composerFiles, files));
+    if (imgs.length > 0 || files.length > 0) els.promptInput.focus();
   });
 
   els.followupDropwrap.addEventListener("dragover", (e) => {
@@ -8160,8 +8252,8 @@ function wireUi() {
     const imgs = imagePathsFromDroppedEntries(dropped);
     const files = nonImagePathsFromDroppedEntries(dropped);
     if (imgs.length > 0) setFollowupImages(mergeImages(state.followupImages, imgs));
-    if (files.length > 0) appendPathsToTextarea(els.followupInput, files);
-    else if (imgs.length > 0) els.followupInput.focus();
+    if (files.length > 0) setFollowupFiles(mergeFiles(state.followupFiles, files));
+    if (imgs.length > 0 || files.length > 0) els.followupInput.focus();
   });
 
   els.jobDialogClose.addEventListener("click", () => {
