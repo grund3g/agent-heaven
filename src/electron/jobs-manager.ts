@@ -106,6 +106,11 @@ export class JobsManager {
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
+  private pendingTitleSummaryByJobId = new Map<
+    string,
+    { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
+  >(); // keep latest requested title refresh while one is in flight
+  private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
 
@@ -279,14 +284,6 @@ export class JobsManager {
     this.titleLlmProcs.clear();
     this.pendingTitleSummaryByJobId.clear();
     this.titleSummaryRevByJobId.clear();
-    for (const child of this.attentionLlmProcs.values()) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-    }
-    this.attentionLlmProcs.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -687,10 +684,13 @@ export class JobsManager {
     return { agent: fallback.agent, model: fallback.model };
   }
 
-  private buildTitleSummarizerPrompt(userPrompt: string): string {
-    const rawPrompt = String(userPrompt || "").trim();
+  private buildTitleSummarizerPrompt(opts: { userPrompt: string; currentTitle?: string }): string {
+    const rawPrompt = String(opts && opts.userPrompt ? opts.userPrompt : "").trim();
+    const rawCurrentTitle =
+      opts && typeof opts.currentTitle === "string" ? truncateText(oneLine(opts.currentTitle).trim(), 120) : "";
     const MAX_PROMPT_CHARS = 6_000;
     const clipped = rawPrompt.length > MAX_PROMPT_CHARS ? `${rawPrompt.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : rawPrompt;
+    const currentTitleSection = rawCurrentTitle || "(none)";
 
     return [
       "Create a concise job card title summarizing the user's request.",
@@ -2053,6 +2053,17 @@ export class JobsManager {
 
     this.jobs.delete(id);
     this.procs.delete(id);
+    const titleProc = this.titleLlmProcs.get(id);
+    if (titleProc) {
+      try {
+        titleProc.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+    this.titleLlmProcs.delete(id);
+    this.pendingTitleSummaryByJobId.delete(id);
+    this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
     this.dirtyJobIds.delete(id);
     try {
