@@ -26,7 +26,6 @@ const api = window.agentHeaven;
 		  modelInput: document.getElementById("modelInput"),
 		  promptDropwrap: document.getElementById("promptDropwrap"),
 		  promptInput: document.getElementById("promptInput"),
-  promptPathSuggest: document.getElementById("promptPathSuggest"),
 	  promptBadge: document.getElementById("promptBadge"),
 	  promptAttachments: document.getElementById("promptAttachments"),
   runBtn: document.getElementById("runBtn"),
@@ -248,14 +247,13 @@ const state = {
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
   durationTimer: null,
-  projectRefreshTimer: null,
-  projectRefreshInFlight: false,
-  composerCheckoutModeProjectId: "",
+	  projectRefreshTimer: null,
+	  composerCheckoutModeProjectId: "",
 
-  editingProjectId: "",
-  branchDialogResolver: null,
-  checkoutsProjectId: "",
-  checkoutsEntries: [],
+	  editingProjectId: "",
+	  branchDialogResolver: null,
+	  checkoutsProjectId: "",
+	  checkoutsEntries: [],
   checkoutsLoading: false,
 
   projectFilterId: "", // projectId | ""
@@ -5588,7 +5586,6 @@ function renderProjects() {
   if (current) els.projectSelect.value = current;
   applyDefaultProjectSelection();
   syncComposerCheckoutModeUi();
-  renderHelperContextScopeOptions({ skipStore: true });
 
   // project filter select (Board)
   if (els.projectFilterSelect) {
@@ -10394,7 +10391,6 @@ async function startJobFromComposer() {
     const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId, checkoutMode);
     if (!okBranch) return;
 
-    const prompt = buildPromptWithFileAttachments(promptText, files);
     const payload = { prompt, projectId, agent, model, images };
     if (checkoutMode) payload.checkoutMode = checkoutMode;
     await api.jobsStart(payload);
@@ -11678,8 +11674,6 @@ function wireUi() {
     }
     if (v && v !== "auto") storeProjectId(v);
     syncComposerCheckoutModeUi();
-    schedulePromptPathSuggestRefresh({ immediate: true });
-    helperSetMeta(helperCurrentMetaStatusText());
   });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
