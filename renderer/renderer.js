@@ -6828,12 +6828,9 @@ function isIntegrateToDefaultAction(action) {
   return false;
 }
 
-function suggestIntegrateCommitMessage(job) {
-  const title = String(jobDisplayTitle(job) || "")
-    .replaceAll(/\s+/g, " ")
-    .trim();
-  if (title) return `chore: ${title}`.slice(0, 120);
-  return "chore: integrate job changes";
+function defaultIntegrateCommitMessage() {
+  const msg = "Checkpoint changes";
+  return msg.slice(0, 72);
 }
 
 function shortCommitSha(value) {

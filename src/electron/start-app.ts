@@ -1950,9 +1950,9 @@ export async function startApp(): Promise<void> {
     const suggestion = suggestCommitMessage({
       style,
       changedPaths,
-      taskText: "",
-      jobTitle: safeTitle,
-      allowTaskContext: true
+      taskText: lastJobPromptText(job),
+      jobTitle: jobDisplayTitle(job),
+      allowTaskContext: false
     });
 
     let suggestion = heuristicFallback;
