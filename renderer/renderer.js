@@ -165,6 +165,14 @@ const api = window.agentHeaven;
 		  textPromptDialogCancel: document.getElementById("textPromptDialogCancel"),
 		  textPromptDialogOk: document.getElementById("textPromptDialogOk"),
 
+		  projectRemoveDialog: document.getElementById("projectRemoveDialog"),
+		  projectRemoveDialogMessage: document.getElementById("projectRemoveDialogMessage"),
+		  projectRemoveDialogDeleteRow: document.getElementById("projectRemoveDialogDeleteRow"),
+		  projectRemoveDialogDeleteFolder: document.getElementById("projectRemoveDialogDeleteFolder"),
+		  projectRemoveDialogClose: document.getElementById("projectRemoveDialogClose"),
+		  projectRemoveDialogCancel: document.getElementById("projectRemoveDialogCancel"),
+		  projectRemoveDialogRemove: document.getElementById("projectRemoveDialogRemove"),
+
 			  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
 
   codexModelsList: document.getElementById("codexModelsList"),
@@ -567,7 +575,92 @@ function laneTitleForKey(key) {
 	  });
 	}
 
-	async function pickDisplayId(actionLabel) {
+	let projectRemoveDialogInFlight = false;
+	let projectRemoveDialogResolve = null;
+	function closeProjectRemoveDialog() {
+	  if (!els.projectRemoveDialog) return;
+	  try {
+	    if (els.projectRemoveDialog.open) els.projectRemoveDialog.close();
+	  } catch {
+	    // ignore
+	  }
+	}
+	function resolveProjectRemoveDialog(value) {
+	  if (typeof projectRemoveDialogResolve !== "function") return;
+	  const resolve = projectRemoveDialogResolve;
+	  projectRemoveDialogResolve = null;
+	  projectRemoveDialogInFlight = false;
+	  resolve(value);
+	}
+	async function promptProjectRemove(project) {
+	  const p = project && typeof project === "object" ? project : null;
+	  const label = p && p.name ? `"${p.name}"` : "this project";
+	  const isTemporary = !!(p && p.isTemporary);
+	  const fullPath = p && typeof p.path === "string" ? p.path : "";
+	  const displayPath = formatProjectPathForDisplay(fullPath);
+
+	  // Fallback for builds without the custom dialog.
+	  if (!els.projectRemoveDialog || !els.projectRemoveDialogRemove) {
+	    const ok = window.confirm(`Remove ${label} from the sidebar list?`);
+	    if (!ok) return { confirmed: false, deleteFolder: false };
+	    let deleteFolder = false;
+	    if (isTemporary) {
+	      deleteFolder = window.confirm(
+	        `Also delete the temporary folder from disk?\n\n${fullPath || displayPath || "(path unknown)"}`
+	      );
+	    }
+	    return { confirmed: true, deleteFolder };
+	  }
+
+	  if (projectRemoveDialogInFlight) return { confirmed: false, deleteFolder: false };
+	  projectRemoveDialogInFlight = true;
+
+	  if (els.projectRemoveDialogMessage) {
+	    const lines = [`Remove ${label} from the sidebar list?`];
+	    if (isTemporary) {
+	      lines.push("");
+	      lines.push("Temporary project folder:");
+	      lines.push(fullPath || displayPath || "(path unknown)");
+	      lines.push("");
+	      lines.push("Enable the checkbox below to also delete the folder from disk.");
+	    }
+	    els.projectRemoveDialogMessage.textContent = lines.join("\n");
+	  }
+
+	  if (els.projectRemoveDialogDeleteRow) els.projectRemoveDialogDeleteRow.hidden = !isTemporary;
+	  if (els.projectRemoveDialogDeleteFolder) {
+	    els.projectRemoveDialogDeleteFolder.checked = false;
+	    els.projectRemoveDialogDeleteFolder.disabled = !isTemporary;
+	  }
+
+	  return await new Promise((resolve) => {
+	    projectRemoveDialogResolve = resolve;
+	    try {
+	      els.projectRemoveDialog.showModal();
+	    } catch {
+	      projectRemoveDialogResolve = null;
+	      projectRemoveDialogInFlight = false;
+	      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
+	      if (!ok) {
+	        resolve({ confirmed: false, deleteFolder: false });
+	        return;
+	      }
+	      const deleteFolder = isTemporary
+	        ? window.confirm(`Also delete the temporary folder from disk?\n\n${fullPath || displayPath || "(path unknown)"}`)
+	        : false;
+	      resolve({ confirmed: true, deleteFolder });
+	      return;
+	    }
+
+	    try {
+	      if (els.projectRemoveDialogRemove) els.projectRemoveDialogRemove.focus();
+	    } catch {
+	      // ignore
+	    }
+	  });
+	}
+
+async function pickDisplayId(actionLabel) {
 	  if (!api.windowListDisplays) return null;
 	  const title = String(actionLabel || "Select display").trim() || "Select display";
 
@@ -4430,6 +4523,36 @@ async function createTemporaryProject(opts = {}) {
     syncComposerCheckoutModeUi();
   }
   return created;
+}
+
+async function removeProjectWithConfirm(projectId, opts = {}) {
+  const id = String(projectId || "").trim();
+  if (!id) return false;
+
+  const o = opts && typeof opts === "object" ? opts : {};
+  const closeDialog = !!o.closeDialog;
+
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  const confirmRes = await promptProjectRemove(project);
+  if (!confirmRes || !confirmRes.confirmed) return false;
+
+  try {
+    setHint("");
+    const removed = await api.projectsRemove(id, { deleteFolder: !!confirmRes.deleteFolder });
+    if (!removed) return false;
+
+    if (getStoredProjectId() === id) clearStoredProjectId();
+
+    state.projects = await api.projectsList();
+    renderProjects();
+    renderBoard();
+
+    if (closeDialog) closeProjectDialog();
+    return true;
+  } catch (err) {
+    setHint(String(err && err.message ? err.message : err), "error");
+    return false;
+  }
 }
 
 async function promptEditProjectShortName(projectId, opts = {}) {
@@ -8433,25 +8556,8 @@ function wireUi() {
       e.stopPropagation();
 
       const id = btn.getAttribute("data-project-remove") || "";
-      const project = state.projects.find((p) => p.id === id) || null;
       if (!id) return;
-
-      const label = project ? `"${project.name}"` : "this project";
-      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
-      if (!ok) return;
-
-      try {
-        const removed = await api.projectsRemove(id);
-        if (!removed) return;
-
-        if (getStoredProjectId() === id) clearStoredProjectId();
-
-        state.projects = await api.projectsList();
-        renderProjects();
-        renderBoard();
-      } catch (err) {
-        setHint(String(err && err.message ? err.message : err), "error");
-      }
+      await removeProjectWithConfirm(id);
       return;
     }
     const colorInp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
@@ -8494,26 +8600,7 @@ function wireUi() {
     els.projectDialogRemoveBtn.addEventListener("click", async () => {
       const id = String(state.editingProjectId || "").trim();
       if (!id) return;
-
-      const project = state.projects.find((p) => p && p.id === id) || null;
-      const label = project ? `"${project.name}"` : "this project";
-      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
-      if (!ok) return;
-
-      try {
-        setHint("");
-        const removed = await api.projectsRemove(id);
-        if (!removed) return;
-
-        if (getStoredProjectId() === id) clearStoredProjectId();
-
-        state.projects = await api.projectsList();
-        renderProjects();
-        renderBoard();
-        closeProjectDialog();
-      } catch (err) {
-        setHint(String(err && err.message ? err.message : err), "error");
-      }
+      await removeProjectWithConfirm(id, { closeDialog: true });
     });
   }
   if (els.projectDialog) {
@@ -9153,6 +9240,46 @@ function wireUi() {
 	    });
 	    els.textPromptDialog.addEventListener("close", () => {
 	      resolveTextPromptDialog(null);
+	    });
+	  }
+
+	  if (els.projectRemoveDialogClose) {
+	    els.projectRemoveDialogClose.addEventListener("click", () => {
+	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
+	      closeProjectRemoveDialog();
+	    });
+	  }
+	  if (els.projectRemoveDialogCancel) {
+	    els.projectRemoveDialogCancel.addEventListener("click", () => {
+	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
+	      closeProjectRemoveDialog();
+	    });
+	  }
+	  if (els.projectRemoveDialogRemove) {
+	    els.projectRemoveDialogRemove.addEventListener("click", () => {
+	      const deleteFolder = !!(
+	        els.projectRemoveDialogDeleteFolder &&
+	        !els.projectRemoveDialogDeleteFolder.disabled &&
+	        els.projectRemoveDialogDeleteFolder.checked
+	      );
+	      resolveProjectRemoveDialog({ confirmed: true, deleteFolder });
+	      closeProjectRemoveDialog();
+	    });
+	  }
+	  if (els.projectRemoveDialog) {
+	    els.projectRemoveDialog.addEventListener("click", (e) => {
+	      if (e.target === els.projectRemoveDialog) {
+	        resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
+	        closeProjectRemoveDialog();
+	      }
+	    });
+	    els.projectRemoveDialog.addEventListener("cancel", (e) => {
+	      e.preventDefault();
+	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
+	      closeProjectRemoveDialog();
+	    });
+	    els.projectRemoveDialog.addEventListener("close", () => {
+	      resolveProjectRemoveDialog({ confirmed: false, deleteFolder: false });
 	    });
 	  }
 

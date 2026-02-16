@@ -1008,11 +1008,53 @@ export async function startApp(): Promise<void> {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
   });
-  ipcMain.handle("projects:remove", async (evt, id) => {
+  function parseProjectRemovePayload(payload: any): { id: string; deleteFolder: boolean } {
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      return {
+        id: String((payload as any).id || "").trim(),
+        deleteFolder: !!(payload as any).deleteFolder
+      };
+    }
+    return {
+      id: String(payload || "").trim(),
+      deleteFolder: false
+    };
+  }
+
+  function tryDeleteTemporaryProjectFolder(project: any): boolean {
+    if (!project || typeof project !== "object" || !project.isTemporary) return false;
+
+    const projectPathRaw = typeof project.path === "string" ? project.path.trim() : "";
+    if (!projectPathRaw) return false;
+
+    const projectPath = path.resolve(projectPathRaw);
+    const parsed = path.parse(projectPath);
+    if (!parsed.root || projectPath === parsed.root) return false;
+
+    const rawBase = typeof project.temporaryBaseDir === "string" ? project.temporaryBaseDir.trim() : "";
+    const baseDir = path.resolve(rawBase || path.join(app.getPath("userData"), "temp-projects"));
+    if (!isPathWithinRoot(baseDir, projectPath)) return false;
+
+    try {
+      fs.rmSync(projectPath, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  ipcMain.handle("projects:remove", async (evt, payload) => {
     assertTrustedIpcSender(evt);
-    const projectId = String(id || "").trim();
+    const parsed = parseProjectRemovePayload(payload);
+    const projectId = parsed.id;
     if (projectId) projectPathIndexCache.delete(projectId);
-    return store.removeProject(projectId || id);
+
+    const project = store.listProjects().find((p: any) => p && p.id === projectId) || null;
+    const removed = store.removeProject(projectId || payload);
+    if (removed && parsed.deleteFolder && project && project.isTemporary) {
+      tryDeleteTemporaryProjectFolder(project);
+    }
+    return removed;
   });
   ipcMain.handle("projects:update", async (evt, { id, patch }) => {
     assertTrustedIpcSender(evt);

@@ -636,6 +636,30 @@
 		      </div>
 		    </dialog>
 
+		    <dialog id="projectRemoveDialog" class="dialog">
+		      <div class="dialog__inner dialog__inner--rerun">
+		        <div class="dialog__header">
+		          <div class="dialog__title">Remove project</div>
+		          <button id="projectRemoveDialogClose" class="btn btn--ghost" type="button">Close</button>
+		        </div>
+		        <div class="settings">
+		          <div class="settings__section">
+		            <div id="projectRemoveDialogMessage" class="settings__note settings__note--prewrap"></div>
+		            <label id="projectRemoveDialogDeleteRow" class="field field--row" hidden>
+		              <input id="projectRemoveDialogDeleteFolder" type="checkbox" />
+		              <div class="field__label field__label--inline">Also delete temporary folder from disk</div>
+		            </label>
+		          </div>
+		        </div>
+		        <div class="dialog__footer">
+		          <div class="dialog__actions dialog__actions--right">
+		            <button id="projectRemoveDialogCancel" class="btn btn--ghost" type="button">Cancel</button>
+		            <button id="projectRemoveDialogRemove" class="btn btn--danger" type="button">Remove</button>
+		          </div>
+		        </div>
+		      </div>
+		    </dialog>
+
 		    <dialog id="projectDialog" class="dialog">
 		      <div class="dialog__inner dialog__inner--project">
 		        <div class="dialog__header">
