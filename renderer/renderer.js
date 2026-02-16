@@ -6827,8 +6827,8 @@ function builtInActionKindFromCommand(command) {
   return "";
 }
 
-function defaultIntegrateCommitMessage() {
-  const msg = "Checkpoint changes";
+function defaultIntegrateCommitMessage(job) {
+  const msg = "Update local changes";
   return msg.slice(0, 72);
 }
 

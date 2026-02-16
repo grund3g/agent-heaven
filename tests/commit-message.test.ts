@@ -57,4 +57,31 @@ describe("commit-message", () => {
     });
     expect(msg).toBe("feat: update app.ts");
   });
+
+  test("uses area-based fallback instead of checkpoint placeholder", () => {
+    const msg = suggestCommitMessage({
+      style: "conventional",
+      changedPaths: ["src/app.ts", "renderer/renderer.js"],
+      allowTaskContext: false
+    });
+    expect(msg).toBe("feat: update src and renderer");
+  });
+
+  test("falls back to local-changes wording when no context/path is available", () => {
+    const msg = suggestCommitMessage({
+      style: "conventional",
+      allowTaskContext: false
+    });
+    expect(msg).toBe("feat: update local changes");
+  });
+
+  test("ignores machine-style status metadata as task context", () => {
+    const msg = suggestCommitMessage({
+      style: "conventional",
+      changedPaths: ["src/app.ts"],
+      taskText: "status=done box=board agent=codex project=agent-heaven thread=abc model=gpt-5",
+      allowTaskContext: true
+    });
+    expect(msg).toBe("feat: update app.ts");
+  });
 });

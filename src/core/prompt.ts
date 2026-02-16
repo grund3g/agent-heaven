@@ -82,6 +82,15 @@ export function isBoilerplatePromptLine(s: unknown): boolean {
   return false;
 }
 
+export function isLowSignalTitleText(s: unknown): boolean {
+  const t = oneLine(String(s || ""));
+  if (!t) return true;
+  if (isBoilerplatePromptLine(t)) return true;
+  if (looksLikeLowSignalIntro(t)) return true;
+  if (looksLikeLowSignalOutro(t)) return true;
+  return false;
+}
+
 export function promptSummary(s: unknown): string {
   const raw = String(s || "").replaceAll("\r\n", "\n");
   const lines = raw.split("\n");
