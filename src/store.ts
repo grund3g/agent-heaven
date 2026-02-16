@@ -874,29 +874,9 @@ function ensureSettings(settings) {
     changed = true;
   }
 
-  {
-    const raw = typeof (next as any).uiDesignVersion === "string" ? (next as any).uiDesignVersion.trim().toLowerCase() : "";
-    const nextVersion = raw === "v2" ? "v2" : "v1";
-    if ((next as any).uiDesignVersion !== nextVersion) {
-      (next as any).uiDesignVersion = nextVersion;
-      changed = true;
-    }
-  }
-
   if (typeof (next as any).integrateAutoArchive !== "boolean") {
     (next as any).integrateAutoArchive = true;
     changed = true;
-  }
-
-  if (typeof (next as any).editorCommand !== "string") {
-    (next as any).editorCommand = "";
-    changed = true;
-  } else {
-    const trimmed = String((next as any).editorCommand).trim();
-    if ((next as any).editorCommand !== trimmed) {
-      (next as any).editorCommand = trimmed;
-      changed = true;
-    }
   }
 
   const agentRes = ensureAgentSettings(next);
