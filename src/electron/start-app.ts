@@ -1034,31 +1034,8 @@ export async function startApp(): Promise<void> {
     return resolveCodexCliPathFromSettings(store.getSettings());
   }
 
-  function projectGitInfoCacheKey(projectPath: string): string {
-    return path.resolve(String(projectPath || "").trim());
-  }
-
-  function invalidateProjectGitInfoCache(projectPath: string) {
-    const p = String(projectPath || "").trim();
-    if (!p) return;
-    projectGitInfoCache.delete(projectGitInfoCacheKey(p));
-  }
-
-  async function getProjectGitInfoCached(projectPath: string) {
-    const p = String(projectPath || "").trim();
-    if (!p) return { isGitRepo: false, branch: "", sha: "", detached: false, dirty: false, error: "Missing path" };
-    const key = projectGitInfoCacheKey(p);
-    const now = Date.now();
-    const cached = projectGitInfoCache.get(key);
-    if (cached && now - cached.at < PROJECT_GIT_INFO_CACHE_TTL_MS) return cached.info;
-    const info = await getGitInfo(p);
-    projectGitInfoCache.set(key, { at: now, info });
-    return info;
-  }
-
   type ProjectPathIndexCacheEntry = { root: string; builtAt: number; relPaths: string[] };
   const projectPathIndexCache = new Map<string, ProjectPathIndexCacheEntry>();
-  const projectPathIndexBuildInFlight = new Map<string, Promise<string[]>>();
   const PROJECT_PATH_CACHE_TTL_MS = 45_000;
   const PROJECT_PATH_SCAN_MAX_FILES = 40_000;
   const PROJECT_PATH_SCAN_MAX_DEPTH = 14;
@@ -1094,20 +1071,7 @@ export async function startApp(): Promise<void> {
     return q;
   }
 
-  function projectPathIndexInflightKey(projectId: string, root: string): string {
-    return `${projectId}\u0000${root}`;
-  }
-
-  function invalidateProjectPathIndex(projectId: string) {
-    const id = String(projectId || "").trim();
-    if (!id) return;
-    projectPathIndexCache.delete(id);
-    for (const key of Array.from(projectPathIndexBuildInFlight.keys())) {
-      if (key.startsWith(`${id}\u0000`)) projectPathIndexBuildInFlight.delete(key);
-    }
-  }
-
-  async function buildProjectPathIndex(projectRoot: string): Promise<string[]> {
+  function buildProjectPathIndex(projectRoot: string): string[] {
     const root = path.resolve(projectRoot);
     const out: string[] = [];
     const stack: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }];
@@ -1118,7 +1082,7 @@ export async function startApp(): Promise<void> {
 
       let entries: fs.Dirent[] = [];
       try {
-        entries = await fs.promises.readdir(next.dir, { withFileTypes: true });
+        entries = fs.readdirSync(next.dir, { withFileTypes: true });
       } catch {
         entries = [];
       }
@@ -1151,41 +1115,16 @@ export async function startApp(): Promise<void> {
     return out;
   }
 
-  async function buildAndCacheProjectPathIndex(projectId: string, projectRoot: string): Promise<string[]> {
-    const id = String(projectId || "").trim();
-    const root = path.resolve(projectRoot);
-    if (!id) return [];
-
-    const key = projectPathIndexInflightKey(id, root);
-    const pending = projectPathIndexBuildInFlight.get(key);
-    if (pending) return pending;
-
-    const run = (async () => {
-      const relPaths = await buildProjectPathIndex(root);
-      projectPathIndexCache.set(id, { root, builtAt: Date.now(), relPaths });
-      return relPaths;
-    })().finally(() => {
-      projectPathIndexBuildInFlight.delete(key);
-    });
-
-    projectPathIndexBuildInFlight.set(key, run);
-    return run;
-  }
-
-  async function getProjectPathIndex(projectId: string, projectRoot: string): Promise<string[]> {
+  function getProjectPathIndex(projectId: string, projectRoot: string): string[] {
     const id = String(projectId || "").trim();
     if (!id) return [];
     const root = path.resolve(projectRoot);
     const now = Date.now();
     const cached = projectPathIndexCache.get(id);
-    if (cached && cached.root === root) {
-      if (now - cached.builtAt < PROJECT_PATH_CACHE_TTL_MS) return cached.relPaths;
-      // Return stale results quickly and refresh in background.
-      void buildAndCacheProjectPathIndex(id, root);
-      return cached.relPaths;
-    }
-
-    return await buildAndCacheProjectPathIndex(id, root);
+    if (cached && cached.root === root && now - cached.builtAt < PROJECT_PATH_CACHE_TTL_MS) return cached.relPaths;
+    const relPaths = buildProjectPathIndex(root);
+    projectPathIndexCache.set(id, { root, builtAt: now, relPaths });
+    return relPaths;
   }
 
   function suggestProjectPaths(relPaths: string[], rawQuery: string, rawLimit: unknown): string[] {
@@ -1688,26 +1627,15 @@ export async function startApp(): Promise<void> {
 
   ipcMain.handle("projects:remove", async (evt, payload) => {
     assertTrustedIpcSender(evt);
-    const parsed = parseProjectRemovePayload(payload);
-    const projectId = parsed.id;
+    const projectId = String(id || "").trim();
     if (projectId) projectPathIndexCache.delete(projectId);
-
-    const project = store.listProjects().find((p: any) => p && p.id === projectId) || null;
-    const removed = store.removeProject(projectId || payload);
-    if (removed && parsed.deleteFolder && project && project.isTemporary) {
-      tryDeleteTemporaryProjectFolder(project);
-    }
-    return removed;
+    return store.removeProject(projectId || id);
   });
   ipcMain.handle("projects:update", async (evt, { id, patch }) => {
     assertTrustedIpcSender(evt);
     const projectId = String(id || "").trim();
-    if (projectId) invalidateProjectPathIndex(projectId);
-    const before = store.listProjects().find((p: any) => p && p.id === projectId) || null;
-    const updated = store.updateProject(projectId || id, patch || {});
-    if (before && typeof before.path === "string") invalidateProjectGitInfoCache(before.path);
-    if (updated && typeof updated.path === "string") invalidateProjectGitInfoCache(updated.path);
-    return updated;
+    if (projectId) projectPathIndexCache.delete(projectId);
+    return store.updateProject(projectId || id, patch || {});
   });
   ipcMain.handle("projects:suggestPaths", async (evt, payload) => {
     assertTrustedIpcSender(evt);
@@ -1722,7 +1650,7 @@ export async function startApp(): Promise<void> {
     if (!fs.existsSync(projectRoot)) return { ok: true, items: [] };
 
     try {
-      const relPaths = await getProjectPathIndex(projectId, projectRoot);
+      const relPaths = getProjectPathIndex(projectId, projectRoot);
       const matched = suggestProjectPaths(relPaths, p.query, p.limit);
       const items: Array<{ path: string; absPath: string }> = [];
       for (const relPath of matched) {

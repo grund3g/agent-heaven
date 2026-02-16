@@ -25,6 +25,7 @@ const api = window.agentHeaven;
 		  modelInput: document.getElementById("modelInput"),
 		  promptDropwrap: document.getElementById("promptDropwrap"),
 		  promptInput: document.getElementById("promptInput"),
+  promptPathSuggest: document.getElementById("promptPathSuggest"),
 	  promptBadge: document.getElementById("promptBadge"),
 	  promptAttachments: document.getElementById("promptAttachments"),
   runBtn: document.getElementById("runBtn"),
@@ -327,7 +328,6 @@ const PROMPT_PATH_SUGGEST_DEBOUNCE_MS = 90;
 const PROMPT_PATH_SUGGEST_CURSOR_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 let promptPathSuggestTimer = null;
 let promptPathSuggestReqSeq = 0;
-const OFFLINE_TOAST_MESSAGE = "No internet connection. Some actions may fail until you're back online.";
 const promptPathSuggestState = {
   open: false,
   mode: "insert", // insert | attach
@@ -10695,7 +10695,6 @@ function wireUi() {
     if (v && v !== "auto") storeProjectId(v);
     syncComposerCheckoutModeUi();
     schedulePromptPathSuggestRefresh({ immediate: true });
-    helperSetMeta(helperCurrentMetaStatusText());
   });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
