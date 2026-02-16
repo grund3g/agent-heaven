@@ -3143,9 +3143,6 @@ function jobDisplayTitle(job) {
 
   const fallback = job && typeof job.title === "string" ? oneLine(job.title) : "";
   if (fallback) return truncateText(fallback, JOB_TITLE_MAX_LEN);
-
-  const status = job && typeof job.status === "string" ? oneLine(job.status).toLowerCase() : "";
-  if (status === "running") return "Generating title...";
   return "Untitled";
 }
 

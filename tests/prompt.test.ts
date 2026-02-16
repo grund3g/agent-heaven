@@ -72,12 +72,7 @@ describe("core/prompt", () => {
     expect(jobDisplayTitle(job)).toBe("Was braeuchten wir?");
   });
 
-  it("shows a pending title label while a job is running", () => {
-    expect(jobDisplayTitle({ status: "running" })).toBe("Generating title...");
-  });
-
-  it("falls back to Untitled when no title information is available and job is not running", () => {
+  it("falls back to Untitled when no title information is available", () => {
     expect(jobDisplayTitle({})).toBe("Untitled");
-    expect(jobDisplayTitle({ status: "done" })).toBe("Untitled");
   });
 });
