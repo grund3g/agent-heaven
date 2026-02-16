@@ -10,7 +10,6 @@ const api = window.agentHeaven;
 	  openStatusBtn: document.getElementById("openStatusBtn"),
 	  openStatusSidebarBtn: document.getElementById("openStatusSidebarBtn"),
 	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
-	  toggleSidebarCollapsedBtn: document.getElementById("toggleSidebarCollapsedBtn"),
   tableScopeCtl: document.getElementById("tableScopeCtl"),
   tableScopeSelect: document.getElementById("tableScopeSelect"),
   sortSelect: document.getElementById("sortSelect"),
