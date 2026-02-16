@@ -10011,6 +10011,16 @@ function wireUi() {
   });
 
   els.projectsList.addEventListener("click", async (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest("[data-project-remove]") : null;
+    if (btn) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const id = btn.getAttribute("data-project-remove") || "";
+      if (!id) return;
+      await removeProjectWithConfirm(id);
+      return;
+    }
     const colorInp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
     if (colorInp) return;
 
@@ -10051,26 +10061,7 @@ function wireUi() {
     els.projectDialogRemoveBtn.addEventListener("click", async () => {
       const id = String(state.editingProjectId || "").trim();
       if (!id) return;
-
-      const project = state.projects.find((p) => p && p.id === id) || null;
-      const label = project ? `"${project.name}"` : "this project";
-      const ok = window.confirm(`Remove ${label} from the sidebar list?`);
-      if (!ok) return;
-
-      try {
-        setHint("");
-        const removed = await api.projectsRemove(id);
-        if (!removed) return;
-
-        if (getStoredProjectId() === id) clearStoredProjectId();
-
-        state.projects = await api.projectsList();
-        renderProjects();
-        renderBoard();
-        closeProjectDialog();
-      } catch (err) {
-        setHint(String(err && err.message ? err.message : err), "error");
-      }
+      await removeProjectWithConfirm(id, { closeDialog: true });
     });
   }
   if (els.projectDialog) {
