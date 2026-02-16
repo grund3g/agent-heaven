@@ -17,11 +17,12 @@ const api = window.agentHeaven;
 
 		  projectSelect: document.getElementById("projectSelect"),
 		  agentSelect: document.getElementById("agentSelect"),
+		  checkoutModeSelect: document.getElementById("checkoutModeSelect"),
 		  modelInput: document.getElementById("modelInput"),
-	  promptDropwrap: document.getElementById("promptDropwrap"),
-	  promptInput: document.getElementById("promptInput"),
-  promptBadge: document.getElementById("promptBadge"),
-  promptAttachments: document.getElementById("promptAttachments"),
+		  promptDropwrap: document.getElementById("promptDropwrap"),
+		  promptInput: document.getElementById("promptInput"),
+	  promptBadge: document.getElementById("promptBadge"),
+	  promptAttachments: document.getElementById("promptAttachments"),
   runBtn: document.getElementById("runBtn"),
   composerHint: document.getElementById("composerHint"),
 
@@ -207,12 +208,13 @@ const state = {
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
   durationTimer: null,
-  projectRefreshTimer: null,
+	  projectRefreshTimer: null,
+	  composerCheckoutModeProjectId: "",
 
-  editingProjectId: "",
-  branchDialogResolver: null,
-  checkoutsProjectId: "",
-  checkoutsEntries: [],
+	  editingProjectId: "",
+	  branchDialogResolver: null,
+	  checkoutsProjectId: "",
+	  checkoutsEntries: [],
   checkoutsLoading: false,
 
   projectFilterId: "", // projectId | ""
@@ -1119,6 +1121,33 @@ function applyDefaultProjectSelection() {
   if (state.projects.length > 1) {
     els.projectSelect.value = "auto";
   }
+}
+
+function syncComposerCheckoutModeUi() {
+  const sel = els.checkoutModeSelect;
+  if (!sel) return;
+  const projectId = String(els.projectSelect && els.projectSelect.value ? els.projectSelect.value : "").trim();
+  if (projectId === state.composerCheckoutModeProjectId) return;
+  state.composerCheckoutModeProjectId = projectId;
+
+  // With Auto selection there is no single project to sync from (the backend will pick one from the prompt).
+  // Disable the override to avoid forcing an accidental strategy onto an auto-picked project.
+  if (!projectId || projectId === "auto") {
+    sel.disabled = true;
+    sel.value = "inplace";
+    return;
+  }
+
+  const project = state.projects.find((p) => p && p.id === projectId) || null;
+  if (!project) {
+    sel.disabled = true;
+    sel.value = "inplace";
+    return;
+  }
+
+  const mode = normalizeCheckoutMode(project.checkoutMode);
+  sel.disabled = false;
+  sel.value = selectHasOptionValue(sel, mode) ? mode : "inplace";
 }
 
 function escapeHtml(s) {
@@ -4074,6 +4103,7 @@ function renderProjects() {
   els.projectSelect.innerHTML = opts.join("");
   if (current) els.projectSelect.value = current;
   applyDefaultProjectSelection();
+  syncComposerCheckoutModeUi();
 
   // project filter select (Board)
   if (els.projectFilterSelect) {
@@ -6740,14 +6770,15 @@ async function addSkipDefaultBranchConfirmBranch(projectId, branch) {
   }
 }
 
-async function maybeConfirmDefaultBranchBeforeRun(projectId) {
+async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverride) {
   const id = String(projectId || "").trim();
   if (!id) return true;
 
   const project = state.projects.find((p) => p && p.id === id) || null;
   if (!project) return true;
 
-  const mode = normalizeCheckoutMode(project.checkoutMode);
+  const overrideRaw = typeof checkoutModeOverride === "string" ? checkoutModeOverride.trim() : "";
+  const mode = overrideRaw ? normalizeCheckoutMode(overrideRaw) : normalizeCheckoutMode(project.checkoutMode);
   const def = normalizeBranchName(project.defaultBranch);
   if (mode !== "inplace") return true;
   if (!def) return true;
@@ -6820,6 +6851,7 @@ async function startJobFromComposer() {
     setHint("");
     if (!projectId) {
       applyDefaultProjectSelection();
+      syncComposerCheckoutModeUi();
       projectId = els.projectSelect.value;
     }
 
@@ -6832,13 +6864,18 @@ async function startJobFromComposer() {
       renderBoard();
       els.projectSelect.value = p.id;
       storeProjectId(p.id);
+      syncComposerCheckoutModeUi();
       projectId = p.id;
     }
 
-    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId);
+    const checkoutMode =
+      els.checkoutModeSelect && !els.checkoutModeSelect.disabled ? normalizeCheckoutMode(els.checkoutModeSelect.value) : "";
+    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId, checkoutMode);
     if (!okBranch) return;
 
-    await api.jobsStart({ prompt, projectId, agent, model, images });
+    const payload = { prompt, projectId, agent, model, images };
+    if (checkoutMode) payload.checkoutMode = checkoutMode;
+    await api.jobsStart(payload);
     els.promptInput.value = "";
     clearStoredComposerDraft();
     setComposerImages([]);
@@ -7937,6 +7974,7 @@ function wireUi() {
   els.projectSelect.addEventListener("change", () => {
     const v = els.projectSelect.value;
     if (v && v !== "auto") storeProjectId(v);
+    syncComposerCheckoutModeUi();
   });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).

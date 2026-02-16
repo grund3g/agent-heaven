@@ -115,6 +115,31 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("supports per-run checkoutMode overrides", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "worktree" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    // Project is configured for worktrees, but overriding to inplace should avoid needing a checkouts directory.
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [], checkoutMode: "inplace" })).toEqual({ ok: true, jobId: "job1" });
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.projectPath).toBe("/tmp/proj");
+  });
+
   it("queues follow-ups while running and drains them after a successful run", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),

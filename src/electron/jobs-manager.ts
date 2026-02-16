@@ -73,9 +73,19 @@ export class JobsManager {
 
   private normalizeCheckoutMode(value: unknown): "inplace" | "worktree" | "clone" {
     const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
     if (raw === "worktree" || raw === "worktrees") return "worktree";
     if (raw === "clone" || raw === "checkout" || raw === "dedicated") return "clone";
     return "inplace";
+  }
+
+  private normalizeCheckoutModeOverride(value: unknown): "" | "inplace" | "worktree" | "clone" {
+    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+    if (!raw) return "";
+    if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
+    if (raw === "worktree" || raw === "worktrees") return "worktree";
+    if (raw === "clone" || raw === "checkout" || raw === "dedicated" || raw === "dedicated_checkout") return "clone";
+    return "";
   }
 
   private normalizeBranchName(value: unknown): string {
@@ -95,8 +105,13 @@ export class JobsManager {
     }
   }
 
-  private async prepareCheckout(project: any, jobId: string): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
-    const mode = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+  private async prepareCheckout(
+    project: any,
+    jobId: string,
+    overrideMode?: "" | "inplace" | "worktree" | "clone"
+  ): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
+    const configured = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+    const mode = overrideMode ? this.normalizeCheckoutMode(overrideMode) : configured;
     const projectPath = project && typeof project.path === "string" ? project.path : "";
     if (!projectPath) throw new Error("Project path is missing");
 
@@ -928,7 +943,8 @@ export class JobsManager {
 
     let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
     try {
-      run = await this.prepareCheckout(project, jobId);
+      const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
+      run = await this.prepareCheckout(project, jobId, checkoutModeOverride);
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }

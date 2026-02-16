@@ -626,7 +626,7 @@ body::before {
 
 .composer__row {
   display: grid;
-  grid-template-columns: 1fr 140px 260px auto;
+  grid-template-columns: 1fr 140px 160px 260px auto;
   gap: 10px;
   align-items: center;
 }

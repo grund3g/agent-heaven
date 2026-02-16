@@ -53,17 +53,22 @@
 
 	      <main class="main">
 	        <header class="composer">
-		          <div class="composer__row">
-		            <select id="projectSelect" class="select">
-		              <option value="">Select project…</option>
-		            </select>
-		            <select id="agentSelect" class="select" title="Agent">
-		              <option value="codex">Codex</option>
-		              <option value="claude">Claude</option>
-		            </select>
-			            <input id="modelInput" class="input" placeholder="Model override (optional)" />
-		            <button id="runBtn" class="btn btn--primary">Run</button>
-		          </div>
+			          <div class="composer__row">
+			            <select id="projectSelect" class="select">
+			              <option value="">Select project…</option>
+			            </select>
+			            <select id="agentSelect" class="select" title="Agent">
+			              <option value="codex">Codex</option>
+			              <option value="claude">Claude</option>
+			            </select>
+			            <select id="checkoutModeSelect" class="select" title="Checkout strategy">
+			              <option value="inplace">In-place</option>
+			              <option value="worktree">Worktree</option>
+			              <option value="clone">Clone</option>
+			            </select>
+				            <input id="modelInput" class="input" placeholder="Model override (optional)" />
+			            <button id="runBtn" class="btn btn--primary">Run</button>
+			          </div>
           <div id="promptDropwrap" class="dropwrap">
 	            <textarea id="promptInput" class="textarea" rows="3" placeholder="Prompt… (⌘+P to focus, ⌘+Enter to run)"></textarea>
             <div id="promptBadge" class="attachbadge" hidden></div>
