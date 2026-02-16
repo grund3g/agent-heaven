@@ -1763,12 +1763,6 @@ export async function startApp(): Promise<void> {
 
   type ManagedCheckoutKind = "worktree" | "clone";
 
-  function resolveManagedCheckoutPath(opts: { projectId: string; jobId: string; kind: ManagedCheckoutKind }): string {
-    const root = path.resolve(checkoutsDir);
-    const sub = opts.kind === "worktree" ? "worktrees" : "clones";
-    return path.resolve(root, sub, opts.projectId, opts.jobId);
-  }
-
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
@@ -1881,12 +1875,14 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
+    const title = jobDisplayTitle(job);
+    const safeTitle = /^untitled$/i.test(title) ? "" : title;
     const suggestion = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",
-      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
-      allowTaskContext: false
+      jobTitle: safeTitle,
+      allowTaskContext: true
     });
 
     return { ok: true, suggestion };
