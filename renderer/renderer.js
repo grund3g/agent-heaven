@@ -6713,866 +6713,86 @@ function openJobActionsMenu(anchorEl) {
   menu.style.top = `${Math.round(y)}px`;
 }
 
-function builtInActionKindFromCommand(command) {
-  const raw = String(command || "").replaceAll("\r\n", "\n");
-  const first = (raw.split("\n")[0] || "").trim();
-  if (!first) return "";
-  if (first === "ah:integrate-to-default" || first === "ah:integrate") return "integrate_to_default";
-  if (first === "ah:commit-and-push" || first === "ah:commit+push" || first === "ah:commit-push") return "commit_and_push";
-  if (first === "ah:commit-only" || first === "ah:commit") return "commit_only";
-  return "";
+function isIntegrateToDefaultAction(action) {
+  const a = action && typeof action === "object" ? action : {};
+  const name = typeof a.name === "string" ? a.name.trim().toLowerCase() : "";
+  const cmd = typeof a.command === "string" ? a.command.trim().toLowerCase() : "";
+  if (!name && !cmd) return false;
+  if (name === "integrate to default branch" || name === "integrate-to-default") return true;
+  if (name.includes("integrate") && name.includes("default branch")) return true;
+  if (cmd === "__integrate_to_default_branch__" || cmd === "integrate-to-default") return true;
+  return false;
 }
 
-function defaultIntegrateCommitMessage(job) {
-  const msg = "Update local changes";
-  return msg.slice(0, 72);
+function suggestIntegrateCommitMessage(job) {
+  const title = String(jobDisplayTitle(job) || "")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+  if (title) return `chore: ${title}`.slice(0, 120);
+  return "chore: integrate job changes";
 }
 
-function isIntegrateAutoArchiveEnabled() {
-  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
-  return s.integrateAutoArchive !== false;
+function shortCommitSha(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  return s.slice(0, 12);
 }
 
-let integrateDialogJobId = "";
-let integrateDialogPhase = ""; // confirm | pending | success | error
-let integrateDialogStatusText = "";
-let integrateDialogMessageText = "";
-let integrateDialogResultText = "";
-let integrateDialogErrorFull = "";
-let integrateDialogTargetPath = "";
-let integrateDialogTargetBranch = "";
-let integrateDialogArchived = false;
-
-function resetIntegrateDialogState() {
-  integrateDialogJobId = "";
-  integrateDialogPhase = "";
-  integrateDialogStatusText = "";
-  integrateDialogMessageText = "";
-  integrateDialogResultText = "";
-  integrateDialogErrorFull = "";
-  integrateDialogTargetPath = "";
-  integrateDialogTargetBranch = "";
-  integrateDialogArchived = false;
-  syncIntegrateDialogUi();
-}
-
-function canCloseIntegrateDialog() {
-  return integrateDialogPhase !== "pending";
-}
-
-function setIntegrateDialogPhase(phase, opts = {}) {
-  const p = opts && typeof opts === "object" ? opts : {};
-  integrateDialogPhase = String(phase || "").trim();
-  if (typeof p.status === "string") integrateDialogStatusText = p.status;
-  if (typeof p.message === "string") integrateDialogMessageText = p.message;
-  if (typeof p.details === "string") integrateDialogResultText = p.details;
-  if (typeof p.errorFull === "string") integrateDialogErrorFull = p.errorFull;
-  if (typeof p.targetPath === "string") integrateDialogTargetPath = p.targetPath;
-  if (typeof p.targetBranch === "string") integrateDialogTargetBranch = p.targetBranch;
-  if (typeof p.archived === "boolean") integrateDialogArchived = p.archived;
-  syncIntegrateDialogUi();
-}
-
-function syncIntegrateDialogUi() {
-  if (!els.integrateDialog) return;
-
-  const jobId = String(integrateDialogJobId || "").trim();
-  const job = jobId ? state.jobs.get(jobId) : null;
-  const projectId = job && typeof job.projectId === "string" ? job.projectId : "";
-  const project = projectId ? state.projects.find((p) => p && p.id === projectId) || null : null;
-
-  if (els.integrateDialogTitle) els.integrateDialogTitle.textContent = "Integrate to default branch";
-  if (els.integrateDialogMeta) {
-    const bits = [];
-    if (project && project.name) bits.push(`project=${project.name}`);
-    else if (projectId) bits.push(`project=${projectId}`);
-    if (job) bits.push(`job=${jobDisplayTitle(job)}`);
-    if (jobId) bits.push(`id=${jobId}`);
-    els.integrateDialogMeta.textContent = bits.join("  ");
-    els.integrateDialogMeta.title = jobId ? `jobId=${jobId}` : "";
-  }
-
-  const phase = integrateDialogPhase || "confirm";
-  const iconVariant =
-    phase === "pending" ? "spinner" : phase === "success" ? "success" : phase === "error" ? "error" : "idle";
-  if (els.integrateDialogIcon) {
-    els.integrateDialogIcon.className = `integrate__icon integrate__icon--${iconVariant}`;
-  }
-
-  if (els.integrateDialogStatus) els.integrateDialogStatus.textContent = integrateDialogStatusText || "";
-  if (els.integrateDialogMessage) {
-    els.integrateDialogMessage.textContent = integrateDialogMessageText || "";
-    els.integrateDialogMessage.hidden = !integrateDialogMessageText;
-  }
-
-  const details = String(integrateDialogResultText || integrateDialogErrorFull || "").trim();
-  if (els.integrateDialogResultWrap) els.integrateDialogResultWrap.hidden = !details;
-  if (els.integrateDialogResult) els.integrateDialogResult.textContent = details;
-
-  const isConfirm = phase === "confirm";
-  const isPending = phase === "pending";
-  const isSuccess = phase === "success";
-  const isError = phase === "error";
-
-  if (els.integrateDialogClose) els.integrateDialogClose.disabled = isPending;
-
-  const canArchive = isSuccess && !integrateDialogArchived && job && job.status !== "running" && jobBox(job) === "board";
-  const showArchiveButton = canArchive && !isIntegrateAutoArchiveEnabled();
-  if (els.integrateDialogCancelBtn) {
-    els.integrateDialogCancelBtn.hidden = !isConfirm;
-    els.integrateDialogCancelBtn.disabled = isPending;
-  }
-  if (els.integrateDialogStartBtn) {
-    els.integrateDialogStartBtn.hidden = !isConfirm;
-    els.integrateDialogStartBtn.disabled = isPending;
-    els.integrateDialogStartBtn.textContent = "Integrate";
-  }
-  if (els.integrateDialogArchiveBtn) {
-    els.integrateDialogArchiveBtn.hidden = !showArchiveButton;
-    els.integrateDialogArchiveBtn.disabled = isPending;
-  }
-
-  if (els.integrateDialogRevealBtn) {
-    els.integrateDialogRevealBtn.hidden = !(isSuccess && integrateDialogTargetPath);
-    els.integrateDialogRevealBtn.disabled = !integrateDialogTargetPath || isPending;
-  }
-
-  if (els.integrateDialogDetailsBtn) {
-    els.integrateDialogDetailsBtn.hidden = !(isError && integrateDialogErrorFull);
-    els.integrateDialogDetailsBtn.disabled = isPending;
-  }
-}
-
-function openIntegrateDialog(jobId) {
-  if (!els.integrateDialog) return false;
-  if (els.integrateDialog.open && !canCloseIntegrateDialog()) return false;
-
-  const id = String(jobId || "").trim();
-  if (!id) return false;
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return false;
-
-  integrateDialogJobId = id;
-  integrateDialogArchived = false;
-
-  integrateDialogResultText = "";
-  integrateDialogErrorFull = "";
-  integrateDialogTargetPath = "";
-  integrateDialogTargetBranch = "";
-  setIntegrateDialogPhase("confirm", {
-    status: "Integrate checkout",
-    message:
-      "Integrate this job's checkout into the project's default branch?\n\n" +
-      "This works for jobs that ran in a Worktree/Clone checkout and will cherry-pick the job's commits onto the default branch.\n" +
-      "If the job ran in-place in the project folder, there is nothing separate to integrate."
-  });
-
-  try {
-    if (!els.integrateDialog.open) els.integrateDialog.showModal();
-  } catch {
-    // ignore
-  }
-
-  try {
-    if (els.integrateDialogStartBtn) els.integrateDialogStartBtn.focus();
-  } catch {
-    // ignore
-  }
-
-  return true;
-}
-
-function closeIntegrateDialog() {
-  if (!els.integrateDialog) return;
-  if (!canCloseIntegrateDialog()) return;
-  try {
-    if (els.integrateDialog.open) els.integrateDialog.close();
-  } catch {
-    // ignore
-  }
-}
-
-function revealIntegrateDialogTarget() {
-  const targetPath = String(integrateDialogTargetPath || "").trim();
-  if (!targetPath) return;
-  if (!api || typeof api.shellOpenPath !== "function") return;
-  api.shellOpenPath(targetPath).catch(() => {});
-}
-
-function showIntegrateDialogDetails() {
-  const full = String(integrateDialogErrorFull || "").trim();
-  if (!full) return;
-  try {
-    window.alert(full);
-  } catch {
-    // ignore
-  }
-}
-
-let integrateToDefaultInFlight = false;
-let integrateToDefaultInFlightJobId = "";
-let queuedIntegrateToDefaultJobId = "";
-async function startIntegrateToDefaultFromDialog(opts = {}) {
-  const o = opts && typeof opts === "object" ? opts : {};
-  const toastOnly = !!o.toastOnly;
-  const forceAutoArchive = !!o.forceAutoArchive;
-
-  const id = String(integrateDialogJobId || "").trim();
-  if (!id) return;
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-
+async function runIntegrateToDefaultAction(job) {
+  const jobId = String(job && job.id ? job.id : "").trim();
+  if (!jobId) return;
   if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
-    if (toastOnly) {
-      showToast("Integration is not supported in this build.");
-    } else {
-      setIntegrateDialogPhase("error", {
-        status: "Integration failed",
-        message: "Integration is not supported in this build.",
-        errorFull: "Integration is not supported in this build."
-      });
-    }
+    showToast("Integrate to default branch is not supported in this build.");
     return;
   }
 
-  if (jobStatusForUi(job) === "running") {
-    const busyMessage = job.integratingToDefault === true ? "Integration already running." : "Wait until the job has finished before integrating.";
-    if (toastOnly) {
-      showToast(busyMessage);
-    } else {
-      setIntegrateDialogPhase("error", {
-        status: "Integration failed",
-        message: busyMessage,
-        errorFull: busyMessage
-      });
-    }
-    return;
-  }
+  let commitMessage = "";
+  let askedCommitMessage = false;
 
-  if (integrateToDefaultInFlight) {
-    const busyMessage =
-      integrateToDefaultInFlightJobId && integrateToDefaultInFlightJobId !== id
-        ? "Another integration is currently running. Please wait."
-        : "Integration already running for this ticket.";
-    if (toastOnly) {
-      showToast(busyMessage);
-    } else {
-      setIntegrateDialogPhase("error", {
-        status: "Integration already running",
-        message: busyMessage,
-        errorFull: busyMessage
-      });
-    }
-    return;
-  }
-  integrateToDefaultInFlight = true;
-  integrateToDefaultInFlightJobId = id;
-
-  integrateDialogResultText = "";
-  integrateDialogErrorFull = "";
-  integrateDialogTargetPath = "";
-  integrateDialogTargetBranch = "";
-  integrateDialogArchived = false;
-  const integrateMode = normalizeIntegrateToDefaultMode(state.settings && state.settings.integrateToDefaultMode);
-  const pendingMessage =
-    integrateMode === "agent"
-      ? "Agent is integrating this checkout into the default branch. This may take a moment."
-      : "Cherry-picking commits onto the project's default branch. This may take a moment.";
-  setIntegrateDialogPhase("pending", {
-    status: "Integrating…",
-    message: pendingMessage
-  });
-  if (toastOnly) showToast("Integrating into default branch…");
-
-  const canArchive = jobBox(job) === "board";
-  const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
-
-  try {
-    let res = null;
+  while (true) {
     try {
-      res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
+      const res = await api.checkoutsIntegrateToDefault(jobId, commitMessage ? { commitMessage } : {});
+      const targetBranch = normalizeBranchName(res && res.targetBranch ? res.targetBranch : "");
+      const targetPath = String(res && res.targetPath ? res.targetPath : "").trim();
+      const commitsApplied = Math.max(0, toIntOrZero(res && res.commitsApplied));
+      const committed = !!(res && res.committed);
+      const committedSha = shortCommitSha(res && res.committedSha ? res.committedSha : "");
+
+      const summaryLines = [];
+      if (commitsApplied > 0) summaryLines.push(`Successfully integrated ${commitsApplied} commit${commitsApplied === 1 ? "" : "s"} into "${targetBranch || "main"}".`);
+      else summaryLines.push(`No commits were applied. This task is already integrated into "${targetBranch || "main"}".`);
+      if (targetPath) summaryLines.push(`Target checkout: ${targetPath}`);
+      if (committed) summaryLines.push(`Committed working-tree changes in task checkout${committedSha ? ` (${committedSha})` : ""}.`);
+
+      const canArchive = jobBox(job) === "board" && job.status !== "running";
+      if (canArchive) {
+        const archiveNow = window.confirm(`${summaryLines.join("\n")}\n\nArchive this task now?`);
+        if (archiveNow) await archiveJob(jobId, { closeDialog: false });
+      } else {
+        window.alert(summaryLines.join("\n"));
+      }
+      return;
     } catch (err) {
       const msg = String(err && err.message ? err.message : err);
-      if (msg.includes("Provide a commit message first")) {
-        setIntegrateDialogPhase("pending", {
-          status: "Commit message required",
-          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
-        });
-
-        let suggested = "";
-        try {
-          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-            suggested = await api.checkoutsSuggestCommitMessage(id, { forceEnglish: true });
-          }
-        } catch {
-          suggested = "";
-        }
-
-        const entered = await promptText({
-          title: "Commit message",
-          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
-          label: "Commit message",
-          defaultValue: suggested || defaultIntegrateCommitMessage(job),
-          okLabel: "Continue",
-          cancelLabel: "Cancel"
-        });
-        const commitMessage = String(entered || "").trim();
+      if (!askedCommitMessage && /Provide a commit message first/i.test(msg)) {
+        askedCommitMessage = true;
+        const suggested = suggestIntegrateCommitMessage(job);
+        const entered = window.prompt(
+          "The task checkout has uncommitted changes.\n\nPlease enter a commit message before integrating to the default branch:",
+          suggested
+        );
+        if (entered == null) return;
+        commitMessage = String(entered || "").trim();
         if (!commitMessage) {
-          setIntegrateDialogPhase("confirm", { status: "Cancelled", message: "Integration cancelled." });
+          showToast("Integration cancelled (empty commit message).");
           return;
         }
-
-        setIntegrateDialogPhase("pending", { status: "Integrating…", message: "Committing and integrating…" });
-        res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
-      } else {
-        showError(msg);
-        return;
+        continue;
       }
-    }
 
-    const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
-    const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
-    const targetPath = res && typeof res.targetPath === "string" ? res.targetPath : "";
-    const committed = !!(res && res.committed === true);
-    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha : "";
-    const targetCommitted = !!(res && res.targetCommitted === true);
-    const targetCommittedSha = res && typeof res.targetCommittedSha === "string" ? res.targetCommittedSha : "";
-    const integrationMethod = res && typeof res.integrationMethod === "string" ? String(res.integrationMethod || "").trim() : "";
-    const agentFallbackReason = res && typeof res.agentFallbackReason === "string" ? String(res.agentFallbackReason || "").trim() : "";
-    const backendAutoArchived = !!(res && res.autoArchived === true);
-    const backendAutoArchiveError = res && typeof res.autoArchiveError === "string" ? String(res.autoArchiveError || "").trim() : "";
-
-    let msg = "";
-    if (applied <= 0) msg = "Nothing to integrate.";
-    else msg = `Integrated ${applied} commit${applied === 1 ? "" : "s"} into ${targetBranch || "default branch"}.`;
-    if (committed && committedSha) msg += ` (Committed: ${committedSha})`;
-
-    integrateDialogTargetPath = targetPath;
-    integrateDialogTargetBranch = targetBranch;
-
-    const canArchive = jobBox(job) === "board";
-    const autoArchive = canArchive && isIntegrateAutoArchiveEnabled();
-    const details = [
-      targetBranch ? `Target branch: ${targetBranch}` : "",
-      targetPath ? `Target path: ${targetPath}` : "",
-      `Commits applied: ${applied}`,
-      committed && committedSha ? `Committed local changes: ${committedSha}` : committed ? "Committed local changes: yes" : "",
-      targetCommitted && targetCommittedSha
-        ? `Committed default-branch local changes: ${targetCommittedSha}`
-        : targetCommitted
-          ? "Committed default-branch local changes: yes"
-          : "",
-      integrationMethod ? `Integration mode: ${integrationMethod}` : "",
-      agentFallbackReason ? `Agent fallback: ${agentFallbackReason}` : ""
-    ]
-      .filter(Boolean)
-      .join("\n");
-    integrateDialogResultText = details;
-
-    setIntegrateDialogPhase("success", {
-      status: applied <= 0 ? "Nothing to integrate" : "Integrated",
-      message: autoArchive ? `${msg}\n\nArchiving ticket automatically…` : canArchive ? `${msg}\n\nArchive this ticket now?` : msg,
-      details,
-      targetPath,
-      targetBranch
-    });
-
-    if (autoArchive) {
-      await archiveIntegrateDialogJob();
-    }
-  } catch (err) {
-    const full = String(err && err.message ? err.message : err).trim() || "Integration failed.";
-    const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
-    integrateDialogErrorFull = full;
-    integrateDialogResultText = full;
-    if (toastOnly) showToast(first);
-    else setIntegrateDialogPhase("error", { status: "Integration failed", message: first, errorFull: full, details: full });
-  } finally {
-    integrateToDefaultInFlight = false;
-    integrateToDefaultInFlightJobId = "";
-    syncIntegrateDialogUi();
-
-    const queuedId = String(queuedIntegrateToDefaultJobId || "").trim();
-    if (queuedId && queuedId !== id) {
-      queuedIntegrateToDefaultJobId = "";
-      window.setTimeout(() => {
-        runIntegrateToDefaultAction(queuedId).catch((err) => {
-          showToast(String(err && err.message ? err.message : err) || "Integration failed.");
-        });
-      }, 0);
-    } else if (queuedId === id) {
-      queuedIntegrateToDefaultJobId = "";
-    }
-  }
-}
-
-async function archiveIntegrateDialogJob() {
-  const id = String(integrateDialogJobId || "").trim();
-  if (!id) return;
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-  if (jobStatusForUi(job) === "running") return;
-  if (!api || typeof api.jobsArchive !== "function") return;
-
-  const prevDetails = integrateDialogResultText;
-  const prevTargetPath = integrateDialogTargetPath;
-  const prevTargetBranch = integrateDialogTargetBranch;
-
-  setIntegrateDialogPhase("pending", { status: "Archiving…", message: "Archiving this ticket…" });
-  try {
-    const archived = await archiveJobWithRetry(id, { attempts: 6, baseDelayMs: 220 });
-    if (!archived.ok) throw new Error(archived.error || "Failed to archive.");
-    integrateDialogArchived = true;
-    integrateDialogResultText = prevDetails;
-    integrateDialogTargetPath = prevTargetPath;
-    integrateDialogTargetBranch = prevTargetBranch;
-    setIntegrateDialogPhase("success", {
-      status: "Archived",
-      message: "Ticket archived.",
-      details: prevDetails,
-      targetPath: prevTargetPath,
-      targetBranch: prevTargetBranch,
-      archived: true
-    });
-  } catch (err) {
-    const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
-    const first = (full.split("\n")[0] || "").trim() || "Failed to archive.";
-    integrateDialogErrorFull = full;
-    integrateDialogResultText = full;
-    setIntegrateDialogPhase("error", { status: "Archive failed", message: first, errorFull: full, details: full });
-  }
-}
-
-async function runIntegrateToDefaultAction(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return;
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-  const o = opts && typeof opts === "object" ? opts : {};
-  const closeDialog = o.closeDialog !== false;
-
-  if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
-    showToast("Integration is not supported in this build.");
-    return;
-  }
-
-  if (jobStatusForUi(job) === "running") {
-    showToast(job.integratingToDefault === true ? "Integration already running." : "Wait until the job has finished before integrating.");
-    return;
-  }
-
-  if (integrateToDefaultInFlight) {
-    if (integrateToDefaultInFlightJobId === id) {
-      showToast("Integration already running for this ticket.");
+      showToast(msg || "Failed to integrate to default branch.");
       return;
     }
-    if (queuedIntegrateToDefaultJobId === id) {
-      showToast("This ticket is already queued for integration.");
-      return;
-    }
-    queuedIntegrateToDefaultJobId = id;
-    showToast("Integration already running. This ticket will run next.");
-    return;
-  }
-
-  if (queuedIntegrateToDefaultJobId === id) queuedIntegrateToDefaultJobId = "";
-  integrateDialogJobId = id;
-  integrateDialogArchived = false;
-  integrateDialogErrorFull = "";
-  integrateDialogResultText = "";
-  integrateDialogTargetPath = "";
-  integrateDialogTargetBranch = "";
-  if (closeDialog && state.selectedJobId === id && els.jobDialog && els.jobDialog.open) closeJobDialog();
-  await startIntegrateToDefaultFromDialog({ toastOnly: true, forceAutoArchive: true });
-}
-
-let checkoutCommitActionInFlight = false;
-async function runCheckoutCommitAction(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return;
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const push = !!o.push;
-
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-
-  if (!api || typeof api.checkoutsCommit !== "function") {
-    showToast("Commit actions are not supported in this build.");
-    return;
-  }
-
-  if (checkoutCommitActionInFlight) {
-    showToast("A commit action is already running.");
-    return;
-  }
-
-  if (jobStatusForUi(job) === "running") {
-    const label = push ? "Commit + push" : "Commit only";
-    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
-    if (!ok) return;
-  }
-
-  let suggested = "";
-  try {
-    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-      suggested = await api.checkoutsSuggestCommitMessage(id);
-    }
-  } catch {
-    suggested = "";
-  }
-
-  const entered = await promptText({
-    title: push ? "Commit + push" : "Commit only",
-    message: push
-      ? "Create a commit from local checkout changes and push the current branch."
-      : "Create a commit from local checkout changes.",
-    label: "Commit message",
-    defaultValue: suggested || defaultCheckoutCommitMessage(job),
-    okLabel: push ? "Commit + push" : "Commit",
-    cancelLabel: "Cancel"
-  });
-
-  if (entered == null) return;
-  const commitMessage = String(entered || "").trim();
-  if (!commitMessage) {
-    showToast("Commit message is required.");
-    return;
-  }
-
-  checkoutCommitActionInFlight = true;
-  try {
-    const res = await api.checkoutsCommit(id, { commitMessage, push });
-    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
-    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
-    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
-    const pushed = !!(res && res.pushed === true);
-
-    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
-    if (push && pushed) {
-      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
-      else if (branch) msg += ` and pushed ${branch}.`;
-      else msg += " and pushed.";
-    } else {
-      msg += ".";
-    }
-    showToast(msg);
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
-  } finally {
-    checkoutCommitActionInFlight = false;
-  }
-}
-
-let checkoutCommitActionInFlight = false;
-async function runCheckoutCommitAction(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return;
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const push = !!o.push;
-
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-
-  if (!api || typeof api.checkoutsCommit !== "function") {
-    showToast("Commit actions are not supported in this build.");
-    return;
-  }
-
-  if (checkoutCommitActionInFlight) {
-    showToast("A commit action is already running.");
-    return;
-  }
-
-  if (job.status === "running") {
-    const label = push ? "Commit + push" : "Commit only";
-    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
-    if (!ok) return;
-  }
-
-  let suggested = "";
-  try {
-    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-      suggested = await api.checkoutsSuggestCommitMessage(id);
-    }
-  } catch {
-    suggested = "";
-  }
-
-  const entered = await promptText({
-    title: push ? "Commit + push" : "Commit only",
-    message: push
-      ? "Create a commit from local checkout changes and push the current branch."
-      : "Create a commit from local checkout changes.",
-    label: "Commit message",
-    defaultValue: suggested || defaultCheckoutCommitMessage(job),
-    okLabel: push ? "Commit + push" : "Commit",
-    cancelLabel: "Cancel"
-  });
-
-  if (entered == null) return;
-  const commitMessage = String(entered || "").trim();
-  if (!commitMessage) {
-    showToast("Commit message is required.");
-    return;
-  }
-
-  checkoutCommitActionInFlight = true;
-  try {
-    const res = await api.checkoutsCommit(id, { commitMessage, push });
-    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
-    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
-    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
-    const pushed = !!(res && res.pushed === true);
-
-    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
-    if (push && pushed) {
-      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
-      else if (branch) msg += ` and pushed ${branch}.`;
-      else msg += " and pushed.";
-    } else {
-      msg += ".";
-    }
-    showToast(msg);
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
-  } finally {
-    checkoutCommitActionInFlight = false;
-  }
-}
-
-let checkoutCommitActionInFlight = false;
-async function runCheckoutCommitAction(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return;
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const push = !!o.push;
-
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-
-  if (!api || typeof api.checkoutsCommit !== "function") {
-    showToast("Commit actions are not supported in this build.");
-    return;
-  }
-
-  if (checkoutCommitActionInFlight) {
-    showToast("A commit action is already running.");
-    return;
-  }
-
-  if (job.status === "running") {
-    const label = push ? "Commit + push" : "Commit only";
-    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
-    if (!ok) return;
-  }
-
-  let suggested = "";
-  try {
-    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-      suggested = await api.checkoutsSuggestCommitMessage(id);
-    }
-  } catch {
-    suggested = "";
-  }
-
-  const entered = await promptText({
-    title: push ? "Commit + push" : "Commit only",
-    message: push
-      ? "Create a commit from local checkout changes and push the current branch."
-      : "Create a commit from local checkout changes.",
-    label: "Commit message",
-    defaultValue: suggested || defaultCheckoutCommitMessage(job),
-    okLabel: push ? "Commit + push" : "Commit",
-    cancelLabel: "Cancel"
-  });
-
-  if (entered == null) return;
-  const commitMessage = String(entered || "").trim();
-  if (!commitMessage) {
-    showToast("Commit message is required.");
-    return;
-  }
-
-  checkoutCommitActionInFlight = true;
-  try {
-    const res = await api.checkoutsCommit(id, { commitMessage, push });
-    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
-    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
-    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
-    const pushed = !!(res && res.pushed === true);
-
-    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
-    if (push && pushed) {
-      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
-      else if (branch) msg += ` and pushed ${branch}.`;
-      else msg += " and pushed.";
-    } else {
-      msg += ".";
-    }
-    showToast(msg);
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
-  } finally {
-    checkoutCommitActionInFlight = false;
-  }
-}
-
-let checkoutCommitActionInFlight = false;
-async function runCheckoutCommitAction(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return;
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const push = !!o.push;
-
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-
-  if (!api || typeof api.checkoutsCommit !== "function") {
-    showToast("Commit actions are not supported in this build.");
-    return;
-  }
-
-  if (checkoutCommitActionInFlight) {
-    showToast("A commit action is already running.");
-    return;
-  }
-
-  if (job.status === "running") {
-    const label = push ? "Commit + push" : "Commit only";
-    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
-    if (!ok) return;
-  }
-
-  let suggested = "";
-  try {
-    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-      suggested = await api.checkoutsSuggestCommitMessage(id);
-    }
-  } catch {
-    suggested = "";
-  }
-
-  const entered = await promptText({
-    title: push ? "Commit + push" : "Commit only",
-    message: push
-      ? "Create a commit from local checkout changes and push the current branch."
-      : "Create a commit from local checkout changes.",
-    label: "Commit message",
-    defaultValue: suggested || defaultCheckoutCommitMessage(job),
-    okLabel: push ? "Commit + push" : "Commit",
-    cancelLabel: "Cancel"
-  });
-
-  if (entered == null) return;
-  const commitMessage = String(entered || "").trim();
-  if (!commitMessage) {
-    showToast("Commit message is required.");
-    return;
-  }
-
-  checkoutCommitActionInFlight = true;
-  try {
-    const res = await api.checkoutsCommit(id, { commitMessage, push });
-    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
-    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
-    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
-    const pushed = !!(res && res.pushed === true);
-
-    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
-    if (push && pushed) {
-      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
-      else if (branch) msg += ` and pushed ${branch}.`;
-      else msg += " and pushed.";
-    } else {
-      msg += ".";
-    }
-    showToast(msg);
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
-  } finally {
-    checkoutCommitActionInFlight = false;
-  }
-}
-
-let checkoutCommitActionInFlight = false;
-async function runCheckoutCommitAction(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return;
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const push = !!o.push;
-
-  const job = state.jobs.get(id);
-  if (!job || isDemoJob(job)) return;
-
-  if (!api || typeof api.checkoutsCommit !== "function") {
-    showToast("Commit actions are not supported in this build.");
-    return;
-  }
-
-  if (checkoutCommitActionInFlight) {
-    showToast("A commit action is already running.");
-    return;
-  }
-
-  if (job.status === "running") {
-    const label = push ? "Commit + push" : "Commit only";
-    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
-    if (!ok) return;
-  }
-
-  let suggested = "";
-  try {
-    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-      suggested = await api.checkoutsSuggestCommitMessage(id);
-    }
-  } catch {
-    suggested = "";
-  }
-
-  const entered = await promptText({
-    title: push ? "Commit + push" : "Commit only",
-    message: push
-      ? "Create a commit from local checkout changes and push the current branch."
-      : "Create a commit from local checkout changes.",
-    label: "Commit message",
-    defaultValue: suggested || defaultCheckoutCommitMessage(job),
-    okLabel: push ? "Commit + push" : "Commit",
-    cancelLabel: "Cancel"
-  });
-
-  if (entered == null) return;
-  const commitMessage = String(entered || "").trim();
-  if (!commitMessage) {
-    showToast("Commit message is required.");
-    return;
-  }
-
-  checkoutCommitActionInFlight = true;
-  try {
-    const res = await api.checkoutsCommit(id, { commitMessage, push });
-    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
-    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
-    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
-    const pushed = !!(res && res.pushed === true);
-
-    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
-    if (push && pushed) {
-      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
-      else if (branch) msg += ` and pushed ${branch}.`;
-      else msg += " and pushed.";
-    } else {
-      msg += ".";
-    }
-    showToast(msg);
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
-  } finally {
-    checkoutCommitActionInFlight = false;
   }
 }
 
@@ -7591,11 +6811,7 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  const cmd = String(action.command || "").trimEnd();
-  if (!cmd) {
-    showToast("Action has no command.");
-    return;
-  }
+  const integrateToDefault = isIntegrateToDefaultAction(action);
 
   const builtIn = builtInActionKindFromCommand(cmd);
   if (builtIn === "integrate_to_default") {
@@ -7614,6 +6830,17 @@ async function runJobActionById(actionId) {
   if (job && jobStatusForUi(job) === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
     if (!ok) return;
+  }
+
+  if (integrateToDefault) {
+    await runIntegrateToDefaultAction(job);
+    return;
+  }
+
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
   }
 
   // Actions run via the per-job terminal session so interactive commands work
