@@ -458,8 +458,27 @@ export async function cherryPick(cwd: string, commits: string[]): Promise<void> 
   const dir = String(cwd || "").trim() || process.cwd();
   const arr = Array.isArray(commits) ? commits.map((c) => String(c || "").trim()).filter(Boolean) : [];
   if (arr.length === 0) return;
-  const res = await git(["cherry-pick", ...arr], { cwd: dir, timeoutMs: 10 * 60_000 });
-  if (!res.ok) throw new Error(res.error);
+
+  function looksLikeEmptyCherryPickError(msg: string): boolean {
+    const low = String(msg || "").toLowerCase();
+    if (!low) return false;
+    return low.includes("cherry-pick is now empty") || low.includes("previous cherry-pick is now empty");
+  }
+
+  for (const commit of arr) {
+    const pick = await git(["cherry-pick", commit], { cwd: dir, timeoutMs: 10 * 60_000 });
+    if (pick.ok) continue;
+
+    const pickText = `${String(pick.error || "")}\n${String(pick.stderr || "")}`;
+    if (!looksLikeEmptyCherryPickError(pickText)) throw new Error(pick.error);
+
+    // Commit is already effectively present (or became empty after prior picks); skip and continue.
+    const skip = await git(["cherry-pick", "--skip"], { cwd: dir, timeoutMs: 60_000 });
+    if (!skip.ok) {
+      const bits = [String(pick.error || "").trim(), String(skip.error || "").trim()].filter(Boolean);
+      throw new Error(bits.join("\n\n"));
+    }
+  }
 }
 
 export async function findWorktreePathForBranch(cwd: string, branchName: string): Promise<string> {
