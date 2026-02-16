@@ -2191,6 +2191,13 @@ export async function startApp(): Promise<void> {
     }
   });
 
+  function normalizeBranchName(value: unknown): string {
+    const s = typeof value === "string" ? value.trim() : "";
+    if (!s) return "";
+    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
+    return stripped.slice(0, 200);
+  }
+
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
@@ -2303,12 +2310,14 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
+    const title = jobDisplayTitle(job);
+    const safeTitle = /^untitled$/i.test(title) ? "" : title;
     const suggestion = suggestCommitMessage({
       style,
       changedPaths,
-      taskText: lastJobPromptText(job),
-      jobTitle: jobDisplayTitle(job),
-      allowTaskContext: false
+      taskText: "",
+      jobTitle: safeTitle,
+      allowTaskContext: true
     });
 
     return { ok: true, suggestion };
