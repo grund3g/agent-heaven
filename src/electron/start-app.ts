@@ -1945,12 +1945,14 @@ export async function startApp(): Promise<void> {
     }
 
     const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const heuristicFallback = suggestCommitMessage({
+    const title = jobDisplayTitle(job);
+    const safeTitle = /^untitled$/i.test(title) ? "" : title;
+    const suggestion = suggestCommitMessage({
       style,
       changedPaths,
       taskText: "",
-      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
-      allowTaskContext: false
+      jobTitle: safeTitle,
+      allowTaskContext: true
     });
 
     let suggestion = heuristicFallback;
