@@ -1579,16 +1579,9 @@ export async function startApp(): Promise<void> {
 
   ipcMain.handle("projects:remove", async (evt, payload) => {
     assertTrustedIpcSender(evt);
-    const parsed = parseProjectRemovePayload(payload);
-    const projectId = parsed.id;
+    const projectId = String(id || "").trim();
     if (projectId) projectPathIndexCache.delete(projectId);
-
-    const project = store.listProjects().find((p: any) => p && p.id === projectId) || null;
-    const removed = store.removeProject(projectId || payload);
-    if (removed && parsed.deleteFolder && project && project.isTemporary) {
-      tryDeleteTemporaryProjectFolder(project);
-    }
-    return removed;
+    return store.removeProject(projectId || id);
   });
   ipcMain.handle("projects:update", async (evt, { id, patch }) => {
     assertTrustedIpcSender(evt);
