@@ -6015,6 +6015,26 @@ function projectColorById(id) {
   return p ? normalizeHexColor(p.color) : "";
 }
 
+function editorCommandFromSettings() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return typeof s.editorCommand === "string" ? s.editorCommand.trim() : "";
+}
+
+function hasConfiguredEditorCommand() {
+  return !!editorCommandFromSettings();
+}
+
+function jobPathForEditor(job) {
+  if (!job || typeof job !== "object") return "";
+
+  const cwdPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+  if (cwdPath) return cwdPath;
+
+  const project = projectById(job.projectId);
+  const basePath = project && typeof project.path === "string" ? project.path.trim() : "";
+  return basePath || "";
+}
+
 function integratedBadgeForJob(job) {
   if (!job || typeof job !== "object") return null;
   const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";

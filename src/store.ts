@@ -24,7 +24,6 @@ export const DEFAULT_STATE = {
     uiModel: "",
     uiTheme: "heaven", // heaven | nord | gruvbox | solarized | dracula | ocean
     uiColorScheme: "dark", // system | dark | light
-    uiDesignVersion: "v1", // v1 | v2
     editorCommand: "", // command/binary for "Open in editor" (e.g. code, cursor, zed)
 
     // Global shortcuts
@@ -877,6 +876,17 @@ function ensureSettings(settings) {
   if (typeof (next as any).integrateAutoArchive !== "boolean") {
     (next as any).integrateAutoArchive = true;
     changed = true;
+  }
+
+  if (typeof (next as any).editorCommand !== "string") {
+    (next as any).editorCommand = "";
+    changed = true;
+  } else {
+    const trimmed = String((next as any).editorCommand).trim();
+    if ((next as any).editorCommand !== trimmed) {
+      (next as any).editorCommand = trimmed;
+      changed = true;
+    }
   }
 
   const agentRes = ensureAgentSettings(next);
