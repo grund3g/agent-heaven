@@ -1836,7 +1836,7 @@ export class JobsManager {
 
     const job: Job = {
       id: jobId,
-      title: fallbackTitle,
+      title: "",
       titleLlm: "",
       status: "running",
       box: "board",
