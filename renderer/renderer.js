@@ -6117,11 +6117,7 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  const cmd = String(action.command || "").trimEnd();
-  if (!cmd) {
-    showToast("Action has no command.");
-    return;
-  }
+  const integrateToDefault = isIntegrateToDefaultAction(action);
 
   const builtIn = builtInActionKindFromCommand(cmd);
   if (builtIn === "integrate_to_default") {
@@ -6140,6 +6136,17 @@ async function runJobActionById(actionId) {
   if (job && job.status === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
     if (!ok) return;
+  }
+
+  if (integrateToDefault) {
+    await runIntegrateToDefaultAction(job);
+    return;
+  }
+
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
   }
 
   // Actions run via the per-job terminal session so interactive commands work
