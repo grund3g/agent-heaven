@@ -11,6 +11,8 @@ describe("core/jobs", () => {
     expect(j?.finishedAt).toBe(nowIso);
     expect(Array.isArray(j?.logs)).toBe(true);
     expect(j?.logs[0].text).toContain("marked as cancelled");
+    expect(j?.integratedToDefaultAt).toBe("");
+    expect(j?.integratedToDefaultBranch).toBe("");
   });
 
   it("computes snapshot meta (title/promptPreview/previewText)", () => {
@@ -23,6 +25,8 @@ describe("core/jobs", () => {
       archivedAt: "",
       archiveReason: "",
       trashedAt: "",
+      integratedToDefaultAt: "2020-01-01T00:00:02.000Z",
+      integratedToDefaultBranch: "main",
       createdAt: "2020-01-01T00:00:00.000Z",
       startedAt: "2020-01-01T00:00:00.000Z",
       finishedAt: "2020-01-01T00:00:01.000Z",
@@ -44,5 +48,7 @@ describe("core/jobs", () => {
     expect(meta.title).toBe("Fix store migration bug");
     expect(meta.promptPreview).toContain("Fix store migration bug");
     expect(meta.previewText).toBe("All set.");
+    expect(meta.integratedToDefaultAt).toBe("2020-01-01T00:00:02.000Z");
+    expect(meta.integratedToDefaultBranch).toBe("main");
   });
 });

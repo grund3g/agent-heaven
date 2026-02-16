@@ -21,6 +21,8 @@ export type Job = {
   archivedAt: string;
   archiveReason: string;
   trashedAt: string;
+  integratedToDefaultAt: string;
+  integratedToDefaultBranch: string;
   createdAt: string;
   startedAt: string;
   finishedAt: string;
@@ -61,6 +63,9 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   // The UI no longer distinguishes this, so treat all archived jobs uniformly.
   out.archiveReason = out.box === "archive" ? "archived" : "";
   out.trashedAt = safeIso(out.trashedAt) || "";
+  out.integratedToDefaultAt = safeIso(out.integratedToDefaultAt) || "";
+  out.integratedToDefaultBranch = typeof out.integratedToDefaultBranch === "string" ? out.integratedToDefaultBranch : "";
+  if (!out.integratedToDefaultAt) out.integratedToDefaultBranch = "";
 
   out.createdAt = safeIso(out.createdAt) || nowIso;
   out.startedAt = safeIso(out.startedAt) || out.createdAt;
@@ -120,6 +125,8 @@ export function snapshotJob(job: Job): Job {
     archivedAt,
     archiveReason,
     trashedAt,
+    integratedToDefaultAt,
+    integratedToDefaultBranch,
     createdAt,
     startedAt,
     finishedAt,
@@ -145,6 +152,8 @@ export function snapshotJob(job: Job): Job {
     archivedAt,
     archiveReason,
     trashedAt,
+    integratedToDefaultAt,
+    integratedToDefaultBranch,
     createdAt,
     startedAt,
     finishedAt,
@@ -214,6 +223,8 @@ export function snapshotJobMeta(job: Job): any {
     archivedAt,
     archiveReason,
     trashedAt,
+    integratedToDefaultAt,
+    integratedToDefaultBranch,
     createdAt,
     startedAt,
     finishedAt,
@@ -236,6 +247,8 @@ export function snapshotJobMeta(job: Job): any {
     archivedAt,
     archiveReason,
     trashedAt,
+    integratedToDefaultAt,
+    integratedToDefaultBranch,
     createdAt,
     startedAt,
     finishedAt,

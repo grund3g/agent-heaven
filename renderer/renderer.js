@@ -4899,11 +4899,26 @@ function projectColorById(id) {
   return p ? normalizeHexColor(p.color) : "";
 }
 
+function integratedBadgeForJob(job) {
+  if (!job || typeof job !== "object") return null;
+  const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
+  if (!atRaw) return null;
+  const branch = typeof job.integratedToDefaultBranch === "string" ? job.integratedToDefaultBranch.trim() : "";
+  const titleBits = ["Integrated into default branch"];
+  if (branch) titleBits.push(`branch=${branch}`);
+  titleBits.push(`at=${atRaw}`);
+  return { text: "Merged", title: titleBits.join("  ") };
+}
+
 function renderCard(job) {
   // Kept for reference; we use DOM nodes + textContent updates now.
   const prev = cardPreview(job);
   const sub = `${projectLabelById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
   const subTitle = `${projectNameById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
+  const integrated = integratedBadgeForJob(job);
+  const integratedHiddenAttr = integrated ? "" : " hidden";
+  const integratedText = integrated ? integrated.text : "Merged";
+  const integratedTitle = integrated ? oneLine(integrated.title) : "";
   const liveCls = prev.live ? " card__preview--live" : "";
   const cardCls = job.status === "running" ? "card card--running" : "card";
   const title = jobDisplayTitle(job);
@@ -4925,6 +4940,9 @@ function renderCard(job) {
           <div class="card__sub">
             <span class="projdot" aria-hidden="true"></span>
             <span class="card__subtext" title="${escapeHtml(oneLine(subTitle))}">${escapeHtml(sub)}</span>
+            <span class="card__flag card__flag--merged" data-job-integrated title="${escapeHtml(integratedTitle)}"${integratedHiddenAttr}>${escapeHtml(
+              integratedText
+            )}</span>
           </div>
         </div>
         <div class="card__status">
@@ -5172,6 +5190,23 @@ function updateCardEl(job) {
     if (subTextEl.classList && subTextEl.classList.contains("card__subtext")) {
       subTextEl.title = oneLine(subTitle);
     }
+  }
+
+  const integrated = integratedBadgeForJob(job);
+  let integratedEl = existing.querySelector("[data-job-integrated]");
+  if (!integratedEl) {
+    const subWrap = existing.querySelector(".card__sub");
+    if (subWrap) {
+      integratedEl = document.createElement("span");
+      integratedEl.className = "card__flag card__flag--merged";
+      integratedEl.setAttribute("data-job-integrated", "");
+      subWrap.appendChild(integratedEl);
+    }
+  }
+  if (integratedEl) {
+    integratedEl.hidden = !integrated;
+    integratedEl.textContent = integrated ? integrated.text : "Merged";
+    integratedEl.title = integrated ? oneLine(integrated.title) : "";
   }
 
   const pillEl = existing.querySelector(".pill");

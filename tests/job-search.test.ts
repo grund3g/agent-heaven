@@ -11,6 +11,8 @@ function mkJob(patch: Partial<Job>): Job {
     archivedAt: "",
     archiveReason: "",
     trashedAt: "",
+    integratedToDefaultAt: "",
+    integratedToDefaultBranch: "",
     createdAt: "2020-01-01T00:00:00.000Z",
     startedAt: "2020-01-01T00:00:00.000Z",
     finishedAt: "2020-01-01T00:00:01.000Z",

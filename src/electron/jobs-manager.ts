@@ -196,6 +196,16 @@ export class JobsManager {
     this.persistTimer = setTimeout(() => this.flushPersist(), this.PERSIST_DELAY_MS);
   }
 
+  private clearIntegratedToDefault(job: Job): boolean {
+    if (!job || typeof job !== "object") return false;
+    const prevAt = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt : "";
+    const prevBranch = typeof job.integratedToDefaultBranch === "string" ? job.integratedToDefaultBranch : "";
+    if (!prevAt && !prevBranch) return false;
+    job.integratedToDefaultAt = "";
+    job.integratedToDefaultBranch = "";
+    return true;
+  }
+
   private loadPersistedJobs() {
     // Load persisted jobs into memory (so renderer can list history).
     const now = new Date().toISOString();
@@ -248,6 +258,31 @@ export class JobsManager {
     const job = this.jobs.get(id);
     if (!job) return { ok: false, error: "Unknown job" };
     return { ok: true, job: snapshotJob(job) };
+  }
+
+  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
+    const id = String(jobId || "").trim();
+    if (!id) return { ok: false, error: "Missing jobId" };
+    const job = this.jobs.get(id);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const p = payload && typeof payload === "object" ? payload : {};
+    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
+    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
+    const branch = this.normalizeBranchName((p as any).branch);
+
+    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
+
+    job.integratedToDefaultAt = at;
+    job.integratedToDefaultBranch = branch;
+    this.sendJobEvent({
+      jobId: id,
+      kind: "meta",
+      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
+    });
+    this.markJobDirty(id);
+    this.tryPersistJobNow(job);
+    return { ok: true };
   }
 
   private getCodexSettingsFrom(settings: any) {
@@ -777,6 +812,14 @@ export class JobsManager {
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
 
     const ts = new Date().toISOString();
+    if (this.clearIntegratedToDefault(job)) {
+      this.sendJobEvent({
+        jobId,
+        kind: "meta",
+        patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
+      });
+      this.markJobDirty(jobId);
+    }
     this.setJobStatus(jobId, "running", { startedAt: ts, finishedAt: "", exitCode: null });
 
     let child: ChildProcess;
@@ -970,6 +1013,8 @@ export class JobsManager {
       archivedAt: "",
       archiveReason: "",
       trashedAt: "",
+      integratedToDefaultAt: "",
+      integratedToDefaultBranch: "",
       createdAt,
       startedAt: createdAt,
       finishedAt: "",
@@ -1074,6 +1119,15 @@ export class JobsManager {
     if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
+
+    if (this.clearIntegratedToDefault(job)) {
+      this.sendJobEvent({
+        jobId,
+        kind: "meta",
+        patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
+      });
+      this.markJobDirty(jobId);
+    }
 
     // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
     // When idle, a thread id is required to resume.

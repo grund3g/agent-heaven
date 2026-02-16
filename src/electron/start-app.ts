@@ -1362,6 +1362,7 @@ export async function startApp(): Promise<void> {
     }
 
     if (commits.length === 0) {
+      jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
       return {
         ok: true,
         targetPath: targetDir,
@@ -1374,6 +1375,7 @@ export async function startApp(): Promise<void> {
 
     try {
       await cherryPick(targetDir, commits);
+      jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
       return {
         ok: true,
         targetPath: targetDir,
