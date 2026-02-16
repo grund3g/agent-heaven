@@ -114,7 +114,6 @@ export class JobsManager {
     { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
   >(); // keep latest requested title refresh while one is in flight
   private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
-  private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
   // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
@@ -299,15 +298,6 @@ export class JobsManager {
     this.titleLlmProcs.clear();
     this.pendingTitleSummaryByJobId.clear();
     this.titleSummaryRevByJobId.clear();
-    for (const child of this.attentionLlmProcs.values()) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-    }
-    this.attentionLlmProcs.clear();
-    this.integratingToDefaultJobIds.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -533,10 +523,13 @@ export class JobsManager {
     return { agent: fallback.agent, model: fallback.model };
   }
 
-  private buildTitleSummarizerPrompt(userPrompt: string): string {
-    const rawPrompt = String(userPrompt || "").trim();
+  private buildTitleSummarizerPrompt(opts: { userPrompt: string; currentTitle?: string }): string {
+    const rawPrompt = String(opts && opts.userPrompt ? opts.userPrompt : "").trim();
+    const rawCurrentTitle =
+      opts && typeof opts.currentTitle === "string" ? truncateText(oneLine(opts.currentTitle).trim(), 120) : "";
     const MAX_PROMPT_CHARS = 6_000;
     const clipped = rawPrompt.length > MAX_PROMPT_CHARS ? `${rawPrompt.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : rawPrompt;
+    const currentTitleSection = rawCurrentTitle || "(none)";
 
     return [
       "Create a concise job card title summarizing the user's request.",
@@ -2152,6 +2145,9 @@ export class JobsManager {
     // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
     // When idle, a thread id is required to resume.
     if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
+
+    // Re-evaluate card title for every accepted follow-up prompt (focus can shift over time).
+    this.kickoffTitleSummary(jobId, text, null);
 
     const queuedAt = new Date().toISOString();
     job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
