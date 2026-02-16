@@ -42,6 +42,11 @@ const api = window.agentHeaven;
   jobDialogLive: document.getElementById("jobDialogLive"),
   jobDialogLogs: document.getElementById("jobDialogLogs"),
   jobDialogTerm: document.getElementById("jobDialogTerm"),
+  jobSearchInput: document.getElementById("jobSearchInput"),
+  jobSearchMeta: document.getElementById("jobSearchMeta"),
+  jobSearchPrevBtn: document.getElementById("jobSearchPrevBtn"),
+  jobSearchNextBtn: document.getElementById("jobSearchNextBtn"),
+  jobSearchClearBtn: document.getElementById("jobSearchClearBtn"),
   followupDropwrap: document.getElementById("followupDropwrap"),
   followupInput: document.getElementById("followupInput"),
   followupBadge: document.getElementById("followupBadge"),
@@ -227,6 +232,10 @@ const state = {
   searchPending: false,
   searchTimer: null,
   searchSeq: 0,
+  jobSearchQuery: "",
+  jobSearchMatches: [],
+  jobSearchIndex: -1,
+  jobSearchUnsupported: false,
 
   composerImages: [],
   composerFiles: [],
@@ -3276,6 +3285,238 @@ function clearSearch({ focus = true } = {}) {
       // ignore
     }
   }
+}
+
+function normalizeJobSearchQuery(value) {
+  const s = typeof value === "string" ? value : value == null ? "" : String(value);
+  return s.trim();
+}
+
+function focusJobSearchInput({ select = true } = {}) {
+  if (!els.jobSearchInput) return false;
+  try {
+    els.jobSearchInput.focus();
+    if (select) els.jobSearchInput.select();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function renderJobSearchUi() {
+  const q = normalizeJobSearchQuery(state.jobSearchQuery);
+  const matches = Array.isArray(state.jobSearchMatches) ? state.jobSearchMatches : [];
+  const total = matches.length;
+  const hasMatches = total > 0;
+  const unsupported = !!(q && state.jobSearchUnsupported);
+
+  if (els.jobSearchClearBtn) els.jobSearchClearBtn.hidden = !q;
+  if (els.jobSearchPrevBtn) els.jobSearchPrevBtn.disabled = !q || !hasMatches || unsupported;
+  if (els.jobSearchNextBtn) els.jobSearchNextBtn.disabled = !q || !hasMatches || unsupported;
+  if (!els.jobSearchMeta) return;
+
+  if (!q) {
+    els.jobSearchMeta.textContent = "";
+    return;
+  }
+
+  if (unsupported) {
+    els.jobSearchMeta.textContent = "Terminal tab";
+    return;
+  }
+
+  if (!hasMatches) {
+    els.jobSearchMeta.textContent = "No matches";
+    return;
+  }
+
+  const idx = state.jobSearchIndex >= 0 ? state.jobSearchIndex + 1 : 1;
+  els.jobSearchMeta.textContent = `${idx}/${total}`;
+}
+
+function jobSearchablePanelForActiveTab() {
+  if (state.activeTab === "chat") return els.jobDialogChat;
+  if (state.activeTab === "live") return els.jobDialogLive;
+  if (state.activeTab === "logs") return els.jobDialogLogs;
+  return null;
+}
+
+function clearJobSearchMarksInPanel(panelEl) {
+  const panel = panelEl && panelEl.querySelectorAll ? panelEl : null;
+  if (!panel) return;
+  const marks = panel.querySelectorAll("mark.jobfindmark");
+  if (!marks || marks.length === 0) return;
+
+  const parents = new Set();
+  marks.forEach((mark) => {
+    const parent = mark && mark.parentNode ? mark.parentNode : null;
+    if (!parent) return;
+    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+    parent.removeChild(mark);
+    if (parent && typeof parent.normalize === "function") parents.add(parent);
+  });
+  parents.forEach((parent) => parent.normalize());
+}
+
+function clearJobSearchMarks() {
+  clearJobSearchMarksInPanel(els.jobDialogChat);
+  clearJobSearchMarksInPanel(els.jobDialogLive);
+  clearJobSearchMarksInPanel(els.jobDialogLogs);
+}
+
+function collectJobSearchTextNodes(rootEl) {
+  const root = rootEl && rootEl.nodeType === 1 ? rootEl : null;
+  if (!root) return [];
+  const out = [];
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        const text = node && typeof node.nodeValue === "string" ? node.nodeValue : "";
+        if (!text || !text.trim()) return NodeFilter.FILTER_REJECT;
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        const tag = String(parent.tagName || "").toUpperCase();
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || tag === "INPUT" || tag === "TEXTAREA") {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    },
+    false
+  );
+
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) out.push(node);
+  return out;
+}
+
+function highlightJobSearchMatches(rootEl, query) {
+  const root = rootEl && rootEl.nodeType === 1 ? rootEl : null;
+  const q = normalizeJobSearchQuery(query).toLowerCase();
+  if (!root || !q) return [];
+
+  const nodes = collectJobSearchTextNodes(root);
+  const marks = [];
+
+  for (const node of nodes) {
+    const text = String(node.nodeValue || "");
+    const low = text.toLowerCase();
+    if (!low.includes(q)) continue;
+
+    const parent = node.parentNode;
+    if (!parent) continue;
+
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+    let idx = low.indexOf(q, cursor);
+    while (idx !== -1) {
+      if (idx > cursor) frag.appendChild(document.createTextNode(text.slice(cursor, idx)));
+      const mark = document.createElement("mark");
+      mark.className = "jobfindmark";
+      mark.textContent = text.slice(idx, idx + q.length);
+      frag.appendChild(mark);
+      marks.push(mark);
+      cursor = idx + q.length;
+      idx = low.indexOf(q, cursor);
+    }
+    if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
+    parent.replaceChild(frag, node);
+  }
+
+  return marks;
+}
+
+function setJobSearchActiveIndex(nextIndex, { scroll = true } = {}) {
+  const matches = Array.isArray(state.jobSearchMatches) ? state.jobSearchMatches : [];
+  const total = matches.length;
+  matches.forEach((mark) => {
+    if (mark && mark.classList) mark.classList.remove("jobfindmark--active");
+  });
+
+  if (!total) {
+    state.jobSearchIndex = -1;
+    renderJobSearchUi();
+    return;
+  }
+
+  let idx = Number(nextIndex);
+  if (!Number.isFinite(idx)) idx = 0;
+  idx = Math.trunc(idx);
+  idx %= total;
+  if (idx < 0) idx += total;
+  state.jobSearchIndex = idx;
+
+  const target = matches[idx];
+  if (target && target.classList) {
+    target.classList.add("jobfindmark--active");
+    if (scroll && typeof target.scrollIntoView === "function") {
+      try {
+        target.scrollIntoView({ block: "center", inline: "nearest" });
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  renderJobSearchUi();
+}
+
+function applyJobSearchToActivePanel({ preserveIndex = false, scroll = false } = {}) {
+  const q = normalizeJobSearchQuery(state.jobSearchQuery);
+  const prevIndex = state.jobSearchIndex;
+  clearJobSearchMarks();
+  state.jobSearchMatches = [];
+  state.jobSearchIndex = -1;
+  state.jobSearchUnsupported = false;
+
+  if (!q) {
+    renderJobSearchUi();
+    return;
+  }
+
+  if (!(els.jobDialog && els.jobDialog.open)) {
+    renderJobSearchUi();
+    return;
+  }
+
+  const panel = jobSearchablePanelForActiveTab();
+  if (!panel) {
+    state.jobSearchUnsupported = state.activeTab === "term";
+    renderJobSearchUi();
+    return;
+  }
+
+  const marks = highlightJobSearchMatches(panel, q);
+  state.jobSearchMatches = marks;
+
+  if (marks.length === 0) {
+    renderJobSearchUi();
+    return;
+  }
+
+  const desired = preserveIndex ? prevIndex : 0;
+  setJobSearchActiveIndex(desired, { scroll });
+}
+
+function setJobSearchQuery(value, { preserveIndex = false, scroll = false } = {}) {
+  state.jobSearchQuery = typeof value === "string" ? value : value == null ? "" : String(value);
+  if (els.jobSearchInput && els.jobSearchInput.value !== state.jobSearchQuery) {
+    els.jobSearchInput.value = state.jobSearchQuery;
+  }
+  applyJobSearchToActivePanel({ preserveIndex, scroll });
+}
+
+function clearJobSearch({ focus = false } = {}) {
+  setJobSearchQuery("");
+  if (focus) focusJobSearchInput({ select: false });
+}
+
+function stepJobSearch(delta) {
+  const q = normalizeJobSearchQuery(state.jobSearchQuery);
+  if (!q || state.jobSearchUnsupported) return;
+  const step = Number(delta) < 0 ? -1 : 1;
+  setJobSearchActiveIndex(state.jobSearchIndex + step, { scroll: true });
 }
 
 function jobBox(job) {
@@ -6801,6 +7042,7 @@ async function openJobDialog(jobId) {
   state.selectedJobId = jobId;
   let job = state.jobs.get(jobId);
   if (!job) return;
+  clearJobSearch();
 
   // While a job is running, the most useful default view is the live feed.
   state.activeTab = job.status === "running" ? "live" : "chat";
@@ -6924,6 +7166,7 @@ function setActiveTab(tab) {
   els.jobDialogLive.classList.toggle("panel--active", tab === "live");
   els.jobDialogLogs.classList.toggle("panel--active", tab === "logs");
   if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", tab === "term");
+  if (els.jobDialog && els.jobDialog.open) applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
   if (tab === "term") maybeEnsureTerminalForSelectedJob();
 }
 
@@ -7164,6 +7407,11 @@ function renderJobDialogPanels(job) {
   if (stickChat) els.jobDialogChat.scrollTop = els.jobDialogChat.scrollHeight;
   if (stickLive) els.jobDialogLive.scrollTop = els.jobDialogLive.scrollHeight;
   if (stickLogs) els.jobDialogLogs.scrollTop = els.jobDialogLogs.scrollHeight;
+  if (normalizeJobSearchQuery(state.jobSearchQuery)) {
+    applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
+  } else {
+    renderJobSearchUi();
+  }
 }
 
 function upsertJob(job) {
@@ -7937,9 +8185,42 @@ function wireUi() {
 	  if (els.searchClearBtn) {
 	    els.searchClearBtn.addEventListener("click", () => clearSearch());
 	  }
+
+	  if (els.jobSearchInput) {
+	    els.jobSearchInput.addEventListener("input", () => {
+	      setJobSearchQuery(els.jobSearchInput.value, { preserveIndex: false, scroll: false });
+	    });
+	    els.jobSearchInput.addEventListener("keydown", (e) => {
+	      if (e.key === "Escape") {
+	        e.preventDefault();
+	        clearJobSearch({ focus: true });
+	        return;
+	      }
+	      if (e.key === "Enter") {
+	        e.preventDefault();
+	        stepJobSearch(e.shiftKey ? -1 : 1);
+	      }
+	    });
+	  }
+	  if (els.jobSearchPrevBtn) {
+	    els.jobSearchPrevBtn.addEventListener("click", () => stepJobSearch(-1));
+	  }
+	  if (els.jobSearchNextBtn) {
+	    els.jobSearchNextBtn.addEventListener("click", () => stepJobSearch(1));
+	  }
+	  if (els.jobSearchClearBtn) {
+	    els.jobSearchClearBtn.addEventListener("click", () => clearJobSearch({ focus: true }));
+	  }
+	  renderJobSearchUi();
+
 	  document.addEventListener("keydown", (e) => {
 	    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
 	    if (e.key !== "f" && e.key !== "F") return;
+	    if (els.jobDialog && els.jobDialog.open) {
+	      e.preventDefault();
+	      focusJobSearchInput();
+	      return;
+	    }
 	    if (document.documentElement.dataset.mode === "lane" || document.documentElement.dataset.mode === "job") return;
 	    if (!els.searchInput) return;
 	    e.preventDefault();
@@ -7949,6 +8230,14 @@ function wireUi() {
 	    } catch {
 	      // ignore
 	    }
+	  });
+	  document.addEventListener("keydown", (e) => {
+	    if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+	    if (e.key !== "g" && e.key !== "G") return;
+	    if (!(els.jobDialog && els.jobDialog.open)) return;
+	    if (!normalizeJobSearchQuery(state.jobSearchQuery)) return;
+	    e.preventDefault();
+	    stepJobSearch(e.shiftKey ? -1 : 1);
 	  });
 
 	  // Cmd+/ (or Ctrl+/): show shortcuts.
@@ -8721,6 +9010,7 @@ function wireUi() {
   // Drop heavy arrays when the dialog closes to keep the board snappy with many jobs.
   els.jobDialog.addEventListener("close", () => {
     hideJobMoreMenu();
+    clearJobSearch();
 
     const jobId = state.selectedJobId;
     if (!jobId) return;
@@ -10431,8 +10721,10 @@ function renderShortcutsDialog() {
     <div class="shortcutsection">
       <div class="shortcutsection__title">Search</div>
       <div class="shortcutlist">
-        ${row(`${mod}+F`, "Focus search (board window)")}
-        ${row("Enter", "Search now (when search is focused)")}
+        ${row(`${mod}+F`, "Focus search (board) or find-in-tab (open job)")}
+        ${row(`${mod}+G`, "Next match (open job)")}
+        ${row(`${mod}+Shift+G`, "Previous match (open job)")}
+        ${row("Enter", "Search now (when board search is focused)")}
         ${row("Esc", "Clear search (when search is focused)")}
       </div>
     </div>
@@ -10443,6 +10735,7 @@ function renderShortcutsDialog() {
       <div class="shortcutsection__title">Job dialog</div>
       <div class="shortcutlist">
         ${row(`${mod}+Enter`, "Send follow-up (when follow-up is focused)")}
+        ${row("Enter / Shift+Enter", "Next / previous match (when find-in-tab is focused)")}
         ${row("Esc", "Close menus and dialogs", "Job popout window: Esc does not close the job view")}
       </div>
     </div>

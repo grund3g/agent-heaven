@@ -234,11 +234,51 @@
 	        </div>
         <div class="dialog__meta" id="jobDialogMeta"></div>
 	        <div class="dialog__body">
-	          <div class="tabs">
-	            <button class="tab tab--active" data-tab="chat">Chat</button>
-	            <button class="tab" data-tab="live">Live</button>
-	            <button class="tab" data-tab="logs">Logs</button>
-	            <button class="tab" data-tab="term">Terminal</button>
+	          <div class="jobtools">
+	            <div class="tabs">
+	              <button class="tab tab--active" data-tab="chat">Chat</button>
+	              <button class="tab" data-tab="live">Live</button>
+	              <button class="tab" data-tab="logs">Logs</button>
+	              <button class="tab" data-tab="term">Terminal</button>
+	            </div>
+	            <div class="jobsearchctl" role="search" aria-label="Search in current job tab">
+	              <input
+	                id="jobSearchInput"
+	                class="jobsearchctl__input"
+	                type="search"
+	                placeholder="Find in tab…"
+	                autocomplete="off"
+	              />
+	              <div id="jobSearchMeta" class="jobsearchctl__meta" aria-live="polite"></div>
+	              <button
+	                id="jobSearchPrevBtn"
+	                class="iconbtn jobsearchctl__nav"
+	                type="button"
+	                title="Previous match (Shift+Enter)"
+	                aria-label="Previous match"
+	              >
+	                ↑
+	              </button>
+	              <button
+	                id="jobSearchNextBtn"
+	                class="iconbtn jobsearchctl__nav"
+	                type="button"
+	                title="Next match (Enter)"
+	                aria-label="Next match"
+	              >
+	                ↓
+	              </button>
+	              <button
+	                id="jobSearchClearBtn"
+	                class="iconbtn jobsearchctl__clear"
+	                type="button"
+	                title="Clear search (Esc)"
+	                aria-label="Clear search"
+	                hidden
+	              >
+	                ×
+	              </button>
+	            </div>
 	          </div>
 		          <div id="jobDialogChat" class="panel panel--active"></div>
 		          <div id="jobDialogLive" class="panel panel--terminal"></div>
