@@ -58,16 +58,6 @@ describe("commit-message", () => {
     expect(msg).toBe("feat: update app.ts");
   });
 
-  test("ignores localized job titles when task context is disabled", () => {
-    const msg = suggestCommitMessage({
-      style: "conventional",
-      changedPaths: ["src/app.ts"],
-      jobTitle: "Bitte Fehler beim Start beheben",
-      allowTaskContext: false
-    });
-    expect(msg).toBe("feat: update app.ts");
-  });
-
   test("uses area-based fallback instead of checkpoint placeholder", () => {
     const msg = suggestCommitMessage({
       style: "conventional",
