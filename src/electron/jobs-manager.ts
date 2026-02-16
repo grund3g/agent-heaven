@@ -42,6 +42,7 @@ export class JobsManager {
     { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
   >(); // keep latest requested title refresh while one is in flight
   private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
+  private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
 
@@ -194,6 +195,14 @@ export class JobsManager {
     this.titleLlmProcs.clear();
     this.pendingTitleSummaryByJobId.clear();
     this.titleSummaryRevByJobId.clear();
+    for (const child of this.attentionLlmProcs.values()) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+    this.attentionLlmProcs.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -742,7 +751,18 @@ export class JobsManager {
     const job = this.jobs.get(jobId);
     if (!job) return;
     // Clear per-run hints when a new run begins (prevents stale hints affecting resumed runs).
-    if (status === "running") this.attentionHintByJobId.delete(jobId);
+    if (status === "running") {
+      this.attentionHintByJobId.delete(jobId);
+      const classifier = this.attentionLlmProcs.get(jobId);
+      if (classifier) {
+        try {
+          classifier.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.attentionLlmProcs.delete(jobId);
+      }
+    }
     job.status = status;
     Object.assign(job, extraPatch);
     this.sendJobEvent({ jobId, kind: "status", patch: { status, ...extraPatch } });
@@ -790,6 +810,271 @@ export class JobsManager {
     while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
 
     return { cleanText: out.join("\n"), hint };
+  }
+
+  private buildAttentionClassifierPrompt(opts: { lastUserPrompt: string; lastAssistant: string }): string {
+    const MAX_PROMPT_CHARS = 4_000;
+    const userRaw = String(opts && opts.lastUserPrompt ? opts.lastUserPrompt : "").trim();
+    const assistantRaw = String(opts && opts.lastAssistant ? opts.lastAssistant : "").trim();
+    const userPrompt =
+      userRaw.length > MAX_PROMPT_CHARS ? `${userRaw.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : userRaw;
+    const assistant =
+      assistantRaw.length > MAX_PROMPT_CHARS
+        ? `${assistantRaw.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]`
+        : assistantRaw;
+
+    return [
+      "Classify whether the final assistant response should be shown in Done or Needs Attention.",
+      "",
+      "Output format (STRICT):",
+      "- Return exactly one token: needs_attention OR done",
+      "- No markdown, no explanation, no punctuation",
+      "",
+      "Choose needs_attention if the assistant requires user input/action to continue now, for example:",
+      "- asks for missing information, files, credentials, logs, or confirmation",
+      "- asks the user to pick between options",
+      "- asks the user to run something and share results",
+      "- says it cannot proceed without a user reply",
+      "",
+      "Choose done if the task is complete and any follow-up is optional, for example:",
+      "- optional closers like 'Anything else?'",
+      "- optional offers that do not block completion",
+      "",
+      "If unsure, choose needs_attention.",
+      "",
+      "Last user prompt:",
+      userPrompt || "(empty)",
+      "",
+      "Final assistant response:",
+      assistant || "(empty)"
+    ].join("\n");
+  }
+
+  private parseAttentionDecision(raw: string): "done" | "needs_attention" | null {
+    const firstLine = String(raw || "")
+      .split("\n")
+      .map((x) => x.trim())
+      .find((x) => x);
+    if (!firstLine) return null;
+
+    const s = firstLine
+      .toLowerCase()
+      .replace(/[.`"'*]/g, "")
+      .trim();
+    if (!s) return null;
+    if (/\bneeds(?:_|\s|-)?attention\b/.test(s)) return "needs_attention";
+    if (/\bdone\b/.test(s)) return "done";
+    return null;
+  }
+
+  private runCodexAttentionSummary(opts: {
+    jobId: string;
+    codexPath: string;
+    settings: any;
+    projectPath: string;
+    model: string;
+    prompt: string;
+  }): Promise<string> {
+    const { jobId, codexPath, settings, projectPath, model, prompt } = opts;
+    return new Promise((resolve) => {
+      let out = "";
+      let resolved = false;
+
+      const child = this.runCodexExec({
+        codexPath,
+        settings,
+        projectPath,
+        model,
+        prompt,
+        images: [],
+        onEvent: (ev: any) => {
+          if (!ev || ev.kind !== "codex") return;
+          const data = ev.data || {};
+          if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+            const text = typeof data.item.text === "string" ? data.item.text : "";
+            if (text) out += (out ? "\n" : "") + text;
+          }
+        }
+      });
+
+      this.attentionLlmProcs.set(jobId, child);
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.attentionLlmProcs.delete(jobId);
+        resolve(out);
+      }, 20_000);
+
+      child.once("error", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.attentionLlmProcs.delete(jobId);
+        resolve(out);
+      });
+      child.once("close", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.attentionLlmProcs.delete(jobId);
+        resolve(out);
+      });
+    });
+  }
+
+  private runClaudeAttentionSummary(opts: {
+    jobId: string;
+    claudePath: string;
+    settings: any;
+    projectPath: string;
+    model: string;
+    prompt: string;
+  }): Promise<string> {
+    const { jobId, claudePath, settings, projectPath, model, prompt } = opts;
+    return new Promise((resolve) => {
+      if (!this.runClaudeExec) return resolve("");
+
+      let out = "";
+      let resolved = false;
+
+      const child = this.runClaudeExec({
+        claudePath,
+        settings,
+        projectPath,
+        model,
+        sessionId: randomUUID(),
+        prompt,
+        onEvent: (ev: any) => {
+          if (!ev || ev.kind !== "claude") return;
+          const data = ev.data || {};
+          if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+            const text = this.claudeMessageToText(data.message);
+            if (text) out += (out ? "\n" : "") + text;
+          }
+        }
+      });
+
+      this.attentionLlmProcs.set(jobId, child);
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.attentionLlmProcs.delete(jobId);
+        resolve(out);
+      }, 20_000);
+
+      child.once("error", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.attentionLlmProcs.delete(jobId);
+        resolve(out);
+      });
+      child.once("close", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.attentionLlmProcs.delete(jobId);
+        resolve(out);
+      });
+    });
+  }
+
+  private async classifyAttentionOnSuccess(job: Job): Promise<"done" | "needs_attention" | null> {
+    const lastAssistant = [...job.messages]
+      .reverse()
+      .find((m: any) => m && m.role === "assistant" && typeof m.text === "string" && String(m.text).trim());
+    const assistantText = lastAssistant && typeof lastAssistant.text === "string" ? String(lastAssistant.text) : "";
+    if (!assistantText) return null;
+
+    const lastPrompt = Array.isArray(job.prompts) && job.prompts.length > 0 ? job.prompts[job.prompts.length - 1] : null;
+    const promptText = lastPrompt && typeof (lastPrompt as any).text === "string" ? (lastPrompt as any).text : "";
+    const llmPrompt = this.buildAttentionClassifierPrompt({ lastUserPrompt: promptText, lastAssistant: assistantText });
+
+    const settings = this.store.getSettings();
+    const codexSettings = this.getCodexSettingsFrom(settings);
+    const claudeSettings = this.getClaudeSettingsFrom(settings);
+
+    const fallbackAgent = this.normalizeAgentKey(job.agent);
+    const fallbackModel = String(job.model || "").trim();
+    const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
+
+    try {
+      let raw = "";
+      if (picked.agent === "claude") {
+        if (!this.runClaudeExec) return null;
+        const claudePath = this.getClaudePath();
+        const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
+        raw = await this.runClaudeAttentionSummary({
+          jobId: job.id,
+          claudePath,
+          settings: safeClaudeSettings,
+          projectPath: job.projectPath || process.cwd(),
+          model: picked.model,
+          prompt: llmPrompt
+        });
+      } else {
+        const codexPath = this.getCodexPath();
+        const safeCodexSettings = {
+          ...(codexSettings || {}),
+          sandboxMode: "read-only",
+          bypassApprovalsAndSandbox: false,
+          skipGitRepoCheck: true
+        };
+        raw = await this.runCodexAttentionSummary({
+          jobId: job.id,
+          codexPath,
+          settings: safeCodexSettings,
+          projectPath: job.projectPath || process.cwd(),
+          model: picked.model,
+          prompt: llmPrompt
+        });
+      }
+      return this.parseAttentionDecision(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  private resolveSuccessStatus(
+    hinted: "done" | "needs_attention" | null,
+    llmDecision: "done" | "needs_attention" | null
+  ): "done" | "needs_attention" {
+    if (hinted === "needs_attention" || llmDecision === "needs_attention") return "needs_attention";
+    if (hinted === "done" || llmDecision === "done") return "done";
+    return "done";
+  }
+
+  private kickoffAttentionClassification(jobId: string, finishedAt: string, code: number | null, hinted: "done" | "needs_attention" | null) {
+    const startJob = this.jobs.get(jobId);
+    if (!startJob) return;
+
+    void (async () => {
+      const llmDecision = await this.classifyAttentionOnSuccess(startJob);
+      const status = this.resolveSuccessStatus(hinted, llmDecision);
+
+      const live = this.jobs.get(jobId);
+      if (!live) return;
+      // Ignore stale classifications (e.g. if the job resumed in the meantime).
+      if (live.status === "running") return;
+      if (String(live.finishedAt || "") !== String(finishedAt || "")) return;
+      if ((typeof live.exitCode === "number" ? live.exitCode : null) !== (typeof code === "number" ? code : null)) return;
+
+      if (live.status !== status) {
+        this.setJobStatus(jobId, status, { finishedAt, exitCode: code });
+      }
+    })();
   }
 
   private wantsAttentionOnSuccess(job: Job): boolean {
@@ -979,16 +1264,15 @@ export class JobsManager {
     }
 
     const hinted = this.attentionHintByJobId.get(jobId) || null;
-    const wantsAttention = hinted ? hinted === "needs_attention" : this.wantsAttentionOnSuccess(job);
+    const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
 
     if (signal) {
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
     } else if (code !== 0) {
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
-    } else if (wantsAttention) {
-      this.setJobStatus(jobId, "needs_attention", { finishedAt, exitCode: code });
     } else {
-      this.setJobStatus(jobId, "done", { finishedAt, exitCode: code });
+      this.setJobStatus(jobId, provisionalStatus, { finishedAt, exitCode: code });
+      this.kickoffAttentionClassification(jobId, finishedAt, typeof code === "number" ? code : null, hinted);
     }
   }
 

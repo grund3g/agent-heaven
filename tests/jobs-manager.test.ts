@@ -245,6 +245,73 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.messages[0].text.includes("AH_STATUS")).toBe(false);
   });
 
+  it("reclassifies successful runs with a final LLM pass", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    let execChild: FakeChild | null = null;
+
+    const runCodexExec = (opts: any) => {
+      const prompt = String((opts && opts.prompt) || "");
+      const child = new FakeChild();
+
+      if (prompt.includes("Create a concise job card title summarizing the user's request.")) {
+        setTimeout(() => child.emit("close", 0, null), 0);
+        return child as any;
+      }
+
+      if (prompt.includes("Classify whether the final assistant response should be shown in Done or Needs Attention.")) {
+        setTimeout(() => {
+          if (typeof opts.onEvent === "function") {
+            opts.onEvent({
+              ts: "2020-01-01T00:00:02.000Z",
+              stream: "stdout",
+              kind: "codex",
+              data: { type: "item.completed", item: { type: "agent_message", text: "needs_attention" } }
+            });
+          }
+          child.emit("close", 0, null);
+        }, 0);
+        return child as any;
+      }
+
+      execOnEvent = opts.onEvent;
+      execChild = child;
+      return child as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    expect(execChild).not.toBeNull();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:01.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "item.completed", item: { type: "agent_message", text: "Ich brauche deine Entscheidung: Option A oder B?" } }
+    });
+
+    execChild!.emit("close", 0, null);
+    await vi.runAllTimersAsync();
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.status).toBe("needs_attention");
+  });
+
   it("starts claude jobs, handles system init, and can resume", async () => {
     const events: any[] = [];
 
