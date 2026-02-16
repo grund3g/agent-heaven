@@ -4782,18 +4782,14 @@ function setLaneHidden(laneEl, hidden) {
   wrap.hidden = !!hidden;
 }
 
-function countLaneCards(laneEl) {
-  if (!laneEl || !laneEl.querySelectorAll) return 0;
-  return laneEl.querySelectorAll("[data-job-id]").length;
-}
-
 function syncBoardLaneVisibility() {
-  // Only hide empty lanes on the main board view; popout lane windows should keep their lane visible even when empty.
+  // Keep all board lanes visible so one non-empty lane never expands to full width.
+  // Popout lane windows are still controlled by applyViewLayout via state.focusLane.
   if (state.view !== "board") return;
   if (state.focusLane) return;
-  setLaneHidden(els.laneRunning, countLaneCards(els.laneRunning) === 0);
-  setLaneHidden(els.laneAttention, countLaneCards(els.laneAttention) === 0);
-  setLaneHidden(els.laneDone, countLaneCards(els.laneDone) === 0);
+  setLaneHidden(els.laneRunning, false);
+  setLaneHidden(els.laneAttention, false);
+  setLaneHidden(els.laneDone, false);
 }
 
 function setLaneTitle(laneEl, title) {
