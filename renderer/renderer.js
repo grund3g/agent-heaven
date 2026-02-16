@@ -6941,15 +6941,30 @@ async function startIntegrateToDefaultFromDialog() {
       return;
     } catch (err) {
       const msg = String(err && err.message ? err.message : err);
-      if (!askedCommitMessage && /Provide a commit message first/i.test(msg)) {
-        askedCommitMessage = true;
-        const suggested = suggestIntegrateCommitMessage(job);
-        const entered = window.prompt(
-          "The task checkout has uncommitted changes.\n\nPlease enter a commit message before integrating to the default branch:",
-          suggested
-        );
-        if (entered == null) return;
-        commitMessage = String(entered || "").trim();
+      if (msg.includes("Provide a commit message first")) {
+        setIntegrateDialogPhase("pending", {
+          status: "Commit message required",
+          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
+        });
+
+        let suggested = "";
+        try {
+          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
+            suggested = await api.checkoutsSuggestCommitMessage(id, { forceEnglish: true });
+          }
+        } catch {
+          suggested = "";
+        }
+
+        const entered = await promptText({
+          title: "Commit message",
+          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
+          label: "Commit message",
+          defaultValue: suggested || defaultIntegrateCommitMessage(job),
+          okLabel: "Continue",
+          cancelLabel: "Cancel"
+        });
+        const commitMessage = String(entered || "").trim();
         if (!commitMessage) {
           showToast("Integration cancelled (empty commit message).");
           return;
