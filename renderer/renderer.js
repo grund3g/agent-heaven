@@ -8882,15 +8882,84 @@ function wireUi() {
   restoreComposerDraft();
 
   // Attach images/files via drag&drop and render them as removable preview tiles.
+  let fileDragDepth = 0;
+  function clearDropwrapDragover() {
+    if (els.promptDropwrap) els.promptDropwrap.classList.remove("dropwrap--dragover");
+    if (els.followupDropwrap) els.followupDropwrap.classList.remove("dropwrap--dragover");
+  }
+  function activeAttachmentDropTarget() {
+    if (els.jobDialog && els.jobDialog.open && els.followupDropwrap && els.followupInput) {
+      return {
+        wrap: els.followupDropwrap,
+        input: els.followupInput,
+        addImages: (imgs) => setFollowupImages(mergeImages(state.followupImages, imgs)),
+        addFiles: (files) => setFollowupFiles(mergeFiles(state.followupFiles, files))
+      };
+    }
+    if (els.promptDropwrap && els.promptInput) {
+      return {
+        wrap: els.promptDropwrap,
+        input: els.promptInput,
+        addImages: (imgs) => setComposerImages(mergeImages(state.composerImages, imgs)),
+        addFiles: (files) => setComposerFiles(mergeFiles(state.composerFiles, files))
+      };
+    }
+    return null;
+  }
+  function syncActiveDropwrapHighlight() {
+    const target = activeAttachmentDropTarget();
+    clearDropwrapDragover();
+    if (!target || !target.wrap) return null;
+    target.wrap.classList.add("dropwrap--dragover");
+    return target;
+  }
+  document.addEventListener("dragenter", (e) => {
+    const dt = e.dataTransfer;
+    if (!dataTransferHasFiles(dt)) return;
+    e.preventDefault();
+    fileDragDepth += 1;
+    syncActiveDropwrapHighlight();
+  });
   document.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
     if (!dataTransferHasFiles(dt)) return;
     e.preventDefault();
+    if (dt) dt.dropEffect = "copy";
+    syncActiveDropwrapHighlight();
+  });
+  document.addEventListener("dragleave", (e) => {
+    const dt = e.dataTransfer;
+    if (!dataTransferHasFiles(dt)) return;
+    const leftWindow =
+      Number.isFinite(e.clientX) &&
+      Number.isFinite(e.clientY) &&
+      (e.clientX < 0 || e.clientY < 0 || e.clientX > window.innerWidth || e.clientY > window.innerHeight);
+    if (leftWindow) fileDragDepth = 0;
+    else fileDragDepth = Math.max(0, fileDragDepth - 1);
+    if (fileDragDepth === 0) clearDropwrapDragover();
+  });
+  document.addEventListener("dragend", () => {
+    fileDragDepth = 0;
+    clearDropwrapDragover();
+  });
+  window.addEventListener("blur", () => {
+    fileDragDepth = 0;
+    clearDropwrapDragover();
   });
   document.addEventListener("drop", (e) => {
     const dt = e.dataTransfer;
     if (!dt || !dt.files || dt.files.length === 0) return;
     e.preventDefault();
+    fileDragDepth = 0;
+    const target = activeAttachmentDropTarget();
+    clearDropwrapDragover();
+    if (!target) return;
+    const dropped = droppedFileEntries(e);
+    const imgs = imagePathsFromDroppedEntries(dropped);
+    const files = nonImagePathsFromDroppedEntries(dropped);
+    if (imgs.length > 0) target.addImages(imgs);
+    if (files.length > 0) target.addFiles(files);
+    if (imgs.length > 0 || files.length > 0) target.input.focus();
   });
 
   els.promptAttachments.addEventListener("click", (e) => {
@@ -8943,48 +9012,6 @@ function wireUi() {
     const thumb = e.target && e.target.closest ? e.target.closest(".attachthumb") : null;
     if (!thumb) return;
     openImageDialogForThumbEl(e.target);
-  });
-
-  els.promptDropwrap.addEventListener("dragover", (e) => {
-    const dt = e.dataTransfer;
-    if (!dataTransferHasFiles(dt)) return;
-    e.preventDefault();
-    els.promptDropwrap.classList.add("dropwrap--dragover");
-  });
-  els.promptDropwrap.addEventListener("dragleave", () => {
-    els.promptDropwrap.classList.remove("dropwrap--dragover");
-  });
-  els.promptDropwrap.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    els.promptDropwrap.classList.remove("dropwrap--dragover");
-    const dropped = droppedFileEntries(e);
-    const imgs = imagePathsFromDroppedEntries(dropped);
-    const files = nonImagePathsFromDroppedEntries(dropped);
-    if (imgs.length > 0) setComposerImages(mergeImages(state.composerImages, imgs));
-    if (files.length > 0) setComposerFiles(mergeFiles(state.composerFiles, files));
-    if (imgs.length > 0 || files.length > 0) els.promptInput.focus();
-  });
-
-  els.followupDropwrap.addEventListener("dragover", (e) => {
-    const dt = e.dataTransfer;
-    if (!dataTransferHasFiles(dt)) return;
-    e.preventDefault();
-    els.followupDropwrap.classList.add("dropwrap--dragover");
-  });
-  els.followupDropwrap.addEventListener("dragleave", () => {
-    els.followupDropwrap.classList.remove("dropwrap--dragover");
-  });
-  els.followupDropwrap.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    els.followupDropwrap.classList.remove("dropwrap--dragover");
-    const dropped = droppedFileEntries(e);
-    const imgs = imagePathsFromDroppedEntries(dropped);
-    const files = nonImagePathsFromDroppedEntries(dropped);
-    if (imgs.length > 0) setFollowupImages(mergeImages(state.followupImages, imgs));
-    if (files.length > 0) setFollowupFiles(mergeFiles(state.followupFiles, files));
-    if (imgs.length > 0 || files.length > 0) els.followupInput.focus();
   });
 
   els.jobDialogClose.addEventListener("click", () => {
