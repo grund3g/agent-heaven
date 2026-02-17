@@ -10,21 +10,23 @@
 
 Agent Heaven is a local Electron desktop app that runs AI coding agents (OpenAI Codex CLI and/or Anthropic Claude Code CLI) as "cards" on a Kanban board and streams their output in real time.
 
+## Key features
+
+- Parallel AI coding agents as Kanban cards (Running / Needs Attention / Done)
+- Live streaming output (terminal view + raw JSON logs)
+- Built-in workflow actions (checkpoint changes, integrate to default branch, commit + push defaults)
+- Smart job outcome handling (Done vs Needs Attention + merged label)
+- Multi-project runs with persistent history (incl. Codex thread IDs / Claude session IDs for resume)
+- Drag & drop attachments and file path autocomplete in prompts
+- Follow-ups, auto-generated card titles, and open-in-Code from tasks
+- Multi-window / multi-display support
+- Themes, sounds, and global hotkey (optional)
+
 <p align="center">
   <img src="assets/screenshot.png" alt="Agent Heaven app screenshot" width="1000" />
 </p>
 
 [Releases](https://github.com/grund3g/agent-heaven/releases/latest) · [Development](#development) · [License](LICENSE)
-
-## Highlights
-
-- Kanban board (Running / Needs Attention / Done)
-- Live streaming output (terminal view + raw JSON logs)
-- Multi-project: each run is tied to a project folder
-- Drag & drop support: images and files become attachment tiles; file paths are appended to the sent prompt/follow-up automatically
-- Persistent history (incl. Codex thread IDs / Claude session IDs for resume)
-- Multi-window / multi-display support
-- Themes, sounds, and global hotkey (optional)
 
 ## Download / Install
 
