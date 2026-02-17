@@ -260,9 +260,8 @@ export class TerminalManager {
   detachAllByWebContentsId(webContentsId: unknown) {
     const wcId = typeof webContentsId === "number" ? webContentsId : Number(webContentsId);
     if (!Number.isFinite(wcId)) return;
-    for (const [jobId, session] of this.sessions.entries()) {
+    for (const session of this.sessions.values()) {
       session.subscribers.delete(wcId);
-      this.scheduleDestroyIfUnsubscribed(jobId, session);
     }
   }
 

@@ -165,42 +165,6 @@ export class JobsManager {
     return normalizeGitCheckoutMode(value);
   }
 
-  private normalizeMissingCheckoutAction(value: unknown): "ask" | "fallback_to_project" | "recreate_worktree" {
-    const raw = String(value || "")
-      .trim()
-      .toLowerCase();
-    if (raw === "fallback_to_project" || raw === "fallback" || raw === "inplace") return "fallback_to_project";
-    if (raw === "recreate_worktree" || raw === "recreate" || raw === "worktree") return "recreate_worktree";
-    return "ask";
-  }
-
-  private promptTextNormalized(prompt: unknown): string {
-    return typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
-  }
-
-  private hasWriteIntent(prompt: unknown): boolean {
-    const text = this.promptTextNormalized(prompt);
-    if (!text) return false;
-    return WRITE_INTENT_PATTERNS.some((re) => re.test(text));
-  }
-
-  private hasReadOnlyIntent(prompt: unknown): boolean {
-    const text = this.promptTextNormalized(prompt);
-    if (!text) return false;
-    return READ_ONLY_INTENT_PATTERNS.some((re) => re.test(text));
-  }
-
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = this.promptTextNormalized(prompt);
-    if (!text) return false;
-    if (this.hasWriteIntent(text)) return false;
-    if (this.hasReadOnlyIntent(text)) return true;
-
-    // Questions without edit intent are typically informational.
-    if (text.endsWith("?")) return true;
-    return false;
-  }
-
   private normalizeBranchName(value: unknown): string {
     return normalizeGitBranchName(value);
   }
