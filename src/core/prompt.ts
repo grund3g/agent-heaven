@@ -170,5 +170,8 @@ export function jobDisplayTitle(job: unknown): string {
   const fallback = typeof j.title === "string" ? oneLine(j.title) : "";
   if (fallback) return truncateText(fallback, JOB_TITLE_MAX_LEN);
 
+  const status = typeof j.status === "string" ? oneLine(j.status).toLowerCase() : "";
+  if (status === "running") return "Generating title...";
+
   return "Untitled";
 }
