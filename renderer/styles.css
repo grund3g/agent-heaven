@@ -3976,6 +3976,24 @@ body::before {
   }
 }
 
+@media (max-width: 1500px) and (min-width: 1101px) {
+  .searchmeta {
+    display: none;
+  }
+}
+
+:root[data-sidebar="collapsed"] #openStatusBtn {
+  display: inline-flex;
+}
+
+:root[data-sidebar="collapsed"] .viewbar__toggle {
+  display: grid;
+}
+
+:root[data-sidebar="collapsed"] #openStatusSidebarBtn {
+  display: none;
+}
+
 .ctxmenu {
   position: fixed;
   z-index: 10000;
