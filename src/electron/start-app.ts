@@ -33,6 +33,7 @@ import {
   findWorktreePathForBranch,
   getGitCommonDir,
   getGitInfo,
+  hasCherryPickInProgress,
   listChangedPaths,
   listCommitsInRange,
   listRecentCommitSubjects,
@@ -504,6 +505,248 @@ function runClaudeUiPrompt(opts: {
       clearTimeout(timeout);
       resolve(out);
     });
+  });
+}
+
+function truncateText(raw: unknown, max = 2000): string {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  const lim = Math.max(80, Math.trunc(max || 2000));
+  if (s.length <= lim) return s;
+  return `${s.slice(0, lim).trimEnd()}…`;
+}
+
+function normalizeIntegrateToDefaultMode(value: unknown): "agent" | "cli" {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "cli" || raw === "git" || raw === "shell" || raw === "local") return "cli";
+  return "agent";
+}
+
+function safeErrorMessage(err: any): string {
+  const msg = String(err && err.message ? err.message : err).trim();
+  return msg || "Unexpected error";
+}
+
+function buildIntegrateToDefaultAgentPrompt(opts: {
+  sourceDir: string;
+  targetDir: string;
+  targetBranch: string;
+  commits: string[];
+}): string {
+  const sourceDir = String(opts.sourceDir || "").trim();
+  const targetDir = String(opts.targetDir || "").trim();
+  const targetBranch = String(opts.targetBranch || "").trim();
+  const commits = Array.isArray(opts.commits) ? opts.commits.map((c) => String(c || "").trim()).filter(Boolean) : [];
+  const commitBlock = commits.length > 0 ? commits.map((c, i) => `${i + 1}. ${c}`).join("\n") : "(none)";
+
+  return [
+    "You are executing a git integration action in a local repository.",
+    "Goal: cherry-pick the listed commits onto the target branch.",
+    "",
+    "Constraints:",
+    "- Work only inside this repository checkout.",
+    "- Do not push, pull, fetch, rebase, merge, or rewrite history.",
+    "- Do not edit files manually unless a cherry-pick conflict forces it.",
+    "- Keep this non-interactive and deterministic.",
+    "",
+    "Repository context:",
+    `- source checkout path: ${sourceDir || "(unknown)"}`,
+    `- target checkout path (your cwd): ${targetDir || "(unknown)"}`,
+    `- target branch: ${targetBranch || "(unknown)"}`,
+    "",
+    "Commits to cherry-pick in exact order:",
+    commitBlock,
+    "",
+    "Required procedure:",
+    `1) Ensure HEAD is on branch ${targetBranch}. If not, switch to it.`,
+    "2) Verify there is no cherry-pick already in progress.",
+    "3) Cherry-pick commits in order. If a pick is empty/already applied, skip it and continue.",
+    "4) If a real conflict occurs, stop and report failure with the exact first failing command and concise reason.",
+    "",
+    "Output format (STRICT):",
+    '- Return ONLY valid JSON: {"ok":true,"applied":<number>} OR {"ok":false,"error":"...","conflict":true|false}',
+    "- No markdown, no code fences, no extra text."
+  ].join("\n");
+}
+
+function looksLikeCherryPickConflict(text: unknown): boolean {
+  const low = String(text || "").toLowerCase();
+  if (!low) return false;
+  return (
+    low.includes("conflict") ||
+    low.includes("cherry-pick --continue") ||
+    low.includes("could not apply") ||
+    low.includes("merge conflict")
+  );
+}
+
+function looksLikeAgentInfrastructureFailure(text: unknown): boolean {
+  const low = String(text || "").toLowerCase();
+  if (!low) return false;
+  return (
+    low.includes("no agent cli") ||
+    low.includes("not found") ||
+    low.includes("enoent") ||
+    low.includes("eacces") ||
+    low.includes("permission denied") ||
+    low.includes("timed out") ||
+    low.includes("timeout") ||
+    low.includes("auth") ||
+    low.includes("api key") ||
+    low.includes("rate limit") ||
+    low.includes("spawn ")
+  );
+}
+
+function normalizeAgentIntegrateResponse(raw: string, expectedCommits: number): {
+  ok: boolean;
+  commitsApplied: number;
+  error: string;
+  canFallbackToCli: boolean;
+} {
+  const out = stripMarkdownCodeFences(String(raw || "")).trim();
+  const fallbackBase = Math.max(0, Math.trunc(expectedCommits || 0));
+  if (!out) {
+    return {
+      ok: false,
+      commitsApplied: 0,
+      error: "Agent returned no output.",
+      canFallbackToCli: true
+    };
+  }
+
+  const parsed = extractJsonFromText(out);
+  if (!isPlainObject(parsed)) {
+    return {
+      ok: false,
+      commitsApplied: 0,
+      error: `Agent returned non-JSON output:\n\n${truncateText(out, 1500)}`,
+      canFallbackToCli: true
+    };
+  }
+
+  const success =
+    parsed.ok === true ||
+    parsed.success === true ||
+    (typeof parsed.status === "string" && String(parsed.status).trim().toLowerCase() === "ok");
+  if (success) {
+    const rawApplied =
+      typeof parsed.applied === "number"
+        ? parsed.applied
+        : typeof parsed.commitsApplied === "number"
+          ? parsed.commitsApplied
+          : fallbackBase;
+    const applied = Math.max(0, Math.min(fallbackBase, Math.trunc(Number.isFinite(rawApplied) ? rawApplied : fallbackBase)));
+    return { ok: true, commitsApplied: applied, error: "", canFallbackToCli: false };
+  }
+
+  const error =
+    truncateText(
+      typeof parsed.error === "string"
+        ? parsed.error
+        : typeof parsed.message === "string"
+          ? parsed.message
+          : typeof parsed.reason === "string"
+            ? parsed.reason
+            : out,
+      2500
+    ) || "Agent integration failed.";
+  const explicitConflict = parsed.conflict === true;
+  const conflict = explicitConflict || looksLikeCherryPickConflict(error);
+  const canFallbackToCli = !conflict && looksLikeAgentInfrastructureFailure(error);
+  return { ok: false, commitsApplied: 0, error, canFallbackToCli };
+}
+
+async function runUiAgentExecPrompt(opts: {
+  settings: any;
+  codexSettings: any;
+  claudeSettings: any;
+  agent: "codex" | "claude";
+  model: string;
+  projectPath: string;
+  prompt: string;
+  timeoutMs?: number;
+}): Promise<{ output: string; timedOut: boolean }> {
+  const settings = opts && typeof opts === "object" ? opts.settings : {};
+  const codexSettings = opts && typeof opts === "object" ? opts.codexSettings : {};
+  const claudeSettings = opts && typeof opts === "object" ? opts.claudeSettings : {};
+  const agent = opts && opts.agent === "claude" ? "claude" : "codex";
+  const model = opts && typeof opts.model === "string" ? opts.model : "";
+  const projectPath = opts && typeof opts.projectPath === "string" ? opts.projectPath : process.cwd();
+  const prompt = opts && typeof opts.prompt === "string" ? opts.prompt : "";
+  const timeoutMs =
+    opts && Number.isFinite(Number(opts.timeoutMs)) ? Math.max(20_000, Math.trunc(Number(opts.timeoutMs))) : 10 * 60_000;
+
+  return await new Promise((resolve) => {
+    let out = "";
+    let resolved = false;
+    let timedOut = false;
+    let child: any = null;
+
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve({ output: out.trim(), timedOut });
+    };
+
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      try {
+        if (child) child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      finish();
+    }, timeoutMs);
+
+    try {
+      if (agent === "claude") {
+        child = runClaudeExec({
+          claudePath: resolveClaudeCliPathFromSettings(settings),
+          settings: claudeSettings || {},
+          projectPath,
+          model,
+          sessionId: randomUUID(),
+          prompt,
+          onEvent: (ev: any) => {
+            if (!ev || ev.kind !== "claude") return;
+            const data = ev.data || {};
+            if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+              const text = claudeMessageToText(data.message);
+              if (text) out += (out ? "\n" : "") + text;
+            }
+          }
+        });
+      } else {
+        child = runCodexExec({
+          codexPath: resolveCodexCliPathFromSettings(settings),
+          settings: codexSettings || {},
+          projectPath,
+          model,
+          prompt,
+          images: [],
+          onEvent: (ev: any) => {
+            if (!ev || ev.kind !== "codex") return;
+            const data = ev.data || {};
+            if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+              const text = typeof data.item.text === "string" ? data.item.text : "";
+              if (text) out += (out ? "\n" : "") + text;
+            }
+          }
+        });
+      }
+    } catch (err: any) {
+      out = safeErrorMessage(err);
+      finish();
+      return;
+    }
+
+    child.once("error", (err: any) => {
+      if (!out.trim()) out = safeErrorMessage(err);
+      finish();
+    });
+    child.once("close", () => finish());
   });
 }
 
@@ -1636,6 +1879,9 @@ export async function startApp(): Promise<void> {
       }
     }
 
+    const settings = store.getSettings();
+    const integrateMode = normalizeIntegrateToDefaultMode((settings as any).integrateToDefaultMode);
+
     let commits: string[] = [];
     try {
       commits = await listCommitsInRange(sourceDir, `${targetBranch}..HEAD`, { noMerges: true });
@@ -1659,6 +1905,115 @@ export async function startApp(): Promise<void> {
       };
     }
 
+    let integrationMethod = integrateMode === "agent" ? "agent" : "cli";
+    let agentFallbackReason = "";
+
+    if (integrateMode === "agent") {
+      const plan = await pickUiTextGenPlan(settings);
+      if (!plan.ok) {
+        integrationMethod = "cli (fallback from agent)";
+        const reason = "error" in plan ? String((plan as any).error || "") : "";
+        agentFallbackReason = truncateText(reason || "No agent CLI available.", 600);
+      } else {
+        const prompt = buildIntegrateToDefaultAgentPrompt({
+          sourceDir,
+          targetDir,
+          targetBranch,
+          commits
+        });
+
+        let parsed: { ok: boolean; commitsApplied: number; error: string; canFallbackToCli: boolean } | null = null;
+        let timedOut = false;
+        try {
+          const agentRun = await runUiAgentExecPrompt({
+            settings,
+            codexSettings: plan.codexSettings,
+            claudeSettings: plan.claudeSettings,
+            agent: plan.agent,
+            model: plan.model,
+            projectPath: targetDir,
+            prompt,
+            timeoutMs: 10 * 60_000
+          });
+          timedOut = !!agentRun.timedOut;
+          parsed = normalizeAgentIntegrateResponse(agentRun.output, commits.length);
+        } catch (err: any) {
+          const msg = safeErrorMessage(err);
+          if (!looksLikeAgentInfrastructureFailure(msg)) return { ok: false, error: `Agent integration failed:\n\n${msg}` };
+          parsed = {
+            ok: false,
+            commitsApplied: 0,
+            error: msg,
+            canFallbackToCli: true
+          };
+        }
+
+        if (parsed && parsed.ok) {
+          jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
+          return {
+            ok: true,
+            targetPath: targetDir,
+            targetBranch,
+            commitsApplied: parsed.commitsApplied,
+            committed,
+            committedSha,
+            integrationMethod: "agent"
+          };
+        }
+
+        const failMsgBase = parsed ? String(parsed.error || "").trim() : "Agent integration failed.";
+        const failMsg = timedOut ? `${failMsgBase}\n\n(Agent timed out.)` : failMsgBase;
+        const canFallback = !!(parsed && parsed.canFallbackToCli);
+        if (!canFallback) return { ok: false, error: failMsg || "Agent integration failed." };
+
+        integrationMethod = "cli (fallback from agent)";
+        agentFallbackReason = truncateText(failMsg || "Agent integration failed.", 600);
+
+        try {
+          const cherryPickInProgress = await hasCherryPickInProgress(targetDir);
+          if (cherryPickInProgress) {
+            return {
+              ok: false,
+              error:
+                `${failMsg}\n\n` +
+                `A cherry-pick is already in progress in:\n\n  ${targetDir}\n\n` +
+                `Resolve it first (continue or abort), then retry integration.`
+            };
+          }
+
+          const postAgent = await getGitInfo(targetDir);
+          if (!postAgent.isGitRepo) return { ok: false, error: `Default-branch checkout is not a git repo: ${targetDir}` };
+          if (postAgent.dirty) {
+            return {
+              ok: false,
+              error:
+                `${failMsg}\n\n` +
+                `Agent left local changes in the target checkout:\n\n  ${targetDir}\n\n` +
+                `Please inspect/clean it, then retry integration.`
+            };
+          }
+          if (postAgent.detached) {
+            return {
+              ok: false,
+              error:
+                `${failMsg}\n\n` +
+                `Default-branch checkout is in detached HEAD (${postAgent.sha || "?"}). Switch to ${targetBranch} first:\n\n  ${targetDir}`
+            };
+          }
+          if (postAgent.branch !== targetBranch) {
+            await switchBranch(targetDir, targetBranch);
+          }
+        } catch (err: any) {
+          return {
+            ok: false,
+            error:
+              `${failMsg}\n\n` +
+              `Could not prepare CLI fallback:\n\n${String(err && err.message ? err.message : err)}`
+          };
+        }
+      }
+    }
+
     try {
       await cherryPick(targetDir, commits);
       jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
@@ -1668,7 +2023,9 @@ export async function startApp(): Promise<void> {
         targetBranch,
         commitsApplied: commits.length,
         committed,
-        committedSha
+        committedSha,
+        integrationMethod,
+        agentFallbackReason
       };
     } catch (err: any) {
       const msg = String(err && err.message ? err.message : err);

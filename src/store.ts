@@ -45,6 +45,7 @@ export const DEFAULT_STATE = {
     boardDoneLimit: 250, // 0 = unlimited (limits Done lane rendering on Board)
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
     integrateAutoArchive: true, // auto-archive ticket after "Integrate to default branch"
+    integrateToDefaultMode: "agent", // agent | cli
 
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
     // Versioned seeding for built-in actions (so existing installs can pick up new defaults once).
@@ -174,6 +175,14 @@ function normalizeCheckoutMode(value) {
   if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
   if (raw === "worktree" || raw === "worktrees") return "worktree";
   if (raw === "clone" || raw === "checkout" || raw === "dedicated" || raw === "dedicated_checkout") return "clone";
+  return "";
+}
+
+function normalizeIntegrateToDefaultMode(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (!raw) return "";
+  if (raw === "agent" || raw === "llm" || raw === "ai") return "agent";
+  if (raw === "cli" || raw === "git" || raw === "shell" || raw === "local") return "cli";
   return "";
 }
 
@@ -596,6 +605,14 @@ function ensureSettings(settings) {
   if (typeof (next as any).integrateAutoArchive !== "boolean") {
     (next as any).integrateAutoArchive = true;
     changed = true;
+  }
+
+  {
+    const mode = normalizeIntegrateToDefaultMode((next as any).integrateToDefaultMode) || "agent";
+    if ((next as any).integrateToDefaultMode !== mode) {
+      (next as any).integrateToDefaultMode = mode;
+      changed = true;
+    }
   }
 
   if (typeof (next as any).editorCommand !== "string") {

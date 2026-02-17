@@ -61,7 +61,7 @@ describe("store", () => {
     expect(Object.prototype.hasOwnProperty.call(projects[0], "shortName")).toBe(false);
   });
 
-  it("defaults integrateAutoArchive to true and normalizes invalid values", () => {
+  it("defaults integrate settings and normalizes invalid values", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
     const storePath = path.join(tmpDir, "agent-heaven.store.json");
 
@@ -70,7 +70,8 @@ describe("store", () => {
       JSON.stringify(
         {
           settings: {
-            integrateAutoArchive: "yes please"
+            integrateAutoArchive: "yes please",
+            integrateToDefaultMode: "sometimes"
           },
           projects: []
         },
@@ -83,9 +84,11 @@ describe("store", () => {
     const s = new Store(storePath);
     s.load();
     expect(s.getSettings().integrateAutoArchive).toBe(true);
+    expect(s.getSettings().integrateToDefaultMode).toBe("agent");
 
-    const updated = s.updateSettings({ integrateAutoArchive: false });
+    const updated = s.updateSettings({ integrateAutoArchive: false, integrateToDefaultMode: "cli" });
     expect(updated.integrateAutoArchive).toBe(false);
+    expect(updated.integrateToDefaultMode).toBe("cli");
   });
 
   it("seeds built-in commit actions when upgrading action defaults", () => {

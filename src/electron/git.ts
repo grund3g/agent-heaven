@@ -454,6 +454,12 @@ export async function listCommitsInRange(
     .filter(Boolean);
 }
 
+export async function hasCherryPickInProgress(cwd: string): Promise<boolean> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const res = await git(["rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"], { cwd: dir, timeoutMs: 2_500 });
+  return !!res.ok;
+}
+
 export async function cherryPick(cwd: string, commits: string[]): Promise<void> {
   const dir = String(cwd || "").trim() || process.cwd();
   const arr = Array.isArray(commits) ? commits.map((c) => String(c || "").trim()).filter(Boolean) : [];

@@ -149,6 +149,7 @@ const api = window.agentHeaven;
 	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
 	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
+	  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -5875,6 +5876,12 @@ function isIntegrateAutoArchiveEnabled() {
   return s.integrateAutoArchive !== false;
 }
 
+function normalizeIntegrateToDefaultMode(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "cli") return "cli";
+  return "agent";
+}
+
 let integrateDialogJobId = "";
 let integrateDialogPhase = ""; // confirm | pending | success | error
 let integrateDialogStatusText = "";
@@ -6082,9 +6089,13 @@ async function startIntegrateToDefaultFromDialog() {
   integrateDialogTargetPath = "";
   integrateDialogTargetBranch = "";
   integrateDialogArchived = false;
+  const integrateMode = normalizeIntegrateToDefaultMode(state.settings && state.settings.integrateToDefaultMode);
   setIntegrateDialogPhase("pending", {
     status: "Integrating…",
-    message: "Cherry-picking commits onto the project's default branch. This may take a moment."
+    message:
+      integrateMode === "agent"
+        ? "Agent is integrating this checkout into the default branch. This may take a moment."
+        : "Cherry-picking commits onto the project's default branch. This may take a moment."
   });
 
   try {
@@ -6134,6 +6145,8 @@ async function startIntegrateToDefaultFromDialog() {
     const targetPath = res && typeof res.targetPath === "string" ? res.targetPath : "";
     const committed = !!(res && res.committed === true);
     const committedSha = res && typeof res.committedSha === "string" ? res.committedSha : "";
+    const integrationMethod = res && typeof res.integrationMethod === "string" ? String(res.integrationMethod || "").trim() : "";
+    const agentFallbackReason = res && typeof res.agentFallbackReason === "string" ? String(res.agentFallbackReason || "").trim() : "";
 
     let msg = "";
     if (applied <= 0) msg = "Nothing to integrate.";
@@ -6149,7 +6162,9 @@ async function startIntegrateToDefaultFromDialog() {
       targetBranch ? `Target branch: ${targetBranch}` : "",
       targetPath ? `Target path: ${targetPath}` : "",
       `Commits applied: ${applied}`,
-      committed && committedSha ? `Committed local changes: ${committedSha}` : committed ? "Committed local changes: yes" : ""
+      committed && committedSha ? `Committed local changes: ${committedSha}` : committed ? "Committed local changes: yes" : "",
+      integrationMethod ? `Integration mode: ${integrationMethod}` : "",
+      agentFallbackReason ? `Agent fallback: ${agentFallbackReason}` : ""
     ]
       .filter(Boolean)
       .join("\n");
@@ -9743,6 +9758,9 @@ function wireUi() {
 					      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
 					      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
 					      integrateAutoArchive: !!els.settingsIntegrateAutoArchive.checked,
+					      integrateToDefaultMode: normalizeIntegrateToDefaultMode(
+					        els.settingsIntegrateToDefaultMode ? els.settingsIntegrateToDefaultMode.value : ""
+					      ),
 					      agents: {
 				        codex: {
 				          path: els.settingsCodexPath.value.trim(),
@@ -10678,6 +10696,9 @@ function maybeShowMissingAgentBinariesToast(res) {
 					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
 					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
 					  els.settingsIntegrateAutoArchive.checked = s.integrateAutoArchive !== false;
+					  if (els.settingsIntegrateToDefaultMode) {
+					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
+					  }
 
 		  refreshCodexModelsDatalist({ showErrors: true });
 

@@ -544,6 +544,14 @@
 		              <input id="settingsIntegrateAutoArchive" type="checkbox" />
 		              <div class="field__label field__label--inline">Integrate action: auto-archive ticket after success</div>
 		            </label>
+		            <label class="field">
+		              <div class="field__label">Integrate action mode</div>
+		              <select id="settingsIntegrateToDefaultMode" class="select">
+		                <option value="agent">Agent (recommended)</option>
+		                <option value="cli">CLI (git commands)</option>
+		              </select>
+		            </label>
+		            <div class="settings__note">Agent mode tries LLM-driven integration first and can fall back to CLI when safe.</div>
 		          </div>
 
 	          <div class="settings__section">
