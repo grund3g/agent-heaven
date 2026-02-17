@@ -53,6 +53,8 @@ export class JobsManager {
   private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
+  // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
+  private integratingToDefaultJobIds = new Set<string>();
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -211,6 +213,7 @@ export class JobsManager {
       }
     }
     this.attentionLlmProcs.clear();
+    this.integratingToDefaultJobIds.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -357,7 +360,10 @@ export class JobsManager {
   }
 
   listJobMetas(): any[] {
-    const arr = Array.from(this.jobs.values()).map(snapshotJobMeta);
+    const arr = Array.from(this.jobs.values()).map((job) => ({
+      ...snapshotJobMeta(job),
+      integratingToDefault: this.integratingToDefaultJobIds.has(job.id)
+    }));
     // Newest first (stable for ISO timestamps).
     arr.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     return arr;
@@ -371,7 +377,34 @@ export class JobsManager {
     const id = String(jobId || "");
     const job = this.jobs.get(id);
     if (!job) return { ok: false, error: "Unknown job" };
-    return { ok: true, job: snapshotJob(job) };
+    return { ok: true, job: { ...snapshotJob(job), integratingToDefault: this.integratingToDefaultJobIds.has(id) } };
+  }
+
+  isIntegratingToDefault(jobId: unknown): boolean {
+    const id = String(jobId || "").trim();
+    if (!id) return false;
+    return this.integratingToDefaultJobIds.has(id);
+  }
+
+  setIntegratingToDefault(jobId: unknown, inProgress: unknown) {
+    const id = String(jobId || "").trim();
+    if (!id) return { ok: false, error: "Missing jobId" };
+    const job = this.jobs.get(id);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const next = !!inProgress;
+    const prev = this.integratingToDefaultJobIds.has(id);
+    if (next === prev) return { ok: true };
+
+    if (next) this.integratingToDefaultJobIds.add(id);
+    else this.integratingToDefaultJobIds.delete(id);
+
+    this.sendJobEvent({
+      jobId: id,
+      kind: "meta",
+      patch: { integratingToDefault: next }
+    });
+    return { ok: true };
   }
 
   setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
@@ -1682,6 +1715,7 @@ export class JobsManager {
     this.pendingTitleSummaryByJobId.delete(id);
     this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
+    this.integratingToDefaultJobIds.delete(id);
     this.dirtyJobIds.delete(id);
     try {
       this.history.remove(id);

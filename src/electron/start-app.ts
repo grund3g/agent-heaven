@@ -277,18 +277,13 @@ function truncateCommitSubjectLine(s: string, max = 72): string {
   return head.trimEnd();
 }
 
-function normalizeGeneratedCommitSubject(raw: string): string {
-  let s = stripMarkdownCodeFences(String(raw || "")).trim();
-  if (!s) return "";
-
-  const first = s
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => !!line);
-  s = String(first || "").trim();
+function cleanGeneratedCommitSubjectLine(line: string): string {
+  let s = String(line || "").trim();
   if (!s) return "";
 
   s = s
+    .replace(/^[-*•]\s+/, "")
+    .replace(/^\d+[.)]\s+/, "")
     .replace(/^commit\s+message\s*:\s*/i, "")
     .replace(/^commit\s+subject\s*:\s*/i, "")
     .replace(/^subject\s*:\s*/i, "")
@@ -302,7 +297,44 @@ function normalizeGeneratedCommitSubject(raw: string): string {
     s = s.slice(1, -1).trim();
   }
 
-  return truncateCommitSubjectLine(s, 72);
+  return s;
+}
+
+function looksLikeGeneratedCommitSubjectCandidate(raw: string): boolean {
+  const s = String(raw || "").replaceAll(/\s+/g, " ").trim();
+  if (!s) return false;
+  if (s.length < 3) return false;
+  if (s.length > 100) return false;
+  if (s.includes("`")) return false;
+
+  const low = s.toLowerCase();
+  if (/^i(?:\s|['’](?:ll|d|m|ve)\b)/i.test(low)) return false;
+  if (/^i\s+(?:will|can|cannot|can't|should|need|would|am)\b/i.test(low)) return false;
+  if (/^we(?:\s|['’](?:ll|d|re|ve)\b)/i.test(low)) return false;
+  if (/^we\s+(?:will|can|cannot|can't|should|need|would|are)\b/i.test(low)) return false;
+  if (/^(here(?:'|’)s|sure|okay|ok|note)\b/i.test(low)) return false;
+  if (/^(?:the\s+)?commit\s+(?:message|subject)\b/i.test(low)) return false;
+  if (/^subject\b/i.test(low)) return false;
+  if (low.endsWith("commit subject") || low.endsWith("commit message")) return false;
+
+  return true;
+}
+
+function normalizeGeneratedCommitSubject(raw: string): string {
+  const text = stripMarkdownCodeFences(String(raw || "")).trim();
+  if (!text) return "";
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => cleanGeneratedCommitSubjectLine(line))
+    .filter(Boolean);
+
+  for (const line of lines) {
+    if (!looksLikeGeneratedCommitSubjectCandidate(line)) continue;
+    return truncateCommitSubjectLine(line, 72);
+  }
+
+  return "";
 }
 
 function buildCommitMessageGeneratorPrompt(opts: {
@@ -1777,6 +1809,13 @@ export async function startApp(): Promise<void> {
     if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
     const job = (got as any).job || {};
 
+    if (jobsManager.isIntegratingToDefault(jobId)) {
+      return { ok: false, error: "Integration already running for this job." };
+    }
+    const marked = jobsManager.setIntegratingToDefault(jobId, true);
+    if (!marked || typeof marked !== "object" || (marked as any).ok !== true) return marked;
+
+    try {
     const projectId = String(job.projectId || "").trim();
     if (!projectId) return { ok: false, error: "Job is missing projectId" };
     const project = store.listProjects().find((x: any) => x && x.id === projectId) || null;
@@ -2036,6 +2075,9 @@ export async function startApp(): Promise<void> {
           `${msg}\n\n` +
           `Resolve conflicts, then run:\n\n  git cherry-pick --continue\n\n(or abort with: git cherry-pick --abort)`
       };
+    }
+    } finally {
+      jobsManager.setIntegratingToDefault(jobId, false);
     }
   });
 

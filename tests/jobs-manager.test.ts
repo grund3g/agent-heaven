@@ -115,6 +115,40 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("tracks integrate-to-default progress as ephemeral metadata", async () => {
+    const events: any[] = [];
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: (p: any) => events.push(p),
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+
+    expect(jm.isIntegratingToDefault("job1")).toBe(false);
+    expect(jm.setIntegratingToDefault("job1", true)).toEqual({ ok: true });
+    expect(jm.isIntegratingToDefault("job1")).toBe(true);
+    expect((jm.getJob("job1") as any).job.integratingToDefault).toBe(true);
+    expect(jm.listJobMetas()[0].integratingToDefault).toBe(true);
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.integratingToDefault === true)).toBe(true);
+
+    expect(jm.setIntegratingToDefault("job1", false)).toEqual({ ok: true });
+    expect(jm.isIntegratingToDefault("job1")).toBe(false);
+    expect((jm.getJob("job1") as any).job.integratingToDefault).toBe(false);
+    expect(jm.listJobMetas()[0].integratingToDefault).toBe(false);
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.integratingToDefault === false)).toBe(true);
+  });
+
   it("supports per-run checkoutMode overrides", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),

@@ -2881,8 +2881,18 @@ function renderLiveTailHtml(chunks, { running } = {}) {
   return `<div class="${cls}">${lines}</div>`;
 }
 
+function jobStatusForUi(value) {
+  if (value && typeof value === "object") {
+    if (value.integratingToDefault === true) return "running";
+    const raw = typeof value.status === "string" ? value.status : "";
+    return raw || "unknown";
+  }
+  const raw = typeof value === "string" ? value : String(value || "");
+  return raw || "unknown";
+}
+
 function fmtStatusPill(status) {
-  const s = status || "unknown";
+  const s = jobStatusForUi(status);
   const cls =
     s === "running"
       ? "pill pill--run"
@@ -2895,9 +2905,10 @@ function fmtStatusPill(status) {
 }
 
 function pickLane(status) {
-  if (status === "running") return "running";
-  if (status === "needs_attention" || status === "failed" || status === "cancelled") return "attention";
-  if (status === "done") return "done";
+  const s = jobStatusForUi(status);
+  if (s === "running") return "running";
+  if (s === "needs_attention" || s === "failed" || s === "cancelled") return "attention";
+  if (s === "done") return "done";
   return "attention";
 }
 
@@ -3442,7 +3453,7 @@ function jobVisibleInCurrentView(job) {
   }
   if (!tableScopeIncludesAllBoxes() && !jobVisibleInView(job, state.view)) return false;
   if (state.view === "board" && state.focusLane) {
-    return pickLane(job.status) === state.focusLane;
+    return pickLane(job) === state.focusLane;
   }
   return true;
 }
@@ -4247,7 +4258,9 @@ function jobHasCommandExecution(job) {
 
 function cardPreview(job) {
   if (!job) return { text: "…", live: false };
-  if (job.status === "running") {
+  const uiStatus = jobStatusForUi(job);
+  if (uiStatus === "running") {
+    if (job.integratingToDefault === true) return { text: "Integrating to default branch…", live: true };
     if (jobHasCommandExecution(job)) {
       const tail = buildLogTail(job, 6);
       if (tail) return { text: tail, live: true };
@@ -4582,7 +4595,7 @@ function renderCheckoutsDialog() {
       const title = p ? p : "";
 
       const job = jobId ? state.jobs.get(jobId) : null;
-      const inUse = !!(job && job.status === "running");
+      const inUse = !!(job && jobStatusForUi(job) === "running");
 
       return `
         <div class="checkoutrow" role="row">
@@ -4943,7 +4956,7 @@ function tableLaneKindForJob(job) {
   } else if (state.view === "trash") {
     return "trash";
   }
-  return pickLane(job && job.status);
+  return pickLane(job);
 }
 
 function tableLaneEnteredMs(job) {
@@ -5011,7 +5024,7 @@ function tableBoxLabel(job) {
   const box = jobBox(job);
   if (box === "archive") return "archive";
   if (box === "trash") return "trash";
-  return `board/${pickLane(job && job.status)}`;
+  return `board/${pickLane(job)}`;
 }
 
 function renderSessionsTable(jobs) {
@@ -5033,7 +5046,7 @@ function renderSessionsTable(jobs) {
     const agent = agentDisplayName(j.agent);
     const model = String(j.model || "").trim() || "—";
     const created = fmtDateTimeShort(j.createdAt);
-    const finished = j.status === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
+    const finished = jobStatusForUi(j) === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
     const duration = jobDurationText(j);
     const tok = jobTokensCardText(j);
     const tokText = tok ? tok.text : "—";
@@ -5048,7 +5061,7 @@ function renderSessionsTable(jobs) {
 
     return `
       <tr class="sessionrow" data-job-id="${escapeHtml(j.id)}">
-        <td>${fmtStatusPill(j.status)}</td>
+        <td>${fmtStatusPill(j)}</td>
         <td class="sessiontable__mono">${escapeHtml(tableBoxLabel(j))}</td>
         <td class="sessiontable__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</td>
         <td title="${escapeHtml(oneLine(projectTitle))}">${escapeHtml(project)}</td>
@@ -5079,15 +5092,15 @@ function renderCardsBoard(jobs) {
     laneA = sortJobsForLane(jobs, "trash");
   } else {
     laneA = sortJobsForLane(
-      jobs.filter((j) => pickLane(j.status) === "running"),
+      jobs.filter((j) => pickLane(j) === "running"),
       "running"
     );
     laneB = sortJobsForLane(
-      jobs.filter((j) => pickLane(j.status) === "attention"),
+      jobs.filter((j) => pickLane(j) === "attention"),
       "attention"
     );
     laneC = sortJobsForLane(
-      jobs.filter((j) => pickLane(j.status) === "done"),
+      jobs.filter((j) => pickLane(j) === "done"),
       "done"
     );
   }
@@ -5214,11 +5227,13 @@ function renderCard(job) {
   const integratedText = integrated ? integrated.text : "Merged";
   const integratedTitle = integrated ? oneLine(integrated.title) : "";
   const liveCls = prev.live ? " card__preview--live" : "";
-  const cardCls = job.status === "running" ? "card card--running" : "card";
+  const uiStatus = jobStatusForUi(job);
+  const isRunningUi = uiStatus === "running";
+  const cardCls = isRunningUi ? "card card--running" : "card";
   const title = jobDisplayTitle(job);
   const projColor = projectColorById(job.projectId) || "transparent";
-  const dur = job.status === "running" ? jobElapsedText(job) : "";
-  const durHiddenAttr = job.status === "running" ? "" : " hidden";
+  const dur = job.integratingToDefault === true ? "Integrating…" : isRunningUi ? jobElapsedText(job) : "";
+  const durHiddenAttr = isRunningUi ? "" : " hidden";
   const tok = jobTokensCardText(job);
   const tokHiddenAttr = tok ? "" : " hidden";
   const tokText = tok ? tok.text : "";
@@ -5240,7 +5255,7 @@ function renderCard(job) {
           </div>
         </div>
         <div class="card__status">
-          ${showStatusPill ? fmtStatusPill(job.status) : ""}
+          ${showStatusPill ? fmtStatusPill(job) : ""}
           <div class="card__duration"${durHiddenAttr} data-job-duration>${escapeHtml(dur)}</div>
           <div class="card__tokens"${tokHiddenAttr} data-job-tokens title="${escapeHtml(oneLine(tokTitle))}">${escapeHtml(tokText)}</div>
         </div>
@@ -5324,10 +5339,10 @@ function syncBoardDoneLane() {
   }
 
   const jobs = Array.from(state.jobs.values()).filter((j) => jobVisibleInCurrentView(j));
-  const runningJobs = jobs.filter((j) => pickLane(j.status) === "running");
-  const attentionJobs = jobs.filter((j) => pickLane(j.status) === "attention");
+  const runningJobs = jobs.filter((j) => pickLane(j) === "running");
+  const attentionJobs = jobs.filter((j) => pickLane(j) === "attention");
   const doneJobs = sortJobsForLane(
-    jobs.filter((j) => pickLane(j.status) === "done"),
+    jobs.filter((j) => pickLane(j) === "done"),
     "done"
   );
 
@@ -5466,7 +5481,9 @@ function updateCardEl(job) {
   }
 
   // Update classes + status pill.
-  existing.classList.toggle("card--running", job.status === "running");
+  const uiStatus = jobStatusForUi(job);
+  const isRunningUi = uiStatus === "running";
+  existing.classList.toggle("card--running", isRunningUi);
   existing.style.setProperty("--proj-color", projectColorById(job.projectId) || "transparent");
 
   const titleEl = existing.querySelector(".card__title");
@@ -5505,7 +5522,7 @@ function updateCardEl(job) {
 
   const pillEl = existing.querySelector(".pill");
   if (pillEl) {
-    const s = job.status || "unknown";
+    const s = uiStatus;
     pillEl.textContent = s;
     pillEl.className =
       s === "running"
@@ -5529,7 +5546,10 @@ function updateCardEl(job) {
     }
   }
   if (durEl) {
-    if (job.status === "running") {
+    if (job.integratingToDefault === true) {
+      durEl.hidden = false;
+      durEl.textContent = "Integrating…";
+    } else if (isRunningUi) {
       durEl.hidden = false;
       durEl.textContent = jobElapsedText(job);
     } else {
@@ -6057,27 +6077,39 @@ function showIntegrateDialogDetails() {
 }
 
 let integrateToDefaultInFlight = false;
-async function startIntegrateToDefaultFromDialog() {
+async function startIntegrateToDefaultFromDialog(opts = {}) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const toastOnly = !!o.toastOnly;
+
   const id = String(integrateDialogJobId || "").trim();
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job || isDemoJob(job)) return;
 
   if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
-    setIntegrateDialogPhase("error", {
-      status: "Integration failed",
-      message: "Integration is not supported in this build.",
-      errorFull: "Integration is not supported in this build."
-    });
+    if (toastOnly) {
+      showToast("Integration is not supported in this build.");
+    } else {
+      setIntegrateDialogPhase("error", {
+        status: "Integration failed",
+        message: "Integration is not supported in this build.",
+        errorFull: "Integration is not supported in this build."
+      });
+    }
     return;
   }
 
-  if (job.status === "running") {
-    setIntegrateDialogPhase("error", {
-      status: "Integration failed",
-      message: "Wait until the job has finished before integrating.",
-      errorFull: "Job is still running."
-    });
+  if (jobStatusForUi(job) === "running") {
+    const busyMessage = job.integratingToDefault === true ? "Integration already running." : "Wait until the job has finished before integrating.";
+    if (toastOnly) {
+      showToast(busyMessage);
+    } else {
+      setIntegrateDialogPhase("error", {
+        status: "Integration failed",
+        message: busyMessage,
+        errorFull: busyMessage
+      });
+    }
     return;
   }
 
@@ -6090,13 +6122,15 @@ async function startIntegrateToDefaultFromDialog() {
   integrateDialogTargetBranch = "";
   integrateDialogArchived = false;
   const integrateMode = normalizeIntegrateToDefaultMode(state.settings && state.settings.integrateToDefaultMode);
+  const pendingMessage =
+    integrateMode === "agent"
+      ? "Agent is integrating this checkout into the default branch. This may take a moment."
+      : "Cherry-picking commits onto the project's default branch. This may take a moment.";
   setIntegrateDialogPhase("pending", {
     status: "Integrating…",
-    message:
-      integrateMode === "agent"
-        ? "Agent is integrating this checkout into the default branch. This may take a moment."
-        : "Cherry-picking commits onto the project's default branch. This may take a moment."
+    message: pendingMessage
   });
+  if (toastOnly) showToast("Integrating into default branch…");
 
   try {
     let res = null;
@@ -6105,10 +6139,12 @@ async function startIntegrateToDefaultFromDialog() {
     } catch (err) {
       const msg = String(err && err.message ? err.message : err);
       if (msg.includes("Provide a commit message first")) {
-        setIntegrateDialogPhase("pending", {
-          status: "Commit message required",
-          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
-        });
+        if (!toastOnly) {
+          setIntegrateDialogPhase("pending", {
+            status: "Commit message required",
+            message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
+          });
+        }
 
         let suggested = "";
         try {
@@ -6129,11 +6165,13 @@ async function startIntegrateToDefaultFromDialog() {
         });
         const commitMessage = String(entered || "").trim();
         if (!commitMessage) {
-          setIntegrateDialogPhase("confirm", { status: "Cancelled", message: "Integration cancelled." });
+          if (toastOnly) showToast("Integration cancelled.");
+          else setIntegrateDialogPhase("confirm", { status: "Cancelled", message: "Integration cancelled." });
           return;
         }
 
         setIntegrateDialogPhase("pending", { status: "Integrating…", message: "Committing and integrating…" });
+        if (toastOnly) showToast("Committing and integrating…");
         res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
       } else {
         throw err;
@@ -6178,7 +6216,39 @@ async function startIntegrateToDefaultFromDialog() {
       targetBranch
     });
 
-    if (autoArchive) {
+    if (toastOnly) {
+      if (autoArchive && api && typeof api.jobsArchive === "function") {
+        try {
+          await api.jobsArchive(id);
+          integrateDialogArchived = true;
+          showToast(`${msg} Ticket archived.`);
+        } catch (err) {
+          const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
+          const first = (full.split("\n")[0] || "").trim() || "Failed to archive.";
+          showToast(`${msg} ${first}`);
+        }
+      } else if (canArchive && api && typeof api.jobsArchive === "function" && !autoArchive) {
+        showToast(msg, null, 10000, {
+          actions: [
+            {
+              label: "Archive ticket",
+              kind: "primary",
+              onClick: async () => {
+                try {
+                  await api.jobsArchive(id);
+                  integrateDialogArchived = true;
+                  showToast("Ticket archived.");
+                } catch (err) {
+                  showToast(String(err && err.message ? err.message : err) || "Failed to archive.");
+                }
+              }
+            }
+          ]
+        });
+      } else {
+        showToast(msg);
+      }
+    } else if (autoArchive) {
       await archiveIntegrateDialogJob();
     }
   } catch (err) {
@@ -6186,7 +6256,8 @@ async function startIntegrateToDefaultFromDialog() {
     const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
     integrateDialogErrorFull = full;
     integrateDialogResultText = full;
-    setIntegrateDialogPhase("error", { status: "Integration failed", message: first, errorFull: full, details: full });
+    if (toastOnly) showToast(first);
+    else setIntegrateDialogPhase("error", { status: "Integration failed", message: first, errorFull: full, details: full });
   } finally {
     integrateToDefaultInFlight = false;
     syncIntegrateDialogUi();
@@ -6198,7 +6269,7 @@ async function archiveIntegrateDialogJob() {
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job || isDemoJob(job)) return;
-  if (job.status === "running") return;
+  if (jobStatusForUi(job) === "running") return;
   if (!api || typeof api.jobsArchive !== "function") return;
 
   const prevDetails = integrateDialogResultText;
@@ -6236,76 +6307,27 @@ async function runIntegrateToDefaultAction(jobId) {
   if (!job || isDemoJob(job)) return;
 
   if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
-    if (els.integrateDialog) {
-      integrateDialogJobId = id;
-      integrateDialogArchived = false;
-      integrateDialogErrorFull = "Integration is not supported in this build.";
-      integrateDialogResultText = integrateDialogErrorFull;
-      setIntegrateDialogPhase("error", {
-        status: "Integration failed",
-        message: "Integration is not supported in this build.",
-        errorFull: integrateDialogErrorFull,
-        details: integrateDialogErrorFull
-      });
-      try {
-        if (!els.integrateDialog.open) els.integrateDialog.showModal();
-      } catch {
-        // ignore
-      }
-    } else {
-      showToast("Integration is not supported in this build.");
-    }
+    showToast("Integration is not supported in this build.");
     return;
   }
 
-  if (job.status === "running") {
-    if (els.integrateDialog) {
-      integrateDialogJobId = id;
-      integrateDialogArchived = false;
-      integrateDialogErrorFull = "Wait until the job has finished before integrating.";
-      integrateDialogResultText = integrateDialogErrorFull;
-      setIntegrateDialogPhase("error", {
-        status: "Integration failed",
-        message: "Wait until the job has finished before integrating.",
-        errorFull: integrateDialogErrorFull,
-        details: integrateDialogErrorFull
-      });
-      try {
-        if (!els.integrateDialog.open) els.integrateDialog.showModal();
-      } catch {
-        // ignore
-      }
-    } else {
-      showToast("Wait until the job has finished before integrating.");
-    }
+  if (jobStatusForUi(job) === "running") {
+    showToast(job.integratingToDefault === true ? "Integration already running." : "Wait until the job has finished before integrating.");
     return;
   }
 
   if (integrateToDefaultInFlight) {
-    if (els.integrateDialog && els.integrateDialog.open) return;
     showToast("Integration already running.");
     return;
   }
 
-  // Use a modal so feedback isn't hidden behind the already-open job dialog.
-  if (els.integrateDialog) {
-    const ok = openIntegrateDialog(id);
-    if (!ok) showToast("Integration already running.");
-    return;
-  }
-
-  // Fallback: old behavior for builds without the integrate dialog.
-  const ok = window.confirm(
-    "Integrate this job's checkout into the project's default branch?\n\nThis will cherry-pick the job's commits onto the default branch. Conflicts may require manual resolution.\n\nContinue?"
-  );
-  if (!ok) return;
-  showToast("Starting integration…");
-  try {
-    await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
-    showToast("Integrated into default branch.");
-  } catch (err) {
-    showToast(String(err && err.message ? err.message : err) || "Integration failed.");
-  }
+  integrateDialogJobId = id;
+  integrateDialogArchived = false;
+  integrateDialogErrorFull = "";
+  integrateDialogResultText = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  await startIntegrateToDefaultFromDialog({ toastOnly: true });
 }
 
 let checkoutCommitActionInFlight = false;
@@ -6329,7 +6351,7 @@ async function runCheckoutCommitAction(jobId, opts = {}) {
     return;
   }
 
-  if (job.status === "running") {
+  if (jobStatusForUi(job) === "running") {
     const label = push ? "Commit + push" : "Commit only";
     const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
     if (!ok) return;
@@ -6421,7 +6443,7 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  if (job && job.status === "running") {
+  if (job && jobStatusForUi(job) === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
     if (!ok) return;
   }
@@ -6804,7 +6826,7 @@ function updateJobDialogActions(job) {
   if (els.jobDialogMove) els.jobDialogMove.hidden = !isJobMode();
 
   const b = jobBox(job);
-  const running = job && job.status === "running";
+  const running = job && jobStatusForUi(job) === "running";
   const hasThreadId = job && typeof job.threadId === "string" && job.threadId.trim().length > 0;
 
   // Stop only makes sense while running.
@@ -6879,7 +6901,7 @@ function updateCardContextMenuActions(job) {
   if (!els.cardContextMenu) return;
   const menu = els.cardContextMenu;
   const b = jobBox(job);
-  const running = job && job.status === "running";
+  const running = job && jobStatusForUi(job) === "running";
 
   const canFile = !running && b === "board";
   const canTrash = !running && b !== "trash";
@@ -8175,7 +8197,7 @@ async function openRerunDialog(jobId) {
     showToast("Could not load job details for rerun.");
     return;
   }
-  if (job.status === "running") {
+  if (jobStatusForUi(job) === "running") {
     showToast("Stop the job before rerunning.");
     return;
   }
@@ -8221,7 +8243,7 @@ async function startRerunFromDialog() {
     showToast("Could not load job details for rerun.");
     return;
   }
-  if (job.status === "running") {
+  if (jobStatusForUi(job) === "running") {
     showToast("Stop the job before rerunning.");
     return;
   }
@@ -8305,7 +8327,7 @@ async function archiveJob(jobId, { closeDialog = false } = {}) {
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job) return;
-  if (job.status === "running") return;
+  if (jobStatusForUi(job) === "running") return;
 
   try {
     await api.jobsArchive(id);
@@ -8327,7 +8349,7 @@ async function trashJob(jobId, { closeDialog = false } = {}) {
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job) return;
-  if (job.status === "running") return;
+  if (jobStatusForUi(job) === "running") return;
   const prevBox = jobBox(job);
 
   try {
@@ -8367,7 +8389,7 @@ async function deleteJob(jobId, { closeDialog = false } = {}) {
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job) return;
-  if (job.status === "running") return;
+  if (jobStatusForUi(job) === "running") return;
 
   const ok = window.confirm("Delete this job permanently? This cannot be undone.");
   if (!ok) return;
@@ -8880,7 +8902,7 @@ function wireUi() {
       if (!projectId || !kind || !jobId) return;
 
       const job = state.jobs.get(jobId);
-      if (job && job.status === "running") {
+      if (job && jobStatusForUi(job) === "running") {
         showToast("This checkout is in use by a running job.");
         return;
       }
@@ -10947,9 +10969,9 @@ function renderStatusDialog() {
   const jobsAll = Array.from(state.jobs.values());
   const jobs = jobsAll.filter((j) => jobVisibleInCurrentView(j));
 
-  const running = jobs.filter((j) => pickLane(j.status) === "running").length;
-  const attention = jobs.filter((j) => pickLane(j.status) === "attention").length;
-  const done = jobs.filter((j) => pickLane(j.status) === "done").length;
+  const running = jobs.filter((j) => pickLane(j) === "running").length;
+  const attention = jobs.filter((j) => pickLane(j) === "attention").length;
+  const done = jobs.filter((j) => pickLane(j) === "done").length;
 
   const usageView = aggregateTokenUsage(jobs);
   const usageAll = aggregateTokenUsage(jobsAll);
@@ -11124,7 +11146,7 @@ function renderStatusDialog() {
 
     rows.push(`
       <div class="statuslist__row" data-status-job-id="${escapeHtml(j.id)}">
-        <div>${fmtStatusPill(j.status)}</div>
+        <div>${fmtStatusPill(j)}</div>
         <div class="statuslist__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</div>
         <div class="statuslist__model" title="${escapeHtml(oneLine(model))}">${escapeHtml(model || "—")}</div>
         <div class="statuslist__elapsed" data-status-elapsed="${escapeHtml(j.id)}">${escapeHtml(elapsed || "—")}</div>
