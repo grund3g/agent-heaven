@@ -6835,8 +6835,8 @@ function builtInActionKindFromCommand(command) {
   return "";
 }
 
-function defaultIntegrateCommitMessage() {
-  const msg = "Checkpoint changes";
+function defaultCheckoutCommitMessage(job) {
+  const msg = "Update local changes";
   return msg.slice(0, 72);
 }
 
@@ -7198,10 +7198,7 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
   const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
 
   try {
-    const res = await api.checkoutsIntegrateToDefault(id, {
-      commitMessage: "",
-      autoArchive
-    });
+    const res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
 
     const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
     const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
@@ -7223,6 +7220,8 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     integrateDialogTargetPath = targetPath;
     integrateDialogTargetBranch = targetBranch;
 
+    const canArchive = jobBox(job) === "board";
+    const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
     const details = [
       targetBranch ? `Target branch: ${targetBranch}` : "",
       targetPath ? `Target path: ${targetPath}` : "",

@@ -2489,7 +2489,7 @@ export async function startApp(): Promise<void> {
         targetCommitted: false,
         targetCommittedSha: "",
         targetCommitMessage: ""
-      });
+      };
     }
 
     const targetReadyInfo = await getGitInfo(targetDir);
