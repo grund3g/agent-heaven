@@ -2405,6 +2405,14 @@ function fmtTokCompact(n) {
   return `${Math.round(x / 1_000_000)}m`;
 }
 
+function fmtPctCompact(value) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return "?";
+  if (Math.abs(n) >= 100) return `${Math.round(n)}%`;
+  if (Math.abs(n) >= 10) return `${n.toFixed(1)}%`;
+  return `${n.toFixed(2)}%`;
+}
+
 function jobTokenTotals(job) {
   if (!job || typeof job !== "object") return null;
 
@@ -6378,7 +6386,11 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  const integrateToDefault = isIntegrateToDefaultAction(action);
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
+  }
 
   const builtIn = builtInActionKindFromCommand(cmd);
   if (builtIn === "integrate_to_default") {
@@ -6397,17 +6409,6 @@ async function runJobActionById(actionId) {
   if (job && job.status === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
     if (!ok) return;
-  }
-
-  if (integrateToDefault) {
-    await runIntegrateToDefaultAction(job);
-    return;
-  }
-
-  const cmd = String(action.command || "").trimEnd();
-  if (!cmd) {
-    showToast("Action has no command.");
-    return;
   }
 
   // Actions run via the per-job terminal session so interactive commands work
@@ -7463,6 +7464,12 @@ function renderJobDialogMeta(job) {
   } else if (job.usage) {
     const u = job.usage;
     bits.push(`tokens in=${u.input_tokens ?? "?"} out=${u.output_tokens ?? "?"}`);
+  }
+  {
+    const ctx = jobContextUsage(job);
+    if (ctx) {
+      bits.push(`context=${fmtPctCompact(ctx.percent)} (${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in)`);
+    }
   }
   els.jobDialogMeta.textContent = bits.join("  ");
 }
@@ -9672,7 +9679,9 @@ function wireUi() {
       e.preventDefault();
       const id = act.getAttribute("data-jobaction-id") || "";
       hideJobMoreMenu();
-      runJobActionById(id);
+      runJobActionById(id).catch((err) => {
+        showToast(String(err && err.message ? err.message : err) || "Failed to run action.");
+      });
     });
   }
   els.cancelJobBtn.addEventListener("click", () => cancelSelectedJob());
@@ -9892,6 +9901,164 @@ let codexModelsCache = null; // array of objects from `codex app-server model/li
 let codexModelComboboxComposer = null;
 let codexModelComboboxSettings = null;
 let codexModelComboboxRerun = null;
+
+function toPositiveInt(value) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 0;
+  const x = Math.trunc(n);
+  return x > 0 ? x : 0;
+}
+
+function normalizeModelLookupValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function modelLookupVariants(value) {
+  const raw = normalizeModelLookupValue(value);
+  if (!raw) return [];
+
+  const out = new Set([raw]);
+
+  const slash = raw.lastIndexOf("/");
+  if (slash >= 0 && slash < raw.length - 1) out.add(raw.slice(slash + 1));
+
+  const colon = raw.lastIndexOf(":");
+  if (colon >= 0 && colon < raw.length - 1) out.add(raw.slice(colon + 1));
+
+  const at = raw.indexOf("@");
+  if (at > 0) out.add(raw.slice(0, at));
+
+  return Array.from(out);
+}
+
+function contextKeyScore(key) {
+  const k = String(key || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  if (!k) return 0;
+  if (k.includes("output")) return 0;
+
+  let score = 0;
+  if (k.includes("context")) score += 100;
+  if (k.includes("input")) score += 60;
+  if (k.includes("window")) score += 25;
+  if (k.includes("token")) score += 20;
+  if (k.includes("limit") || k.includes("max")) score += 10;
+
+  if (k === "maxtokens" || k === "tokenlimit" || k === "contextlength") score += 8;
+  return score;
+}
+
+function modelContextWindowFromRecord(record) {
+  const root = record && typeof record === "object" ? record : null;
+  if (!root) return 0;
+
+  let bestScore = 0;
+  let bestValue = 0;
+  const seen = new Set();
+
+  function visit(node, depth) {
+    if (!node || typeof node !== "object" || depth > 2) return;
+    if (seen.has(node)) return;
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      const max = Math.min(12, node.length);
+      for (let i = 0; i < max; i += 1) visit(node[i], depth + 1);
+      return;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      const score = contextKeyScore(key);
+      if (score > 0) {
+        const parsed = toPositiveInt(value);
+        if (parsed >= 1024 && (score > bestScore || (score === bestScore && parsed > bestValue))) {
+          bestScore = score;
+          bestValue = parsed;
+        }
+      }
+
+      if (value && typeof value === "object") visit(value, depth + 1);
+    }
+  }
+
+  visit(root, 0);
+  return bestValue;
+}
+
+function modelContextWindowFromCodexCache(modelName) {
+  const targetVariants = modelLookupVariants(modelName);
+  if (targetVariants.length === 0) return 0;
+
+  const arr = Array.isArray(codexModelsCache) ? codexModelsCache : [];
+  if (arr.length === 0) return 0;
+
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+
+    const modelVariants = new Set();
+    for (const source of [item.model, item.id, item.name]) {
+      for (const v of modelLookupVariants(source)) modelVariants.add(v);
+    }
+
+    let matched = false;
+    for (const v of targetVariants) {
+      if (modelVariants.has(v)) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) continue;
+
+    const limit = modelContextWindowFromRecord(item);
+    if (limit > 0) return limit;
+  }
+
+  return 0;
+}
+
+function modelContextWindowFromHeuristic(modelName) {
+  const m = normalizeModelLookupValue(modelName);
+  if (!m) return 0;
+
+  // Claude models commonly expose a 200k context window.
+  if (m.includes("claude")) return 200_000;
+  return 0;
+}
+
+function resolveModelContextWindow(modelName) {
+  return modelContextWindowFromCodexCache(modelName) || modelContextWindowFromHeuristic(modelName);
+}
+
+function jobContextUsage(job) {
+  if (!job || typeof job !== "object") return null;
+
+  const model = String(job.model || "").trim();
+  if (!model) return null;
+
+  const usage = job.usage && typeof job.usage === "object" ? job.usage : null;
+  let inputTokens = usage ? toPositiveInt(usage.input_tokens) : 0;
+
+  if (inputTokens <= 0) {
+    const ut = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : null;
+    if (ut && toIntOrZero(ut.turns) === 1) {
+      inputTokens = toPositiveInt(ut.input_tokens);
+    }
+  }
+
+  if (inputTokens <= 0) return null;
+
+  const limitTokens = resolveModelContextWindow(model);
+  if (limitTokens <= 0) return null;
+
+  return {
+    input_tokens: inputTokens,
+    limit_tokens: limitTokens,
+    percent: (inputTokens / limitTokens) * 100
+  };
+}
 
 function historyModelStrings(agentKey) {
   const out = new Set();
@@ -10392,6 +10559,10 @@ async function refreshCodexModelsDatalist({ showErrors = false } = {}) {
     const models = await api.codexListModels();
     codexModelsCache = Array.isArray(models) ? models : [];
     renderCodexModelsDatalist();
+    if (state.selectedJobId && els.jobDialog && els.jobDialog.open) {
+      const job = state.jobs.get(state.selectedJobId);
+      if (job) renderJobDialogMeta(job);
+    }
   } catch (err) {
     if (showErrors) showToast(`Could not load Codex models list: ${String(err && err.message ? err.message : err)}`);
   } finally {
