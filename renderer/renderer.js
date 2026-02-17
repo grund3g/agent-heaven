@@ -14159,7 +14159,6 @@ async function init() {
   }
 
   wireUi();
-  setupTokenTooltips();
   wireOfflineToast();
   wireSystemColorSchemeListener();
   state.sortMode = normalizeSortMode(getStoredSortMode());
