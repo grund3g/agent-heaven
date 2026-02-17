@@ -606,4 +606,68 @@ describe("electron/jobs-manager", () => {
 
     resumeChild.emit("close", 0, null);
   });
+
+  it("renames temporary projects to a short LLM-based name after run completion", async () => {
+    const events: any[] = [];
+    const projects: any[] = [{ id: "p1", name: "temp-20200101-000000-deadbeef", path: "/tmp/proj", isTemporary: true }];
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => projects,
+      updateProject: (id: string, patch: any) => {
+        const idx = projects.findIndex((p: any) => p && p.id === id);
+        if (idx < 0) return null;
+        projects[idx] = { ...projects[idx], ...(patch && typeof patch === "object" ? patch : {}) };
+        return projects[idx];
+      }
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    type TitleRun = { child: FakeChild; onEvent: (ev: any) => void };
+    const titleRuns: TitleRun[] = [];
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      const p = String(opts && opts.prompt ? opts.prompt : "");
+      const isTitleSummary = p.includes("Create a concise job card title summarizing the user's request.");
+      if (isTitleSummary) {
+        const child = new FakeChild();
+        titleRuns.push({ child, onEvent: opts.onEvent });
+        return child as any;
+      }
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: (p: any) => events.push(p),
+      runCodexExec,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Fix flaky login test in CI", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    expect(titleRuns.length).toBe(1);
+
+    titleRuns[0].onEvent({
+      ts: "2020-01-01T00:00:00.100Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "item.completed", item: { type: "agent_message", text: "Fix flaky login test in CI" } }
+    });
+    titleRuns[0].child.emit("close", 0, null);
+    await Promise.resolve();
+
+    // While the run is active, keep the original generated temp folder name.
+    expect(projects[0].name).toBe("temp-20200101-000000-deadbeef");
+
+    execChild.emit("close", 0, null);
+    await Promise.resolve();
+
+    expect(projects[0].name).toBe("temp (flaky login test)");
+    expect(events.some((e) => e.kind === "project_meta" && e.patch && e.patch.name === "temp (flaky login test)")).toBe(true);
+  });
 });

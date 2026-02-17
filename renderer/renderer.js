@@ -11443,6 +11443,19 @@ async function init() {
       return;
     }
 
+    if (kind === "project_meta") {
+      void (async () => {
+        try {
+          state.projects = await api.projectsList();
+          renderProjects();
+          renderBoard();
+        } catch {
+          // ignore
+        }
+      })();
+      return;
+    }
+
     if (kind === "deleted") {
       removeJob(jobId);
       return;

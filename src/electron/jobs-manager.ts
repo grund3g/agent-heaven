@@ -550,6 +550,103 @@ export class JobsManager {
     return truncateText(t, 120);
   }
 
+  private canAutoRenameTemporaryProject(currentName: string): boolean {
+    const name = String(currentName || "").trim();
+    if (!name) return false;
+    if (/^[a-zA-Z0-9._-]+-\d{8}-\d{6}-[0-9a-f]{8}$/i.test(name)) return true;
+    if (/^temp\s*\(.+\)$/i.test(name)) return true;
+    if (/^tmp\s*\(.+\)$/i.test(name)) return true;
+    return false;
+  }
+
+  private cleanTemporaryProjectLabel(raw: string): string {
+    let t = oneLine(String(raw || "")).trim();
+    if (!t) return "";
+
+    t = t.replace(/^["'`]+/, "").replace(/["'`]+$/, "");
+    t = t.replace(/[.!?]+$/g, "").trim();
+
+    // Keep the descriptor short by stripping common leading verbs.
+    t = t.replace(
+      /^(fix|add|update|create|implement|improve|refactor|investigate|analyze|analyse|build|set up|setup|support|handle)\s+/i,
+      ""
+    );
+    t = t.replace(/^(behebe|fixe|fuege|füge|aktualisiere|erstelle|implementiere|verbessere|refaktoriere|untersuche|analysiere)\s+/i, "");
+
+    t = t.replace(/[()[\]{}]/g, " ");
+    t = t.replace(/[,:;|]+/g, " ");
+    t = t.replace(/\s+/g, " ").trim();
+    if (!t) return "";
+
+    const words = t.split(" ").filter(Boolean);
+    let short = words.slice(0, 3).join(" ");
+    if (short.length > 20) short = words.slice(0, 2).join(" ");
+    short = truncateText(short, 20);
+    return short.trim();
+  }
+
+  private temporaryProjectLabelFromJob(job: Job): string {
+    const title = this.cleanTemporaryProjectLabel(String(job && job.titleLlm ? job.titleLlm : ""));
+    if (title) return title;
+
+    const prompts = Array.isArray(job && job.prompts) ? job.prompts : [];
+    for (let i = prompts.length - 1; i >= 0; i -= 1) {
+      const p = prompts[i];
+      const promptText = p && typeof (p as any).text === "string" ? String((p as any).text) : "";
+      if (!promptText) continue;
+      const summary = promptSummary(promptText);
+      const label = this.cleanTemporaryProjectLabel(summary || promptText);
+      if (label) return label;
+    }
+
+    return "";
+  }
+
+  private maybeAutoRenameTemporaryProject(jobId: string) {
+    const id = String(jobId || "").trim();
+    if (!id) return;
+
+    const job = this.jobs.get(id);
+    if (!job) return;
+    if (job.status === "running") return;
+    if (job.status !== "done" && job.status !== "needs_attention") return;
+
+    const project = this.projectById(job.projectId);
+    if (!project || !project.isTemporary) return;
+
+    const projectId = String(project.id || "").trim();
+    if (!projectId) return;
+
+    const currentName = typeof project.name === "string" ? project.name.trim() : "";
+    if (!currentName) return;
+    if (!this.canAutoRenameTemporaryProject(currentName)) return;
+
+    const label = this.temporaryProjectLabelFromJob(job);
+    if (!label) return;
+
+    const nextName = `temp (${label})`;
+    if (nextName === currentName) return;
+
+    if (!this.store || typeof this.store.updateProject !== "function") return;
+
+    let updated: any = null;
+    try {
+      updated = this.store.updateProject(projectId, { name: nextName });
+    } catch {
+      return;
+    }
+    if (!updated) return;
+
+    this.sendJobEvent({
+      jobId: id,
+      kind: "project_meta",
+      patch: {
+        projectId,
+        name: nextName
+      }
+    });
+  }
+
   private runCodexTitleSummary(opts: {
     jobId: string;
     codexPath: string;
@@ -741,6 +838,7 @@ export class JobsManager {
         this.sendJobEvent({ jobId, kind: "meta", patch: { titleLlm: title, title: meta.title } });
         this.markJobDirty(jobId);
         this.tryPersistJobNow(live);
+        this.maybeAutoRenameTemporaryProject(jobId);
       } catch {
         // ignore
       } finally {
@@ -926,6 +1024,7 @@ export class JobsManager {
     if (status !== "running") {
       const meta = snapshotJobMeta(job);
       this.sendJobEvent({ jobId, kind: "meta", patch: { title: meta.title } });
+      this.maybeAutoRenameTemporaryProject(jobId);
     }
 
     this.markJobDirty(jobId);
