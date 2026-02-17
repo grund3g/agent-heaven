@@ -118,16 +118,17 @@ const api = window.agentHeaven;
   projectDialogCheckoutsBtn: document.getElementById("projectDialogCheckoutsBtn"),
 
 	  settingsDialog: document.getElementById("settingsDialog"),
-		  settingsDialogClose: document.getElementById("settingsDialogClose"),
-			  settingsCodexPath: document.getElementById("settingsCodexPath"),
-			  settingsCodexModel: document.getElementById("settingsCodexModel"),
-			  settingsUiModel: document.getElementById("settingsUiModel"),
-				  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
-				  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-			  settingsTheme: document.getElementById("settingsTheme"),
-			  settingsColorScheme: document.getElementById("settingsColorScheme"),
-			  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
-			  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
+	  settingsDialogClose: document.getElementById("settingsDialogClose"),
+	  settingsCodexPath: document.getElementById("settingsCodexPath"),
+	  settingsCodexModel: document.getElementById("settingsCodexModel"),
+	  settingsCodexTransport: document.getElementById("settingsCodexTransport"),
+	  settingsUiModel: document.getElementById("settingsUiModel"),
+	  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
+	  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
+	  settingsTheme: document.getElementById("settingsTheme"),
+	  settingsColorScheme: document.getElementById("settingsColorScheme"),
+	  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
+	  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -2605,7 +2606,8 @@ function summarizeCodexEvent(data) {
   if (type === "item.completed" && d.item && (d.item.type === "reasoning" || d.item.type === "agent_message")) {
     return null;
   }
-  if (type === "turn.completed" && d.usage) return null;
+  if (type === "turn.completed") return null;
+  if (type === "token.usage.updated") return null;
   if (type === "thread.started" && d.thread_id) return null;
 
   if ((type === "item.started" || type === "item.completed") && d.item && d.item.type) {
@@ -7670,11 +7672,28 @@ function codexEventToLogLines(data) {
 
   if (type === "turn.started") return ["[turn.started]"];
 
-  if (type === "turn.completed") {
-    const u = d.usage || {};
+  if (type === "token.usage.updated") {
+    const u = d.usage && typeof d.usage === "object" ? d.usage : {};
     const inTok = u.input_tokens ?? "?";
     const outTok = u.output_tokens ?? "?";
-    return [`[turn.completed] tokens in=${inTok} out=${outTok}`];
+    const mcw = toPositiveInt(d.model_context_window);
+    let line = `[token.usage.updated] tokens in=${inTok} out=${outTok}`;
+    const inNum = toPositiveInt(inTok);
+    if (mcw > 0 && inNum > 0) {
+      const pct = (inNum / mcw) * 100;
+      line += ` context=${fmtPctCompact(pct)} (${fmtTokCompact(inNum)}/${fmtTokCompact(mcw)} in)`;
+    }
+    return [line];
+  }
+
+  if (type === "turn.completed") {
+    const u = d.usage && typeof d.usage === "object" ? d.usage : null;
+    if (u) {
+      const inTok = u.input_tokens ?? "?";
+      const outTok = u.output_tokens ?? "?";
+      return [`[turn.completed] tokens in=${inTok} out=${outTok}`];
+    }
+    return ["[turn.completed]"];
   }
 
   if ((type === "item.started" || type === "item.completed") && d.item && typeof d.item === "object") {
@@ -9955,6 +9974,7 @@ function wireUi() {
 				        codex: {
 				          path: els.settingsCodexPath.value.trim(),
 			          model: els.settingsCodexModel.value.trim(),
+			          transport: els.settingsCodexTransport ? els.settingsCodexTransport.value : "exec_json",
 		          sandboxMode: els.settingsCodexSandboxMode.value,
 		          skipGitRepoCheck: !!els.settingsCodexSkipGitRepoCheck.checked,
 		          bypassApprovalsAndSandbox: !!els.settingsCodexBypass.checked,
@@ -10243,8 +10263,9 @@ function resolveModelContextWindow(modelName) {
 function jobContextUsage(job) {
   if (!job || typeof job !== "object") return null;
 
+  const directLimit = toPositiveInt(job.modelContextWindow);
   const model = String(job.model || "").trim();
-  if (!model) return null;
+  if (!model && directLimit <= 0) return null;
 
   const usage = job.usage && typeof job.usage === "object" ? job.usage : null;
   let inputTokens = usage ? toPositiveInt(usage.input_tokens) : 0;
@@ -10258,7 +10279,7 @@ function jobContextUsage(job) {
 
   if (inputTokens <= 0) return null;
 
-  const limitTokens = resolveModelContextWindow(model);
+  const limitTokens = directLimit > 0 ? directLimit : resolveModelContextWindow(model);
   if (limitTokens <= 0) return null;
 
   return {
@@ -10856,7 +10877,8 @@ function maybeShowMissingAgentBinariesToast(res) {
 
 		  els.settingsCodexPath.value = codex.path || "";
 		  els.settingsCodexModel.value = codex.model || "";
-				  setUiModelControls(s.uiModel || "");
+	  if (els.settingsCodexTransport) els.settingsCodexTransport.value = codex.transport || "exec_json";
+		  setUiModelControls(s.uiModel || "");
 		  els.settingsTheme.value = normalizeTheme(s.uiTheme);
 		  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
 	  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();

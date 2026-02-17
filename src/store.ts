@@ -80,6 +80,7 @@ export const DEFAULT_STATE = {
       codex: {
         path: "", // empty => use PATH resolution ("codex")
         model: "",
+        transport: "exec_json", // exec_json | app_server
         sandboxMode: "workspace-write", // read-only | workspace-write | danger-full-access
         bypassApprovalsAndSandbox: false,
         skipGitRepoCheck: false,
@@ -344,6 +345,15 @@ function ensureAgentSettings(settings) {
   if (hasLegacyKeys && legacyCodexModel.trim() && !codex.model.trim()) {
     codex.model = legacyCodexModel;
     changed = true;
+  }
+
+  {
+    const raw = typeof codex.transport === "string" ? codex.transport.trim().toLowerCase() : "";
+    const nextTransport = raw === "app_server" || raw === "app-server" || raw === "appserver" ? "app_server" : "exec_json";
+    if (codex.transport !== nextTransport) {
+      codex.transport = nextTransport;
+      changed = true;
+    }
   }
 
   if (typeof codex.sandboxMode !== "string") {

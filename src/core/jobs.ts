@@ -37,6 +37,7 @@ export type Job = {
   logs: JobLogEntry[];
   usage: any;
   usageTotal: UsageTotals;
+  modelContextWindow?: number | null;
   exitCode: number | null;
 };
 
@@ -93,6 +94,10 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
       turns: toIntOrZero((ut as any).turns)
     };
   }
+  {
+    const mcw = toIntOrZero((out as any).modelContextWindow);
+    out.modelContextWindow = mcw > 0 ? mcw : null;
+  }
   out.exitCode = typeof out.exitCode === "number" || out.exitCode === null ? out.exitCode : null;
 
   // If the app died/restarted mid-run, there is no process to attach to anymore.
@@ -142,6 +147,7 @@ export function snapshotJob(job: Job): Job {
     logs,
     usage,
     usageTotal,
+    modelContextWindow,
     exitCode
   } = job;
   return {
@@ -169,6 +175,7 @@ export function snapshotJob(job: Job): Job {
     logs,
     usage,
     usageTotal,
+    modelContextWindow,
     exitCode
   };
 }
@@ -236,6 +243,7 @@ export function snapshotJobMeta(job: Job): any {
     threadId,
     usage,
     usageTotal,
+    modelContextWindow,
     exitCode
   } = job;
 
@@ -261,6 +269,7 @@ export function snapshotJobMeta(job: Job): any {
     queuedCount: Array.isArray(job.queuedPrompts) ? job.queuedPrompts.length : 0,
     usage,
     usageTotal,
+    modelContextWindow,
     exitCode,
     previewText: jobPreviewText(job)
   };

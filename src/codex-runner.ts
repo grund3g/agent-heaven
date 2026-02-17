@@ -1,10 +1,13 @@
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { spawnPlatform } from "./platform-spawn";
+import { runCodexAppServerExec, runCodexAppServerResume } from "./codex-app-server-runner";
 
 function nowIso() {
   return new Date().toISOString();
 }
 
-function pushImageArgs(args, images) {
+function pushImageArgs(args: string[], images: unknown) {
   const arr = Array.isArray(images) ? images : [];
   for (const img of arr) {
     const p = typeof img === "string" ? img.trim() : "";
@@ -13,12 +16,12 @@ function pushImageArgs(args, images) {
   }
 }
 
-function looksLikeJsonObjectLine(line) {
+function looksLikeJsonObjectLine(line: string) {
   const s = line.trimStart();
   return s.startsWith("{") && s.endsWith("}");
 }
 
-function parseJsonLine(line) {
+function parseJsonLine(line: string) {
   if (!looksLikeJsonObjectLine(line)) return null;
   try {
     return JSON.parse(line);
@@ -27,7 +30,7 @@ function parseJsonLine(line) {
   }
 }
 
-function buildExecArgs({ settings, model, projectPath, images }) {
+function buildExecArgs({ settings, model, projectPath, images }: { settings: any; model: string; projectPath: string; images: string[] }) {
   const args = ["exec", "--json"];
 
   if (settings.color && settings.color !== "auto") {
@@ -60,7 +63,7 @@ function buildExecArgs({ settings, model, projectPath, images }) {
   return args;
 }
 
-function buildResumeArgs({ settings, model, threadId, images }) {
+function buildResumeArgs({ settings, model, threadId, images }: { settings: any; model: string; threadId: string; images: string[] }) {
   const args = ["exec", "resume", "--json"];
 
   if (settings.skipGitRepoCheck) {
@@ -80,7 +83,7 @@ function buildResumeArgs({ settings, model, threadId, images }) {
   return args;
 }
 
-function spawnCodex({ codexPath, cwd, args, prompt }) {
+function spawnCodex({ codexPath, cwd, args, prompt }: { codexPath: string; cwd: string; args: string[]; prompt: string }) {
   const child = spawnPlatform(codexPath, args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
@@ -94,7 +97,7 @@ function spawnCodex({ codexPath, cwd, args, prompt }) {
   return child;
 }
 
-function attachLineStream(stream, onLine) {
+function attachLineStream(stream: NodeJS.ReadableStream, onLine: (line: string) => void) {
   let buf = "";
   stream.setEncoding("utf8");
   stream.on("data", (chunk) => {
@@ -113,7 +116,7 @@ function attachLineStream(stream, onLine) {
   });
 }
 
-export function runCodexExec({ codexPath, settings, projectPath, model, prompt, images, onEvent }) {
+function runCodexExecJson({ codexPath, settings, projectPath, model, prompt, images, onEvent }: any) {
   const args = buildExecArgs({ settings, model, projectPath, images });
   const child = spawnCodex({ codexPath, cwd: projectPath || process.cwd(), args, prompt });
 
@@ -131,7 +134,7 @@ export function runCodexExec({ codexPath, settings, projectPath, model, prompt, 
   return child;
 }
 
-export function runCodexResume({ codexPath, settings, cwd, threadId, model, prompt, images, onEvent }) {
+function runCodexResumeJson({ codexPath, settings, cwd, threadId, model, prompt, images, onEvent }: any) {
   const args = buildResumeArgs({ settings, model, threadId, images });
   const child = spawnCodex({ codexPath, cwd: cwd || process.cwd(), args, prompt });
 
@@ -147,4 +150,193 @@ export function runCodexResume({ codexPath, settings, cwd, threadId, model, prom
   });
 
   return child;
+}
+
+function normalizeCodexTransport(value: unknown): "exec_json" | "app_server" {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "app_server" || raw === "app-server" || raw === "appserver") return "app_server";
+  return "exec_json";
+}
+
+class ChildSupervisor extends EventEmitter {
+  killed = false;
+  pid: number | undefined;
+  private child: ChildProcess | null = null;
+
+  setChild(next: ChildProcess | null) {
+    this.child = next;
+    this.pid = next && typeof (next as any).pid === "number" ? (next as any).pid : undefined;
+    if (this.killed && this.child) {
+      try {
+        this.child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  kill(signal?: NodeJS.Signals | number) {
+    this.killed = true;
+    if (!this.child || typeof this.child.kill !== "function") return false;
+    try {
+      return this.child.kill(signal as any);
+    } catch {
+      return false;
+    }
+  }
+}
+
+function runWithAppServerFallback(opts: any, runAppServer: (nextOpts: any) => ChildProcess, runExecJson: (nextOpts: any) => ChildProcess) {
+  const supervisor = new ChildSupervisor();
+
+  let startedTurn = false;
+  let finished = false;
+  let fallbackActive = false;
+
+  const onEventFallback = typeof opts.onEvent === "function" ? opts.onEvent : () => {};
+
+  function startFallback(reason: string) {
+    if (finished || fallbackActive) return;
+    fallbackActive = true;
+
+    onEventFallback({
+      ts: nowIso(),
+      stream: "stderr",
+      kind: "log",
+      text: `[codex] app-server unavailable (${reason}); falling back to exec --json`
+    });
+
+    let child: ChildProcess;
+    try {
+      child = runExecJson({ ...opts, onEvent: onEventFallback });
+    } catch (err: any) {
+      finished = true;
+      supervisor.emit("error", err);
+      return;
+    }
+
+    supervisor.setChild(child);
+
+    child.on("error", (err: any) => {
+      if (finished) return;
+      finished = true;
+      supervisor.emit("error", err);
+    });
+
+    child.on("close", (code: any, signal: any) => {
+      if (finished) return;
+      finished = true;
+      supervisor.emit("close", code, signal);
+    });
+  }
+
+  const onPrimaryEvent = (ev: any) => {
+    if (fallbackActive) return;
+    if (!ev || typeof ev !== "object") return;
+
+    if (ev.kind === "codex" && ev.data && typeof ev.data === "object") {
+      const data = ev.data as any;
+      if (data.type === "turn.started") startedTurn = true;
+
+      if (!startedTurn && data.type === "runner.error") {
+        const reason = typeof data.message === "string" && data.message.trim() ? data.message.trim() : "bootstrap error";
+        startFallback(reason);
+        return;
+      }
+    }
+
+    onEventFallback(ev);
+  };
+
+  let primary: ChildProcess;
+  try {
+    primary = runAppServer({ ...opts, onEvent: onPrimaryEvent });
+  } catch (err: any) {
+    startFallback(String(err && err.message ? err.message : err));
+    return supervisor as unknown as ChildProcess;
+  }
+
+  supervisor.setChild(primary);
+
+  primary.on("error", (err: any) => {
+    if (finished) return;
+    if (fallbackActive) return;
+
+    if (supervisor.killed) {
+      finished = true;
+      supervisor.emit("error", err);
+      return;
+    }
+
+    if (!startedTurn) {
+      startFallback(String(err && err.message ? err.message : err));
+      return;
+    }
+
+    finished = true;
+    supervisor.emit("error", err);
+  });
+
+  primary.on("close", (code: any, signal: any) => {
+    if (finished) return;
+    if (fallbackActive) return;
+
+    if (supervisor.killed) {
+      finished = true;
+      supervisor.emit("close", code, signal);
+      return;
+    }
+
+    if (!startedTurn && !fallbackActive) {
+      const numericCode = typeof code === "number" ? code : null;
+      if (numericCode !== 0) {
+        startFallback(`exit code ${numericCode}`);
+        return;
+      }
+    }
+
+    finished = true;
+    supervisor.emit("close", code, signal);
+  });
+
+  return supervisor as unknown as ChildProcess;
+}
+
+export function runCodexExec(opts: {
+  codexPath: string;
+  settings: any;
+  projectPath: string;
+  model: string;
+  prompt: string;
+  images: string[];
+  onEvent: (ev: any) => void;
+}) {
+  const transport = normalizeCodexTransport(opts && opts.settings && (opts.settings as any).transport);
+  if (transport !== "app_server") return runCodexExecJson(opts);
+
+  return runWithAppServerFallback(
+    opts,
+    (nextOpts) => runCodexAppServerExec(nextOpts),
+    (nextOpts) => runCodexExecJson(nextOpts)
+  );
+}
+
+export function runCodexResume(opts: {
+  codexPath: string;
+  settings: any;
+  cwd: string;
+  threadId: string;
+  model: string;
+  prompt: string;
+  images: string[];
+  onEvent: (ev: any) => void;
+}) {
+  const transport = normalizeCodexTransport(opts && opts.settings && (opts.settings as any).transport);
+  if (transport !== "app_server") return runCodexResumeJson(opts);
+
+  return runWithAppServerFallback(
+    opts,
+    (nextOpts) => runCodexAppServerResume(nextOpts),
+    (nextOpts) => runCodexResumeJson(nextOpts)
+  );
 }

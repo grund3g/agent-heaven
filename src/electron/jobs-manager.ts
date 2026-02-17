@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeImagePaths, validateImagePaths } from "../core/images";
 import { promptSummary } from "../core/prompt";
 import { oneLine, truncateText } from "../core/text";
-import { addUsageTotals } from "../core/usage";
+import { addUsageTotals, toIntOrZero } from "../core/usage";
 import { newId } from "../core/id";
 import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job } from "../core/jobs";
 import { searchJobs, type JobSearchOpts } from "../core/job-search";
@@ -94,76 +94,6 @@ export class JobsManager {
 
   private normalizeCheckoutModeOverride(value: unknown): "" | "inplace" | "worktree" | "clone" {
     return normalizeGitCheckoutMode(value);
-  }
-
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
-    if (!text) return false;
-
-    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
-    const writePatterns = [
-      /\bfix\b/,
-      /\bimplement\b/,
-      /\badd\b/,
-      /\bupdate\b/,
-      /\bchange\b/,
-      /\bedit\b/,
-      /\brefactor\b/,
-      /\bpatch\b/,
-      /\bwrite\b/,
-      /\bcreate\b/,
-      /\bremove\b/,
-      /\brename\b/,
-      /\bmigrate\b/,
-      /\bcommit\b/,
-      /\bbugfix\b/,
-      /\bcode\s+change/,
-      /\bcode\s+changes/,
-      /\bmake\s+changes?\b/,
-      /\bbehebe\b/,
-      /\bfixe\b/,
-      /\bimplementier/,
-      /\bfu[eü]g(?:e|en)?\b/,
-      /\b[aä]nder(?:e|n|ung)/,
-      /\baktualisier/,
-      /\berstell(?:e|en)?\b/,
-      /\bschreib(?:e|en)?\b/,
-      /\brefaktorisier/,
-      /\bl[oö]sch(?:e|en)?\b/,
-      /\bumbau(?:en)?\b/,
-      /\bmigrier(?:e|en)?\b/
-    ];
-    if (writePatterns.some((re) => re.test(text))) return false;
-
-    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
-    const readOnlyPatterns = [
-      /\banalys(?:e|is|ier)/,
-      /\banaly[sz]e\b/,
-      /\bexplain\b/,
-      /\berkl[aä]r/,
-      /\breview\b/,
-      /\binspect\b/,
-      /\binvestigat/,
-      /\buntersuch/,
-      /\bcheck\b/,
-      /\bpr[uü]f(?:e|en)?\b/,
-      /\bwhy\b/,
-      /\bwarum\b/,
-      /\bwieso\b/,
-      /\bplan\b/,
-      /\bbrainstorm\b/,
-      /\bidee(?:n)?\b/,
-      /\bsummariz/,
-      /\bzusammenfass/,
-      /\bstatus\b/,
-      /\bcompare\b/,
-      /\bvergleich/
-    ];
-    if (readOnlyPatterns.some((re) => re.test(text))) return true;
-
-    // Questions without edit intent are typically informational.
-    if (text.endsWith("?")) return true;
-    return false;
   }
 
   private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
@@ -1101,10 +1031,25 @@ export class JobsManager {
         }
       }
 
+      if (data.type === "token.usage.updated") {
+        const mcw = toIntOrZero((data as any).model_context_window);
+        if (mcw > 0 && job.modelContextWindow !== mcw) {
+          job.modelContextWindow = mcw;
+          this.sendJobEvent({ jobId, kind: "meta", patch: { modelContextWindow: job.modelContextWindow } });
+          this.markJobDirty(jobId);
+        }
+      }
+
       if (data.type === "turn.completed" && data.usage) {
         job.usage = data.usage;
         job.usageTotal = addUsageTotals(job.usageTotal, data.usage);
-        this.sendJobEvent({ jobId, kind: "meta", patch: { usage: job.usage, usageTotal: job.usageTotal } });
+        const mcw = toIntOrZero((data as any).model_context_window);
+        if (mcw > 0) job.modelContextWindow = mcw;
+        this.sendJobEvent({
+          jobId,
+          kind: "meta",
+          patch: { usage: job.usage, usageTotal: job.usageTotal, modelContextWindow: job.modelContextWindow || null }
+        });
         this.markJobDirty(jobId);
       }
     }
@@ -1783,6 +1728,7 @@ export class JobsManager {
       logs: [],
       usage: null,
       usageTotal: { input_tokens: 0, output_tokens: 0, turns: 0 },
+      modelContextWindow: null,
       exitCode: null
     };
 

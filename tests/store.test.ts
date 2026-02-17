@@ -42,6 +42,7 @@ describe("store", () => {
     const settings: any = s.getSettings();
     expect(settings.agents.codex.path).toBe("/bin/codex");
     expect(settings.agents.codex.model).toBe("gpt-4.1");
+    expect(settings.agents.codex.transport).toBe("exec_json");
     expect(settings.agents.codex.sandboxMode).toBe("read-only");
     expect(settings.agents.codex.bypassApprovalsAndSandbox).toBe(true);
     expect(settings.agents.codex.skipGitRepoCheck).toBe(true);
@@ -156,5 +157,36 @@ describe("store", () => {
 
     const updated = s.updateSettings({ editorCommand: "  code  " });
     expect(updated.editorCommand).toBe("code");
+  });
+
+  it("normalizes codex transport mode", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify(
+        {
+          settings: {
+            agents: {
+              codex: {
+                transport: "app-server"
+              }
+            }
+          },
+          projects: []
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect((s.getSettings() as any).agents.codex.transport).toBe("app_server");
+
+    const updated = s.updateSettings({ agents: { codex: { transport: "wat" } } });
+    expect((updated as any).agents.codex.transport).toBe("exec_json");
   });
 });
