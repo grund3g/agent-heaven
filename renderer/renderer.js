@@ -296,6 +296,7 @@ const PROMPT_PATH_SUGGEST_DEBOUNCE_MS = 90;
 const PROMPT_PATH_SUGGEST_CURSOR_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 let promptPathSuggestTimer = null;
 let promptPathSuggestReqSeq = 0;
+const OFFLINE_TOAST_MESSAGE = "No internet connection. Some actions may fail until you're back online.";
 const promptPathSuggestState = {
   open: false,
   mode: "insert", // insert | attach
@@ -8308,6 +8309,35 @@ function showToast(msg, undoHandler = null, ms = 8000, opts = null) {
   state.toastTimer = window.setTimeout(() => hideToast(), Math.max(800, ms));
 }
 
+function browserOnlineState() {
+  if (typeof navigator === "undefined") return true;
+  if (typeof navigator.onLine !== "boolean") return true;
+  return navigator.onLine;
+}
+
+function wireOfflineToast() {
+  let lastKnownOnline = browserOnlineState();
+
+  const syncOnlineState = () => {
+    const nowOnline = browserOnlineState();
+    const wentOffline = lastKnownOnline && !nowOnline;
+    lastKnownOnline = nowOnline;
+    if (wentOffline) showToast(OFFLINE_TOAST_MESSAGE);
+  };
+
+  if (!lastKnownOnline) showToast(OFFLINE_TOAST_MESSAGE);
+
+  window.addEventListener("offline", () => syncOnlineState());
+  window.addEventListener("online", () => {
+    lastKnownOnline = true;
+  });
+  window.addEventListener("focus", () => syncOnlineState());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    syncOnlineState();
+  });
+}
+
 function closeJobDialog() {
   if (!els.jobDialog) return;
   if (els.jobDialog.open) els.jobDialog.close();
@@ -11354,6 +11384,7 @@ async function init() {
   }
 
   wireUi();
+  wireOfflineToast();
   wireSystemColorSchemeListener();
   state.sortMode = normalizeSortMode(getStoredSortMode());
   if (els.sortSelect) els.sortSelect.value = state.sortMode;
