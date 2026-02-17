@@ -1821,6 +1821,7 @@ export async function startApp(): Promise<void> {
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     const jobId = String(p.jobId || "").trim();
     const commitMessage = typeof p.commitMessage === "string" ? p.commitMessage.trim() : "";
+    const autoArchive = p.autoArchive === true;
     if (!jobId) return { ok: false, error: "Missing jobId" };
 
     const got = jobsManager.getJob(jobId);
@@ -1832,6 +1833,15 @@ export async function startApp(): Promise<void> {
     }
     const marked = jobsManager.setIntegratingToDefault(jobId, true);
     if (!marked || typeof marked !== "object" || (marked as any).ok !== true) return marked;
+
+    const withAutoArchiveResult = (result: any) => {
+      if (!autoArchive) return result;
+      const archived = jobsManager.archive({ jobId, reason: "integrated_after_default_branch" });
+      const archivedOk = !!(archived && typeof archived === "object" && (archived as any).ok === true);
+      if (archivedOk) return { ...result, autoArchived: true, autoArchiveError: "" };
+      const err = archived && typeof archived === "object" ? String((archived as any).error || "").trim() : "";
+      return { ...result, autoArchived: false, autoArchiveError: err || "Failed to archive." };
+    };
 
     try {
     const projectId = String(job.projectId || "").trim();
@@ -1965,7 +1975,7 @@ export async function startApp(): Promise<void> {
       if (committed) {
         jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
       }
-      return {
+      return withAutoArchiveResult({
         ok: true,
         targetPath: targetDir,
         targetBranch,
@@ -1975,7 +1985,7 @@ export async function startApp(): Promise<void> {
         targetCommitted: false,
         targetCommittedSha: "",
         targetCommitMessage: ""
-      };
+      });
     }
 
     const targetReadyInfo = await getGitInfo(targetDir);
@@ -2057,7 +2067,7 @@ export async function startApp(): Promise<void> {
 
         if (parsed && parsed.ok) {
           jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
-          return {
+          return withAutoArchiveResult({
             ok: true,
             targetPath: targetDir,
             targetBranch,
@@ -2068,7 +2078,7 @@ export async function startApp(): Promise<void> {
             targetCommittedSha,
             targetCommitMessage,
             integrationMethod: "agent"
-          };
+          });
         }
 
         const failMsgBase = parsed ? String(parsed.error || "").trim() : "Agent integration failed.";
@@ -2127,7 +2137,7 @@ export async function startApp(): Promise<void> {
     try {
       await cherryPick(targetDir, commits);
       jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
-      return {
+      return withAutoArchiveResult({
         ok: true,
         targetPath: targetDir,
         targetBranch,
@@ -2139,7 +2149,7 @@ export async function startApp(): Promise<void> {
         targetCommitMessage,
         integrationMethod,
         agentFallbackReason
-      };
+      });
     } catch (err: any) {
       const msg = String(err && err.message ? err.message : err);
       return {

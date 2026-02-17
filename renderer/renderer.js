@@ -6106,6 +6106,44 @@ function showIntegrateDialogDetails() {
 let integrateToDefaultInFlight = false;
 let integrateToDefaultInFlightJobId = "";
 let queuedIntegrateToDefaultJobId = "";
+
+function waitMs(ms) {
+  const delay = Math.max(0, Math.trunc(Number(ms) || 0));
+  if (!delay) return Promise.resolve();
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delay);
+  });
+}
+
+async function archiveJobWithRetry(jobId, opts = {}) {
+  const id = String(jobId || "").trim();
+  if (!id) return { ok: false, error: "Missing job id." };
+  if (!api || typeof api.jobsArchive !== "function") return { ok: false, error: "Archive is not supported in this build." };
+
+  const o = opts && typeof opts === "object" ? opts : {};
+  const attemptsRaw = Number(o.attempts);
+  const attempts = Number.isFinite(attemptsRaw) ? Math.max(1, Math.min(10, Math.trunc(attemptsRaw))) : 5;
+  const baseDelayRaw = Number(o.baseDelayMs);
+  const baseDelayMs = Number.isFinite(baseDelayRaw) ? Math.max(80, Math.min(2000, Math.trunc(baseDelayRaw))) : 220;
+
+  let lastErr = "";
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await api.jobsArchive(id);
+      return { ok: true, error: "" };
+    } catch (err) {
+      const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
+      lastErr = full;
+      const low = full.toLowerCase();
+      const retryable = low.includes("job is running") || low.includes("integration already running");
+      if (!retryable || i >= attempts - 1) break;
+      await waitMs(baseDelayMs * (i + 1));
+    }
+  }
+
+  return { ok: false, error: lastErr || "Failed to archive." };
+}
+
 async function startIntegrateToDefaultFromDialog(opts = {}) {
   const o = opts && typeof opts === "object" ? opts : {};
   const toastOnly = !!o.toastOnly;
@@ -6178,8 +6216,14 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
   });
   if (toastOnly) showToast("Integrating into default branch…");
 
+  const canArchive = jobBox(job) === "board";
+  const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
+
   try {
-    const res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
+    const res = await api.checkoutsIntegrateToDefault(id, {
+      commitMessage: "",
+      autoArchive
+    });
 
     const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
     const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
@@ -6190,6 +6234,8 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     const targetCommittedSha = res && typeof res.targetCommittedSha === "string" ? res.targetCommittedSha : "";
     const integrationMethod = res && typeof res.integrationMethod === "string" ? String(res.integrationMethod || "").trim() : "";
     const agentFallbackReason = res && typeof res.agentFallbackReason === "string" ? String(res.agentFallbackReason || "").trim() : "";
+    const backendAutoArchived = !!(res && res.autoArchived === true);
+    const backendAutoArchiveError = res && typeof res.autoArchiveError === "string" ? String(res.autoArchiveError || "").trim() : "";
 
     let msg = "";
     if (applied <= 0) msg = "Nothing to integrate.";
@@ -6199,8 +6245,6 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     integrateDialogTargetPath = targetPath;
     integrateDialogTargetBranch = targetBranch;
 
-    const canArchive = jobBox(job) === "board";
-    const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
     const details = [
       targetBranch ? `Target branch: ${targetBranch}` : "",
       targetPath ? `Target path: ${targetPath}` : "",
@@ -6227,20 +6271,28 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     });
 
     if (toastOnly) {
-      if (autoArchive && api && typeof api.jobsArchive === "function") {
-        try {
-          await api.jobsArchive(id);
+      if (autoArchive) {
+        if (backendAutoArchived) {
           integrateDialogArchived = true;
           showToast(msg, null, 2400);
           window.setTimeout(() => {
             showToast("Ticket archived.");
           }, 950);
-        } catch (err) {
-          const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
-          const first = (full.split("\n")[0] || "").trim() || "Failed to archive.";
-          showToast(`${msg} ${first}`);
+        } else {
+          const archiveRes = await archiveJobWithRetry(id, { attempts: 6, baseDelayMs: 220 });
+          if (archiveRes.ok) {
+            integrateDialogArchived = true;
+            showToast(msg, null, 2400);
+            window.setTimeout(() => {
+              showToast("Ticket archived.");
+            }, 950);
+          } else {
+            const full = backendAutoArchiveError || archiveRes.error || "Failed to archive.";
+            const first = (String(full).split("\n")[0] || "").trim() || "Failed to archive.";
+            showToast(`${msg} ${first}`);
+          }
         }
-      } else if (canArchive && api && typeof api.jobsArchive === "function" && !autoArchive) {
+      } else if (canArchive && api && typeof api.jobsArchive === "function") {
         showToast(msg, null, 10000, {
           actions: [
             {
@@ -6261,8 +6313,18 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
       } else {
         showToast(msg);
       }
-    } else if (autoArchive) {
+    } else if (autoArchive && !backendAutoArchived) {
       await archiveIntegrateDialogJob();
+    } else if (autoArchive && backendAutoArchived) {
+      integrateDialogArchived = true;
+      setIntegrateDialogPhase("success", {
+        status: "Archived",
+        message: "Ticket archived.",
+        details,
+        targetPath,
+        targetBranch,
+        archived: true
+      });
     }
   } catch (err) {
     const full = String(err && err.message ? err.message : err).trim() || "Integration failed.";
@@ -6304,7 +6366,8 @@ async function archiveIntegrateDialogJob() {
 
   setIntegrateDialogPhase("pending", { status: "Archiving…", message: "Archiving this ticket…" });
   try {
-    await api.jobsArchive(id);
+    const archived = await archiveJobWithRetry(id, { attempts: 6, baseDelayMs: 220 });
+    if (!archived.ok) throw new Error(archived.error || "Failed to archive.");
     integrateDialogArchived = true;
     integrateDialogResultText = prevDetails;
     integrateDialogTargetPath = prevTargetPath;

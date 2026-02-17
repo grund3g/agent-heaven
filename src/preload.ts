@@ -104,7 +104,11 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   },
   checkoutsIntegrateToDefault: async (jobId, opts) => {
     const p = opts && typeof opts === "object" ? opts : {};
-    const res = await invokeOk("checkouts:integrateToDefault", { jobId, commitMessage: p.commitMessage });
+    const res = await invokeOk("checkouts:integrateToDefault", {
+      jobId,
+      commitMessage: p.commitMessage,
+      autoArchive: p.autoArchive === true
+    });
     return res;
   },
   checkoutsCommit: async (jobId, opts) => {
