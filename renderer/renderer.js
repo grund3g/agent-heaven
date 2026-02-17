@@ -118,15 +118,16 @@ const api = window.agentHeaven;
   projectDialogCheckoutsBtn: document.getElementById("projectDialogCheckoutsBtn"),
 
 	  settingsDialog: document.getElementById("settingsDialog"),
-	  settingsDialogClose: document.getElementById("settingsDialogClose"),
-		  settingsCodexPath: document.getElementById("settingsCodexPath"),
-		  settingsCodexModel: document.getElementById("settingsCodexModel"),
-		  settingsUiModel: document.getElementById("settingsUiModel"),
-			  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
-			  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-		  settingsTheme: document.getElementById("settingsTheme"),
-		  settingsColorScheme: document.getElementById("settingsColorScheme"),
-		  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
+		  settingsDialogClose: document.getElementById("settingsDialogClose"),
+			  settingsCodexPath: document.getElementById("settingsCodexPath"),
+			  settingsCodexModel: document.getElementById("settingsCodexModel"),
+			  settingsUiModel: document.getElementById("settingsUiModel"),
+				  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
+				  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
+			  settingsTheme: document.getElementById("settingsTheme"),
+			  settingsColorScheme: document.getElementById("settingsColorScheme"),
+			  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
+			  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -306,6 +307,8 @@ const promptPathSuggestState = {
 };
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
+const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
+const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
 
 let followupAutosizeRaf = 0;
 
@@ -5200,6 +5203,26 @@ function editorCommandFromSettings() {
   return typeof s.editorCommand === "string" ? s.editorCommand.trim() : "";
 }
 
+function editorPresetFromCommand(command) {
+  const cmd = String(command || "").trim();
+  if (!cmd) return "";
+  if (EDITOR_PRESET_VALUES.has(cmd)) return cmd;
+  return EDITOR_PRESET_CUSTOM_VALUE;
+}
+
+function syncEditorPresetFromCommandInput() {
+  if (!els.settingsEditorPreset || !els.settingsEditorCommand) return;
+  const cmd = String(els.settingsEditorCommand.value || "").trim();
+  els.settingsEditorPreset.value = editorPresetFromCommand(cmd);
+}
+
+function applyEditorPresetToCommandInput() {
+  if (!els.settingsEditorPreset || !els.settingsEditorCommand) return;
+  const preset = String(els.settingsEditorPreset.value || "").trim();
+  if (!preset || preset === EDITOR_PRESET_CUSTOM_VALUE) return;
+  els.settingsEditorCommand.value = preset;
+}
+
 function hasConfiguredEditorCommand() {
   return !!editorCommandFromSettings();
 }
@@ -9526,6 +9549,17 @@ function wireUi() {
 	    if (e.target === els.settingsDialog) els.settingsDialog.close();
 	  });
 
+	  if (els.settingsEditorPreset) {
+	    els.settingsEditorPreset.addEventListener("change", () => {
+	      applyEditorPresetToCommandInput();
+	    });
+	  }
+	  if (els.settingsEditorCommand) {
+	    els.settingsEditorCommand.addEventListener("input", () => {
+	      syncEditorPresetFromCommandInput();
+	    });
+	  }
+
 	  if (els.actionsDialogClose) {
 	    els.actionsDialogClose.addEventListener("click", () => {
 	      try {
@@ -10823,10 +10857,11 @@ function maybeShowMissingAgentBinariesToast(res) {
 		  els.settingsCodexPath.value = codex.path || "";
 		  els.settingsCodexModel.value = codex.model || "";
 				  setUiModelControls(s.uiModel || "");
-				  els.settingsTheme.value = normalizeTheme(s.uiTheme);
-				  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
-		  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
-				  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
+		  els.settingsTheme.value = normalizeTheme(s.uiTheme);
+		  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+	  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
+	  syncEditorPresetFromCommandInput();
+		  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
 				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
 	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
 	  els.settingsCodexColor.value = codex.color || "auto";

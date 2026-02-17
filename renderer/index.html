@@ -541,10 +541,31 @@
 		              </select>
 		            </label>
 	            <label class="field">
-	              <div class="field__label">Editor command (task: Open in editor)</div>
-	              <input id="settingsEditorCommand" class="input" placeholder="e.g. code, cursor, zed" />
+	              <div class="field__label">Editor preset</div>
+	              <select id="settingsEditorPreset" class="select">
+	                <option value="">Select preset…</option>
+	                <option value="code">Visual Studio Code</option>
+	                <option value="cursor">Cursor</option>
+	                <option value="windsurf">Windsurf</option>
+	                <option value="zed">Zed</option>
+	                <option value="subl">Sublime Text</option>
+	                <option value="nvim">Neovim</option>
+	                <option value="vim">Vim</option>
+	                <option value="idea">IntelliJ IDEA</option>
+	                <option value="webstorm">WebStorm</option>
+	                <option value="pycharm">PyCharm</option>
+	                <option value="goland">GoLand</option>
+	                <option value="__custom__">Custom…</option>
+	              </select>
 	            </label>
-	            <div class="settings__note">The task path is passed as one argument. This action is hidden when empty.</div>
+	            <label class="field">
+	              <div class="field__label">Editor command (task: Open in editor)</div>
+	              <input id="settingsEditorCommand" class="input" placeholder="e.g. code, cursor, zed, code --reuse-window" />
+	            </label>
+	            <div class="settings__note">
+	              Pick a preset or use a custom command. The task path is appended automatically unless your command already passes a target
+	              (for example <code class="md-inline">.</code>) or uses <code class="md-inline">{path}</code>.
+	            </div>
 	            <label class="field field--row">
 	              <input id="settingsMenuBarMode" type="checkbox" />
 	              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>

@@ -23,6 +23,7 @@ import { listCodexModels } from "./codex-models";
 import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
 import { installAgentCli } from "../agent-install";
 import { inferCommitMessageStyleFromSubjects, suggestCommitMessage } from "../core/commit-message";
+import { buildEditorLaunchCommand } from "../core/command-line";
 import { jobDisplayTitle } from "../core/prompt";
 import { normalizeBranchName } from "../core/git-normalize";
 import { spawnPlatform } from "../platform-spawn";
@@ -1345,8 +1346,13 @@ export async function startApp(): Promise<void> {
       return { ok: false, error: "No editor configured. Set one in Settings -> UI -> Editor command." };
     }
 
+    const launch = buildEditorLaunchCommand(editorCommand, targetPath);
+    if (!launch) {
+      return { ok: false, error: "Invalid editor command. Use a binary name (for example: code)." };
+    }
+
     try {
-      const child = spawnPlatform(editorCommand, [targetPath], {
+      const child = spawnPlatform(launch.command, launch.args, {
         cwd: pickCwdForEditorTarget(targetPath),
         detached: true,
         stdio: "ignore",
