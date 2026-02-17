@@ -5263,13 +5263,13 @@ function renderCard(job) {
         </div>
         ${showStatusPill ? `<div class="card__status">${fmtStatusPill(job)}</div>` : ""}
       </div>
+      <div class="card__preview${liveCls}">${renderMarkdownInlineSafeHtml(prev.text || "…")}</div>
       <div class="card__meta"${metaHiddenAttr} data-job-meta>
         <div class="card__tokens"${tokHiddenAttr} data-job-tokens title="${escapeHtml(oneLine(tokTitle))}">${escapeHtml(tokText)}</div>
         <div class="card__duration"${durHiddenAttr} data-job-duration>${escapeHtml(dur)}</div>
       </div>
-	      <div class="card__preview${liveCls}">${renderMarkdownInlineSafeHtml(prev.text || "…")}</div>
-	    </article>
-	  `;
+    </article>
+  `;
 }
 
 function laneElForStatus(status) {
@@ -5543,13 +5543,18 @@ function updateCardEl(job) {
 
   const ensureMetaWrap = () => {
     let wrap = existing.querySelector("[data-job-meta]");
-    if (wrap) return wrap;
+    const previewEl = existing.querySelector(".card__preview");
+    if (wrap) {
+      if (previewEl && previewEl.parentElement === existing && wrap.parentElement === existing && wrap !== previewEl.nextElementSibling) {
+        existing.insertBefore(wrap, previewEl.nextSibling);
+      }
+      return wrap;
+    }
     wrap = document.createElement("div");
     wrap.className = "card__meta";
     wrap.setAttribute("data-job-meta", "");
     wrap.hidden = true;
-    const previewEl = existing.querySelector(".card__preview");
-    if (previewEl && previewEl.parentElement === existing) existing.insertBefore(wrap, previewEl);
+    if (previewEl && previewEl.parentElement === existing) existing.insertBefore(wrap, previewEl.nextSibling);
     else existing.appendChild(wrap);
     return wrap;
   };
