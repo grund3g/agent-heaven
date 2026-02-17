@@ -426,17 +426,24 @@
 	            </label>
 		            <label class="field">
 		              <div class="field__label">Default model</div>
-			              <input
-			                id="settingsCodexModel"
-			                class="input"
-			                placeholder="e.g. gpt-5.3-codex, ..."
-			              />
+				              <input
+				                id="settingsCodexModel"
+				                class="input"
+				                placeholder="e.g. gpt-5.3-codex, ..."
+				              />
 		            </label>
-	            <label class="field">
-	              <div class="field__label">Sandbox mode</div>
-	              <select id="settingsCodexSandboxMode" class="select">
-	                <option value="read-only">read-only</option>
-	                <option value="workspace-write">workspace-write</option>
+		            <label class="field">
+		              <div class="field__label">Transport</div>
+		              <select id="settingsCodexTransport" class="select">
+		                <option value="exec_json">exec --json (stable)</option>
+		                <option value="app_server">app-server (experimental)</option>
+		              </select>
+		            </label>
+		            <label class="field">
+		              <div class="field__label">Sandbox mode</div>
+		              <select id="settingsCodexSandboxMode" class="select">
+		                <option value="read-only">read-only</option>
+		                <option value="workspace-write">workspace-write</option>
 	                <option value="danger-full-access">danger-full-access</option>
 	              </select>
 	            </label>

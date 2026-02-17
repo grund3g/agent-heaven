@@ -4,11 +4,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-const AGENT_HEAVEN_INLINE_MCP_NAME = "agent_heaven";
-const AGENT_HEAVEN_INLINE_MCP_TOKEN_ENV = "AGENT_HEAVEN_MCP_BEARER_TOKEN";
-
-type InlineMcpServerConfig = { url: string; token: string };
-
 function looksLikeJsonObjectLine(line: string) {
   const s = String(line || "").trimStart();
   return s.startsWith("{") && s.endsWith("}");
@@ -55,41 +50,7 @@ function toIntOrZero(value: unknown): number {
   return Math.trunc(n);
 }
 
-function parseInlineMcpServer(value: unknown): InlineMcpServerConfig | null {
-  if (!value || typeof value !== "object") return null;
-  const rawUrl = typeof (value as any).url === "string" ? String((value as any).url || "").trim() : "";
-  const token = typeof (value as any).token === "string" ? String((value as any).token || "").trim() : "";
-  if (!rawUrl || !token) return null;
-  try {
-    const u = new URL(rawUrl);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-    return { url: u.toString(), token };
-  } catch {
-    return null;
-  }
-}
-
-function inlineMcpServerFromSettings(settings: any): InlineMcpServerConfig | null {
-  const s = settings && typeof settings === "object" ? settings : {};
-  return parseInlineMcpServer((s as any).__agentHeavenMcp);
-}
-
-function appendInlineMcpArgs(args: string[], mcp: InlineMcpServerConfig | null) {
-  if (!mcp) return;
-  args.push("-c", `mcp_servers.${AGENT_HEAVEN_INLINE_MCP_NAME}.url=${JSON.stringify(mcp.url)}`);
-  args.push(
-    "-c",
-    `mcp_servers.${AGENT_HEAVEN_INLINE_MCP_NAME}.bearer_token_env_var=${JSON.stringify(AGENT_HEAVEN_INLINE_MCP_TOKEN_ENV)}`
-  );
-}
-
-function buildCodexEnv(mcp: InlineMcpServerConfig | null): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  if (mcp) env[AGENT_HEAVEN_INLINE_MCP_TOKEN_ENV] = mcp.token;
-  return env;
-}
-
-function pushAppServerConfigArgs(args: string[], settings: any, mcp: InlineMcpServerConfig | null) {
+function pushAppServerConfigArgs(args: string[], settings: any) {
   const s = settings && typeof settings === "object" ? settings : {};
 
   // Keep parity with exec-mode settings where feasible.
@@ -97,8 +58,6 @@ function pushAppServerConfigArgs(args: string[], settings: any, mcp: InlineMcpSe
 
   const color = typeof s.color === "string" ? s.color.trim() : "";
   if (color && color !== "auto") args.push("-c", `color=${JSON.stringify(color)}`);
-
-  appendInlineMcpArgs(args, mcp);
 }
 
 function mapSandbox(settings: any): string | null {
@@ -235,14 +194,13 @@ function runCodexViaAppServer(opts: ModeOpts) {
     mode
   } = opts as ModeOpts;
 
-  const mcp = inlineMcpServerFromSettings(settings);
   const args = ["app-server"];
-  pushAppServerConfigArgs(args, settings, mcp);
+  pushAppServerConfigArgs(args, settings);
 
   const child = spawnPlatform(codexPath, args, {
     cwd: cwd || process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
-    env: buildCodexEnv(mcp)
+    env: process.env
   });
 
   let exited = false;

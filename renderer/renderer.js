@@ -118,17 +118,17 @@ const api = window.agentHeaven;
 
   projectDialogCheckoutsBtn: document.getElementById("projectDialogCheckoutsBtn"),
 
-	  settingsDialog: document.getElementById("settingsDialog"),
+		  settingsDialog: document.getElementById("settingsDialog"),
 		  settingsDialogClose: document.getElementById("settingsDialogClose"),
 			  settingsCodexPath: document.getElementById("settingsCodexPath"),
 			  settingsCodexModel: document.getElementById("settingsCodexModel"),
+		  settingsCodexTransport: document.getElementById("settingsCodexTransport"),
 			  settingsUiModel: document.getElementById("settingsUiModel"),
 				  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
 				  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-			  settingsTheme: document.getElementById("settingsTheme"),
-			  settingsColorScheme: document.getElementById("settingsColorScheme"),
-			  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
-			  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
+		  settingsTheme: document.getElementById("settingsTheme"),
+		  settingsColorScheme: document.getElementById("settingsColorScheme"),
+		  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -11229,6 +11229,7 @@ function wireUi() {
 				        codex: {
 				          path: els.settingsCodexPath.value.trim(),
 			          model: els.settingsCodexModel.value.trim(),
+			          transport: els.settingsCodexTransport ? els.settingsCodexTransport.value : "exec_json",
 		          sandboxMode: els.settingsCodexSandboxMode.value,
 		          skipGitRepoCheck: !!els.settingsCodexSkipGitRepoCheck.checked,
 		          bypassApprovalsAndSandbox: !!els.settingsCodexBypass.checked,
@@ -11520,8 +11521,9 @@ function resolveModelContextWindow(modelName) {
 function jobContextUsage(job) {
   if (!job || typeof job !== "object") return null;
 
+  const directLimit = toPositiveInt(job.modelContextWindow);
   const model = String(job.model || "").trim();
-  if (!model) return null;
+  if (!model && directLimit <= 0) return null;
 
   const usage = job.usage && typeof job.usage === "object" ? job.usage : null;
   let inputTokens = usage ? toPositiveInt(usage.input_tokens) : 0;
@@ -11535,7 +11537,7 @@ function jobContextUsage(job) {
 
   if (inputTokens <= 0) return null;
 
-  const limitTokens = resolveModelContextWindow(model);
+  const limitTokens = directLimit > 0 ? directLimit : resolveModelContextWindow(model);
   if (limitTokens <= 0) return null;
 
   return {
@@ -12176,14 +12178,14 @@ function closeSettings() {
 			  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
 			  const claude = agents.claude && typeof agents.claude === "object" ? agents.claude : {};
 
-		  els.settingsCodexPath.value = codex.path || "";
-		  els.settingsCodexModel.value = codex.model || "";
-				  setUiModelControls(s.uiModel || "");
-		  els.settingsTheme.value = normalizeTheme(s.uiTheme);
-		  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
-	  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
-	  syncEditorPresetFromCommandInput();
-		  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
+			  els.settingsCodexPath.value = codex.path || "";
+			  els.settingsCodexModel.value = codex.model || "";
+	  if (els.settingsCodexTransport) els.settingsCodexTransport.value = codex.transport || "exec_json";
+					  setUiModelControls(s.uiModel || "");
+					  els.settingsTheme.value = normalizeTheme(s.uiTheme);
+					  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+		  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
+				  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
 				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
 	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
 	  els.settingsCodexColor.value = codex.color || "auto";

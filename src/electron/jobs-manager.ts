@@ -1380,6 +1380,15 @@ export class JobsManager {
         }
       }
 
+      if (data.type === "token.usage.updated") {
+        const mcw = toIntOrZero((data as any).model_context_window);
+        if (mcw > 0 && job.modelContextWindow !== mcw) {
+          job.modelContextWindow = mcw;
+          this.sendJobEvent({ jobId, kind: "meta", patch: { modelContextWindow: job.modelContextWindow } });
+          this.markJobDirty(jobId);
+        }
+      }
+
       if (data.type === "turn.completed" && data.usage) {
         job.usage = data.usage;
         job.usageTotal = addUsageTotals(job.usageTotal, data.usage);
