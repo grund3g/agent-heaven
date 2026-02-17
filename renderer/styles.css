@@ -815,10 +815,11 @@ body::before {
 
 #openStatusBtn {
   white-space: nowrap;
+  display: none;
 }
 
 #openStatusSidebarBtn {
-  display: none;
+  display: grid;
 }
 
 .seg {
@@ -3103,6 +3104,12 @@ body::before {
   .sidebar {
     display: none;
   }
+  #openStatusBtn {
+    display: inline-flex;
+  }
+  #openStatusSidebarBtn {
+    display: none;
+  }
   .composer__row {
     grid-template-columns: 1fr;
   }
@@ -3113,17 +3120,17 @@ body::before {
 }
 
 @media (max-width: 1500px) and (min-width: 1101px) {
-  :root:not([data-sidebar="collapsed"]) #openStatusBtn {
-    display: none;
-  }
-
-  :root:not([data-sidebar="collapsed"]) #openStatusSidebarBtn {
-    display: grid;
-  }
-
   .searchmeta {
     display: none;
   }
+}
+
+:root[data-sidebar="collapsed"] #openStatusBtn {
+  display: inline-flex;
+}
+
+:root[data-sidebar="collapsed"] #openStatusSidebarBtn {
+  display: none;
 }
 
 .ctxmenu {
