@@ -96,6 +96,76 @@ export class JobsManager {
     return normalizeGitCheckoutMode(value);
   }
 
+  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
+    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
+    if (!text) return false;
+
+    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
+    const writePatterns = [
+      /\bfix\b/,
+      /\bimplement\b/,
+      /\badd\b/,
+      /\bupdate\b/,
+      /\bchange\b/,
+      /\bedit\b/,
+      /\brefactor\b/,
+      /\bpatch\b/,
+      /\bwrite\b/,
+      /\bcreate\b/,
+      /\bremove\b/,
+      /\brename\b/,
+      /\bmigrate\b/,
+      /\bcommit\b/,
+      /\bbugfix\b/,
+      /\bcode\s+change/,
+      /\bcode\s+changes/,
+      /\bmake\s+changes?\b/,
+      /\bbehebe\b/,
+      /\bfixe\b/,
+      /\bimplementier/,
+      /\bfu[eü]g(?:e|en)?\b/,
+      /\b[aä]nder(?:e|n|ung)/,
+      /\baktualisier/,
+      /\berstell(?:e|en)?\b/,
+      /\bschreib(?:e|en)?\b/,
+      /\brefaktorisier/,
+      /\bl[oö]sch(?:e|en)?\b/,
+      /\bumbau(?:en)?\b/,
+      /\bmigrier(?:e|en)?\b/
+    ];
+    if (writePatterns.some((re) => re.test(text))) return false;
+
+    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
+    const readOnlyPatterns = [
+      /\banalys(?:e|is|ier)/,
+      /\banaly[sz]e\b/,
+      /\bexplain\b/,
+      /\berkl[aä]r/,
+      /\breview\b/,
+      /\binspect\b/,
+      /\binvestigat/,
+      /\buntersuch/,
+      /\bcheck\b/,
+      /\bpr[uü]f(?:e|en)?\b/,
+      /\bwhy\b/,
+      /\bwarum\b/,
+      /\bwieso\b/,
+      /\bplan\b/,
+      /\bbrainstorm\b/,
+      /\bidee(?:n)?\b/,
+      /\bsummariz/,
+      /\bzusammenfass/,
+      /\bstatus\b/,
+      /\bcompare\b/,
+      /\bvergleich/
+    ];
+    if (readOnlyPatterns.some((re) => re.test(text))) return true;
+
+    // Questions without edit intent are typically informational.
+    if (text.endsWith("?")) return true;
+    return false;
+  }
+
   private normalizeBranchName(value: unknown): string {
     return normalizeGitBranchName(value);
   }
@@ -113,6 +183,7 @@ export class JobsManager {
   private async prepareCheckout(
     project: any,
     jobId: string,
+    promptText?: string,
     overrideMode?: "" | "inplace" | "worktree" | "clone"
   ): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
     const configured = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
@@ -121,8 +192,6 @@ export class JobsManager {
     if (!projectPath) throw new Error("Project path is missing");
 
     if (mode === "inplace") return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
-
-    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
 
     const projectId = project && typeof project.id === "string" ? project.id : "project";
     const branchName = `ah/job/${jobId}`;
@@ -136,6 +205,12 @@ export class JobsManager {
         baseBranch = "";
       }
     }
+
+    if (mode === "worktree" && this.shouldDeferWorktreeForPrompt(promptText)) {
+      return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
+    }
+
+    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
 
     if (mode === "worktree") {
       const baseRef = baseBranch || "HEAD";
@@ -244,6 +319,27 @@ export class JobsManager {
     const projects = this.store && typeof this.store.listProjects === "function" ? this.store.listProjects() : [];
     if (!Array.isArray(projects)) return null;
     return projects.find((p: any) => p && String(p.id || "").trim() === id) || null;
+  }
+
+  private ensureRunnableProjectPath(job: Job): string {
+    if (!job || typeof job !== "object") return process.cwd();
+
+    const current = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (current && fs.existsSync(current)) return current;
+
+    const project = this.projectById(job.projectId);
+    const fallback = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    if (fallback && fs.existsSync(fallback)) {
+      if (fallback !== current) {
+        job.projectPath = fallback;
+        this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: fallback } });
+        this.markJobDirty(job.id);
+        this.tryPersistJobNow(job);
+      }
+      return fallback;
+    }
+
+    return current || fallback || process.cwd();
   }
 
   private async shouldClearIntegratedToDefault(job: Job): Promise<boolean> {
@@ -1397,6 +1493,7 @@ export class JobsManager {
         (agent === "claude" ? String((claudeSettings as any).model || "") : String(codexSettings.model || settings.agentModel || "")) ||
         "").trim();
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
+    const runProjectPath = this.ensureRunnableProjectPath(job);
 
     const ts = new Date().toISOString();
     if (this.clearIntegratedToDefault(job)) {
@@ -1416,7 +1513,7 @@ export class JobsManager {
         child = this.runClaudeResume!({
           claudePath,
           settings: claudeSettings,
-          cwd: job.projectPath || process.cwd(),
+          cwd: runProjectPath,
           sessionId: job.threadId,
           model,
           prompt: runPrompt,
@@ -1427,7 +1524,7 @@ export class JobsManager {
         child = this.runCodexResume({
           codexPath,
           settings: codexSettings,
-          cwd: job.projectPath || process.cwd(),
+          cwd: runProjectPath,
           threadId: job.threadId,
           model,
           prompt: runPrompt,
@@ -1573,7 +1670,7 @@ export class JobsManager {
     let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
     try {
       const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
-      run = await this.prepareCheckout(project, jobId, checkoutModeOverride);
+      run = await this.prepareCheckout(project, jobId, prompt, checkoutModeOverride);
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
@@ -1683,6 +1780,7 @@ export class JobsManager {
     const job = this.jobs.get(jobId);
     if (!job) return { ok: false, error: "Unknown job" };
     const isRunning = this.procs.has(jobId) || job.status === "running";
+    const runProjectPath = this.ensureRunnableProjectPath(job);
 
     // Resuming a job should bring it back onto the board so it's visible while running.
     if (job.box && job.box !== "board") {
@@ -1702,7 +1800,7 @@ export class JobsManager {
     if (!text) return { ok: false, error: "Prompt is empty" };
     if (text.length > 200_000) return { ok: false, error: "Prompt is too large" };
 
-    let images = normalizeImagePaths((params && (params as any).images) || [], job.projectPath);
+    let images = normalizeImagePaths((params && (params as any).images) || [], runProjectPath);
     if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };

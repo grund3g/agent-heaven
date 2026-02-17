@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { JobsManager } from "../src/electron/jobs-manager";
 
@@ -118,6 +121,58 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("falls back to project path when a job checkout path no longer exists", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    // Simulate that an isolated checkout got removed during archive/trash cleanup.
+    (jm as any).jobs.get("job1").projectPath = path.join(os.tmpdir(), "missing-checkout-path-does-not-exist");
+
+    expect(jm.send({ jobId: "job1", prompt: "follow up", images: [] })).toEqual({ ok: true });
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(projectPath);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.projectPath).toBe(projectPath);
+  });
+
   it("tracks integrate-to-default progress as ephemeral metadata", async () => {
     const events: any[] = [];
     const store = {
@@ -214,10 +269,17 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.projectPath).toBe("/tmp/proj");
   });
 
+<<<<<<< HEAD
   it("normalizes checkoutMode override alias dedicated_checkout", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "inplace" }]
+=======
+  it("defers worktree creation for analysis-like prompts", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "worktree" }]
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
     };
     const history = { loadAll: () => [], save: () => true, remove: () => true };
 
@@ -231,6 +293,7 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
+<<<<<<< HEAD
     const res = await jm.start({ prompt: "Do the thing", projectId: "p1", images: [], checkoutMode: "dedicated_checkout" });
     expect(res).toEqual({ ok: false, error: "Checkouts directory is not configured" });
   });
@@ -239,6 +302,23 @@ describe("electron/jobs-manager", () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+=======
+    // No checkoutsDir configured on purpose: analysis-style prompts should stay in-place.
+    expect(await jm.start({ prompt: "Kannst du das bitte analysieren und die Risiken zusammenfassen?", projectId: "p1", images: [] })).toEqual({
+      ok: true,
+      jobId: "job1"
+    });
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.projectPath).toBe("/tmp/proj");
+  });
+
+  it("still requires checkoutsDir for worktree write prompts", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "worktree" }]
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
     };
     const history = { loadAll: () => [], save: () => true, remove: () => true };
 
@@ -252,6 +332,7 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
+<<<<<<< HEAD
     expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
     expect((jm.getJob("  job1  ") as any).ok).toBe(true);
   });
@@ -282,6 +363,12 @@ describe("electron/jobs-manager", () => {
     expect(execChild.killed).toBe(true);
     expect((jm as any).procs.size).toBe(0);
     await vi.runOnlyPendingTimersAsync();
+=======
+    expect(await jm.start({ prompt: "Bitte implementiere die Änderung in src/app.ts", projectId: "p1", images: [] })).toEqual({
+      ok: false,
+      error: "Checkouts directory is not configured"
+    });
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
   });
 
   it("queues follow-ups while running and drains them after a successful run", async () => {
