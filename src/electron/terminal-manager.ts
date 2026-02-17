@@ -229,6 +229,14 @@ export class TerminalManager {
     return { ok: true as const };
   }
 
+  detachAllByWebContentsId(webContentsId: unknown) {
+    const wcId = typeof webContentsId === "number" ? webContentsId : Number(webContentsId);
+    if (!Number.isFinite(wcId)) return;
+    for (const session of this.sessions.values()) {
+      session.subscribers.delete(wcId);
+    }
+  }
+
   destroy(jobId: unknown) {
     const id = String(jobId || "").trim();
     const session = this.sessions.get(id) || null;

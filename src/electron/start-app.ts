@@ -24,6 +24,7 @@ import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPa
 import { installAgentCli } from "../agent-install";
 import { inferCommitMessageStyleFromSubjects, suggestCommitMessage } from "../core/commit-message";
 import { jobDisplayTitle } from "../core/prompt";
+import { normalizeBranchName } from "../core/git-normalize";
 import { spawnPlatform } from "../platform-spawn";
 import {
   addAll,
@@ -1064,6 +1065,11 @@ export async function startApp(): Promise<void> {
     needsAttentionHeuristic
   });
   const terminalManager = new TerminalManager();
+  app.on("web-contents-created", (_evt, contents) => {
+    contents.on("destroyed", () => {
+      terminalManager.detachAllByWebContentsId(contents.id);
+    });
+  });
 
   app.on("before-quit", () => {
     windowManager.setWillQuit(true);
@@ -1720,13 +1726,6 @@ export async function startApp(): Promise<void> {
     }
   });
 
-  function normalizeBranchName(value: unknown): string {
-    const s = typeof value === "string" ? value.trim() : "";
-    if (!s) return "";
-    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
-    return stripped.slice(0, 200);
-  }
-
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
@@ -2228,6 +2227,7 @@ export async function startApp(): Promise<void> {
   });
 
   ipcMain.handle("term:ensure", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     const id = String(p.jobId || "").trim();
     if (!id) return { ok: false, error: "Missing jobId" };
@@ -2240,17 +2240,20 @@ export async function startApp(): Promise<void> {
     return terminalManager.ensure(id, { cwd, cols: p.cols, rows: p.rows, webContentsId: evt.sender.id });
   });
 
-  ipcMain.handle("term:write", async (_evt, payload) => {
+  ipcMain.handle("term:write", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     return terminalManager.write(p.jobId, p.data);
   });
 
-  ipcMain.handle("term:resize", async (_evt, payload) => {
+  ipcMain.handle("term:resize", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     return terminalManager.resize(p.jobId, p.cols, p.rows);
   });
 
   ipcMain.handle("term:detach", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
     return terminalManager.detach(p.jobId, evt.sender.id);
   });

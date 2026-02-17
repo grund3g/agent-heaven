@@ -1,6 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
+import {
+  normalizeBranchName as normalizeGitBranchName,
+  normalizeCheckoutMode as normalizeGitCheckoutMode
+} from "./core/git-normalize";
 
 const PROJECT_COLOR_PALETTE = [
   "#64d8a3", // green
@@ -148,10 +152,7 @@ function normalizeShortName(value) {
 }
 
 function normalizeBranchName(value) {
-  const s = typeof value === "string" ? value.trim() : "";
-  if (!s) return "";
-  const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
-  return stripped.slice(0, 200);
+  return normalizeGitBranchName(value);
 }
 
 function normalizeBranchList(value, maxLen = 100) {
@@ -170,12 +171,7 @@ function normalizeBranchList(value, maxLen = 100) {
 }
 
 function normalizeCheckoutMode(value) {
-  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (!raw) return "";
-  if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
-  if (raw === "worktree" || raw === "worktrees") return "worktree";
-  if (raw === "clone" || raw === "checkout" || raw === "dedicated" || raw === "dedicated_checkout") return "clone";
-  return "";
+  return normalizeGitCheckoutMode(value);
 }
 
 function normalizeIntegrateToDefaultMode(value) {

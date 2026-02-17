@@ -9,6 +9,7 @@ import { addUsageTotals } from "../core/usage";
 import { newId } from "../core/id";
 import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job } from "../core/jobs";
 import { searchJobs, type JobSearchOpts } from "../core/job-search";
+import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as normalizeGitCheckoutMode } from "../core/git-normalize";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
 import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
@@ -88,27 +89,15 @@ export class JobsManager {
   }
 
   private normalizeCheckoutMode(value: unknown): "inplace" | "worktree" | "clone" {
-    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-    if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
-    if (raw === "worktree" || raw === "worktrees") return "worktree";
-    if (raw === "clone" || raw === "checkout" || raw === "dedicated") return "clone";
-    return "inplace";
+    return normalizeGitCheckoutMode(value) || "inplace";
   }
 
   private normalizeCheckoutModeOverride(value: unknown): "" | "inplace" | "worktree" | "clone" {
-    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-    if (!raw) return "";
-    if (raw === "inplace" || raw === "in_place" || raw === "in-place" || raw === "project" || raw === "folder") return "inplace";
-    if (raw === "worktree" || raw === "worktrees") return "worktree";
-    if (raw === "clone" || raw === "checkout" || raw === "dedicated" || raw === "dedicated_checkout") return "clone";
-    return "";
+    return normalizeGitCheckoutMode(value);
   }
 
   private normalizeBranchName(value: unknown): string {
-    const s = typeof value === "string" ? value.trim() : "";
-    if (!s) return "";
-    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
-    return stripped.slice(0, 200);
+    return normalizeGitBranchName(value);
   }
 
   private ensureDir(dirPath: string) {
@@ -194,6 +183,22 @@ export class JobsManager {
 
   shutdown() {
     this.flushPersist();
+    for (const child of this.procs.values()) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      const t = setTimeout(() => {
+        try {
+          if (!child.killed) child.kill("SIGKILL");
+        } catch {
+          // ignore
+        }
+      }, 2_000);
+      if (typeof (t as any).unref === "function") (t as any).unref();
+    }
+    this.procs.clear();
     // Best-effort cleanup; title summaries are non-critical.
     for (const child of this.titleLlmProcs.values()) {
       try {
@@ -374,7 +379,7 @@ export class JobsManager {
   }
 
   getJob(jobId: unknown) {
-    const id = String(jobId || "");
+    const id = String(jobId || "").trim();
     const job = this.jobs.get(id);
     if (!job) return { ok: false, error: "Unknown job" };
     return { ok: true, job: { ...snapshotJob(job), integratingToDefault: this.integratingToDefaultJobIds.has(id) } };
