@@ -1904,9 +1904,9 @@ body::before {
 
 .followup__row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
-  align-items: start;
+  align-items: end;
   min-width: 0;
 }
 
@@ -1916,12 +1916,12 @@ body::before {
 
 .followup__row .btn {
   white-space: nowrap;
-  align-self: start;
+  align-self: end;
 }
 
 @media (max-width: 640px) {
   .followup__row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
 }
 
@@ -2862,7 +2862,7 @@ body::before {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  /* Keep the action buttons aligned with the top edge of the follow-up textarea. */
+  /* Keep footer actions aligned with the composer edge in wider layouts. */
   align-items: start;
 }
 
@@ -2871,8 +2871,8 @@ body::before {
   grid-template-areas:
     "follow actions"
     "attach attach";
-  /* Keep actions aligned with the top edge of the follow-up composer row. */
-  align-items: start;
+  /* Align controls to the bottom edge of the follow-up textarea. */
+  align-items: end;
 }
 
 .dialog__footer--job .followup {
@@ -2881,7 +2881,9 @@ body::before {
 
 .dialog__footer--job .dialog__actions {
   grid-area: actions;
-  align-self: start;
+  align-self: end;
+  flex-wrap: nowrap;
+  align-items: flex-end;
 }
 
 .dialog__footer--job #followupAttachments {
@@ -2897,7 +2899,7 @@ body::before {
       "attach";
   }
   .dialog__footer--job .dialog__actions {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 }
 
@@ -2927,7 +2929,8 @@ body::before {
   line-height: 1;
 }
 
-#sendFollowupBtn {
+#sendFollowupBtn,
+#cancelJobBtn {
   height: 38px; /* match footer icon buttons */
   padding-top: 0;
   padding-bottom: 0;
