@@ -269,31 +269,23 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.projectPath).toBe("/tmp/proj");
   });
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   it("normalizes checkoutMode override alias dedicated_checkout", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "inplace" }]
-    };
-    const history = { loadAll: () => [], save: () => true, remove: () => true };
-
-    const jm = new JobsManager({
-      store,
-      history,
-      sendJobEvent: () => {},
-      runCodexExec: () => new FakeChild() as any,
-      runCodexResume: () => new FakeChild() as any,
-      needsAttentionHeuristic: () => false,
-      createId: () => "job1"
-    });
-
-    const res = await jm.start({ prompt: "Do the thing", projectId: "p1", images: [], checkoutMode: "dedicated_checkout" });
-    expect(res).toEqual({ ok: false, error: "Checkouts directory is not configured" });
-  });
-
+=======
+=======
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
   it("defers worktree creation for analysis-like prompts", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "worktree" }]
+<<<<<<< HEAD
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
+=======
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
     };
     const history = { loadAll: () => [], save: () => true, remove: () => true };
 
@@ -307,6 +299,19 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+    const res = await jm.start({ prompt: "Do the thing", projectId: "p1", images: [], checkoutMode: "dedicated_checkout" });
+    expect(res).toEqual({ ok: false, error: "Checkouts directory is not configured" });
+  });
+
+  it("trims jobId in getJob", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+=======
+=======
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
     // No checkoutsDir configured on purpose: analysis-style prompts should stay in-place.
     expect(await jm.start({ prompt: "Kannst du das bitte analysieren und die Risiken zusammenfassen?", projectId: "p1", images: [] })).toEqual({
       ok: true,
@@ -322,6 +327,10 @@ describe("electron/jobs-manager", () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj", checkoutMode: "worktree" }]
+<<<<<<< HEAD
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
+=======
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
     };
     const history = { loadAll: () => [], save: () => true, remove: () => true };
 
@@ -335,29 +344,8 @@ describe("electron/jobs-manager", () => {
       createId: () => "job1"
     });
 
-    expect(await jm.start({ prompt: "Bitte implementiere die Änderung in src/app.ts", projectId: "p1", images: [] })).toEqual({
-      ok: false,
-      error: "Checkouts directory is not configured"
-    });
-  });
-
-  it("trims jobId in getJob", async () => {
-    const store = {
-      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
-      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
-    };
-    const history = { loadAll: () => [], save: () => true, remove: () => true };
-
-    const jm = new JobsManager({
-      store,
-      history,
-      sendJobEvent: () => {},
-      runCodexExec: () => new FakeChild() as any,
-      runCodexResume: () => new FakeChild() as any,
-      needsAttentionHeuristic: () => false,
-      createId: () => "job1"
-    });
-
+<<<<<<< HEAD
+<<<<<<< HEAD
     expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
     expect((jm.getJob("  job1  ") as any).ok).toBe(true);
   });
@@ -388,6 +376,17 @@ describe("electron/jobs-manager", () => {
     expect(execChild.killed).toBe(true);
     expect((jm as any).procs.size).toBe(0);
     await vi.runOnlyPendingTimersAsync();
+=======
+=======
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
+    expect(await jm.start({ prompt: "Bitte implementiere die Änderung in src/app.ts", projectId: "p1", images: [] })).toEqual({
+      ok: false,
+      error: "Checkouts directory is not configured"
+    });
+<<<<<<< HEAD
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
+=======
+>>>>>>> c4b7f80 (feat: update renderer, src, and tests)
   });
 
   it("queues follow-ups while running and drains them after a successful run", async () => {
