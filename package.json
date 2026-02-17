@@ -1,6 +1,6 @@
 {
   "name": "agent-heaven",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "private": true,
   "productName": "Agent Heaven",
   "description": "Electron UI that spawns Codex + Claude Code CLI agents as cards and streams output.",
