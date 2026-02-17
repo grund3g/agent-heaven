@@ -8,6 +8,7 @@ const api = window.agentHeaven;
 	  openShortcutsBtn: document.getElementById("openShortcutsBtn"),
 	  openSettingsBtn: document.getElementById("openSettingsBtn"),
 	  openStatusBtn: document.getElementById("openStatusBtn"),
+	  openStatusSidebarBtn: document.getElementById("openStatusSidebarBtn"),
 	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
   tableScopeCtl: document.getElementById("tableScopeCtl"),
   tableScopeSelect: document.getElementById("tableScopeSelect"),
@@ -8929,9 +8930,8 @@ function wireUi() {
 	    openSettingsDialog();
 	  });
 
-  if (els.openStatusBtn) {
-    els.openStatusBtn.addEventListener("click", () => openStatusDialog());
-  }
+  if (els.openStatusBtn) els.openStatusBtn.addEventListener("click", () => openStatusDialog());
+  if (els.openStatusSidebarBtn) els.openStatusSidebarBtn.addEventListener("click", () => openStatusDialog());
   if (els.statusDialogClose) {
     els.statusDialogClose.addEventListener("click", () => {
       try {

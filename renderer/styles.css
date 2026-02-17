@@ -674,18 +674,22 @@ body::before {
 
 .viewbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: center;
-  gap: 10px;
+  align-content: flex-start;
+  column-gap: 10px;
+  row-gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
+}
+
+.viewbar > * {
+  min-width: 0;
 }
 
 .viewbar__toggle {
-  margin-right: auto;
+  margin-right: 0;
 }
 
 .sortctl {
@@ -696,6 +700,7 @@ body::before {
   border-radius: 999px;
   border: 1px solid var(--stroke);
   background: var(--surface1);
+  min-width: 0;
 }
 
 .sortctl__label {
@@ -713,6 +718,7 @@ body::before {
   border-radius: 999px;
   border: 1px solid var(--stroke);
   background: var(--surface1);
+  min-width: 0;
 }
 
 .filterctl:focus-within {
@@ -735,6 +741,9 @@ body::before {
   border-radius: 999px;
   border: 1px solid var(--stroke);
   background: var(--surface1);
+  min-width: 0;
+  flex: 1 1 240px;
+  max-width: 360px;
 }
 
 .searchctl:focus-within {
@@ -743,7 +752,9 @@ body::before {
 }
 
 .searchctl__input {
-  width: clamp(160px, 22vw, 260px);
+  width: clamp(130px, 18vw, 240px);
+  min-width: 0;
+  flex: 1 1 auto;
   border: none;
   background: transparent;
   color: var(--ink);
@@ -778,6 +789,8 @@ body::before {
   font-size: 12px;
   color: var(--muted2);
   max-width: 240px;
+  min-width: 0;
+  flex: 0 1 220px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -785,7 +798,7 @@ body::before {
 
 .select.sortselect {
   width: auto;
-  min-width: 190px;
+  min-width: 170px;
   padding: 8px 10px;
   border-radius: 999px;
   font-size: 12px;
@@ -793,11 +806,19 @@ body::before {
 
 .select.filterselect {
   width: auto;
-  min-width: 170px;
-  max-width: min(340px, 28vw);
+  min-width: 150px;
+  max-width: min(300px, 24vw);
   padding: 8px 10px;
   border-radius: 999px;
   font-size: 12px;
+}
+
+#openStatusBtn {
+  white-space: nowrap;
+}
+
+#openStatusSidebarBtn {
+  display: none;
 }
 
 .seg {
@@ -3076,6 +3097,20 @@ body::before {
   .sessiontable th,
   .sessiontable td {
     padding: 8px 10px;
+  }
+}
+
+@media (max-width: 1500px) and (min-width: 1101px) {
+  :root:not([data-sidebar="collapsed"]) #openStatusBtn {
+    display: none;
+  }
+
+  :root:not([data-sidebar="collapsed"]) #openStatusSidebarBtn {
+    display: grid;
+  }
+
+  .searchmeta {
+    display: none;
   }
 }
 
