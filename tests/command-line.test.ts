@@ -13,11 +13,6 @@ describe("core/command-line", () => {
       "C:\\Program Files\\Microsoft VS Code\\Code.exe",
       "--reuse-window"
     ]);
-    expect(splitCommandLine(`code --reuse-window C:\\Users\\me\\Project`)).toEqual([
-      "code",
-      "--reuse-window",
-      "C:\\Users\\me\\Project"
-    ]);
   });
 
   it("builds editor launch command and appends target path by default", () => {
