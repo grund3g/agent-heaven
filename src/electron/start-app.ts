@@ -1721,6 +1721,14 @@ export async function startApp(): Promise<void> {
     return path.resolve(root, sub, opts.projectId, opts.jobId);
   }
 
+  type ManagedCheckoutKind = "worktree" | "clone";
+
+  function resolveManagedCheckoutPath(opts: { projectId: string; jobId: string; kind: ManagedCheckoutKind }): string {
+    const root = path.resolve(checkoutsDir);
+    const sub = opts.kind === "worktree" ? "worktrees" : "clones";
+    return path.resolve(root, sub, opts.projectId, opts.jobId);
+  }
+
   async function removeManagedCheckout(opts: {
     projectId: string;
     jobId: string;
@@ -1866,6 +1874,7 @@ export async function startApp(): Promise<void> {
 
     await removeManagedCheckout({ projectId, jobId: id, kind: managed.kind, projectPath });
   }
+
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};

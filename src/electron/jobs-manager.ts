@@ -236,6 +236,76 @@ export class JobsManager {
     return false;
   }
 
+  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
+    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
+    if (!text) return false;
+
+    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
+    const writePatterns = [
+      /\bfix\b/,
+      /\bimplement\b/,
+      /\badd\b/,
+      /\bupdate\b/,
+      /\bchange\b/,
+      /\bedit\b/,
+      /\brefactor\b/,
+      /\bpatch\b/,
+      /\bwrite\b/,
+      /\bcreate\b/,
+      /\bremove\b/,
+      /\brename\b/,
+      /\bmigrate\b/,
+      /\bcommit\b/,
+      /\bbugfix\b/,
+      /\bcode\s+change/,
+      /\bcode\s+changes/,
+      /\bmake\s+changes?\b/,
+      /\bbehebe\b/,
+      /\bfixe\b/,
+      /\bimplementier/,
+      /\bfu[eü]g(?:e|en)?\b/,
+      /\b[aä]nder(?:e|n|ung)/,
+      /\baktualisier/,
+      /\berstell(?:e|en)?\b/,
+      /\bschreib(?:e|en)?\b/,
+      /\brefaktorisier/,
+      /\bl[oö]sch(?:e|en)?\b/,
+      /\bumbau(?:en)?\b/,
+      /\bmigrier(?:e|en)?\b/
+    ];
+    if (writePatterns.some((re) => re.test(text))) return false;
+
+    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
+    const readOnlyPatterns = [
+      /\banalys(?:e|is|ier)/,
+      /\banaly[sz]e\b/,
+      /\bexplain\b/,
+      /\berkl[aä]r/,
+      /\breview\b/,
+      /\binspect\b/,
+      /\binvestigat/,
+      /\buntersuch/,
+      /\bcheck\b/,
+      /\bpr[uü]f(?:e|en)?\b/,
+      /\bwhy\b/,
+      /\bwarum\b/,
+      /\bwieso\b/,
+      /\bplan\b/,
+      /\bbrainstorm\b/,
+      /\bidee(?:n)?\b/,
+      /\bsummariz/,
+      /\bzusammenfass/,
+      /\bstatus\b/,
+      /\bcompare\b/,
+      /\bvergleich/
+    ];
+    if (readOnlyPatterns.some((re) => re.test(text))) return true;
+
+    // Questions without edit intent are typically informational.
+    if (text.endsWith("?")) return true;
+    return false;
+  }
+
   private normalizeBranchName(value: unknown): string {
     return normalizeGitBranchName(value);
   }
@@ -253,6 +323,7 @@ export class JobsManager {
   private async prepareCheckout(
     project: any,
     jobId: string,
+    promptText?: string,
     overrideMode?: "" | "inplace" | "worktree" | "clone"
   ): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
     const configured = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
@@ -377,6 +448,117 @@ export class JobsManager {
     job.integratedToDefaultAt = "";
     job.integratedToDefaultBranch = "";
     return true;
+  }
+
+  private projectById(projectId: unknown): any | null {
+    const id = String(projectId || "").trim();
+    if (!id) return null;
+    const projects = this.store && typeof this.store.listProjects === "function" ? this.store.listProjects() : [];
+    if (!Array.isArray(projects)) return null;
+    return projects.find((p: any) => p && String(p.id || "").trim() === id) || null;
+  }
+
+  private ensureRunnableProjectPath(job: Job): string {
+    if (!job || typeof job !== "object") return process.cwd();
+
+    const current = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (current && fs.existsSync(current)) return current;
+
+    const project = this.projectById(job.projectId);
+    const fallback = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    if (fallback && fs.existsSync(fallback)) {
+      if (fallback !== current) {
+        job.projectPath = fallback;
+        this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: fallback } });
+        this.markJobDirty(job.id);
+        this.tryPersistJobNow(job);
+      }
+      return fallback;
+    }
+
+    return current || fallback || process.cwd();
+  }
+
+  private async shouldClearIntegratedToDefault(job: Job): Promise<boolean> {
+    if (!job || typeof job !== "object") return false;
+    const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
+    if (!atRaw) return false;
+
+    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!sourceDir) return false;
+
+    let srcInfo: any = null;
+    try {
+      srcInfo = await getGitInfo(sourceDir);
+    } catch {
+      srcInfo = null;
+    }
+    if (!srcInfo || !srcInfo.isGitRepo) return false;
+    // If new work exists in the checkout, it is no longer fully integrated.
+    if (srcInfo.dirty) return true;
+
+    const project = this.projectById(job.projectId);
+    const projectPath = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    if (!projectPath) return false;
+
+    let srcCommon = "";
+    let projectCommon = "";
+    try {
+      srcCommon = await getGitCommonDir(sourceDir);
+      projectCommon = await getGitCommonDir(projectPath);
+    } catch {
+      srcCommon = "";
+      projectCommon = "";
+    }
+    // Revalidation is reliable only for shared-object worktrees (same repo).
+    if (!srcCommon || !projectCommon || srcCommon !== projectCommon) return false;
+
+    let targetBranch = this.normalizeBranchName(job.integratedToDefaultBranch);
+    if (!targetBranch) {
+      targetBranch = this.normalizeBranchName(project && typeof project === "object" ? (project as any).defaultBranch : "");
+    }
+    if (!targetBranch) {
+      try {
+        targetBranch = this.normalizeBranchName(await detectDefaultBranch(projectPath));
+      } catch {
+        targetBranch = "";
+      }
+    }
+    if (!targetBranch) return false;
+
+    try {
+      const ahead = await listCommitsInRange(sourceDir, `${targetBranch}..HEAD`, { noMerges: false });
+      return Array.isArray(ahead) && ahead.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  async reconcileIntegratedToDefault(jobId?: unknown): Promise<void> {
+    const id = String(jobId || "").trim();
+    const targets: Job[] = id ? ([this.jobs.get(id)].filter((j): j is Job => !!j) as Job[]) : Array.from(this.jobs.values());
+
+    for (const job of targets) {
+      const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
+      if (!atRaw) continue;
+
+      let shouldClear = false;
+      try {
+        shouldClear = await this.shouldClearIntegratedToDefault(job);
+      } catch {
+        shouldClear = false;
+      }
+      if (!shouldClear) continue;
+      if (!this.clearIntegratedToDefault(job)) continue;
+
+      this.sendJobEvent({
+        jobId: job.id,
+        kind: "meta",
+        patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
+      });
+      this.markJobDirty(job.id);
+      this.tryPersistJobNow(job);
+    }
   }
 
   private loadPersistedJobs() {
@@ -2184,7 +2366,7 @@ export class JobsManager {
     let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
     try {
       const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
-      run = await this.prepareCheckout(project, jobId, checkoutModeOverride);
+      run = await this.prepareCheckout(project, jobId, prompt, checkoutModeOverride);
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
@@ -2361,7 +2543,7 @@ export class JobsManager {
     const job = this.jobs.get(jobId);
     if (!job) return { ok: false, error: "Unknown job" };
     const isRunning = this.procs.has(jobId) || job.status === "running";
-    const missingCheckoutAction = this.normalizeMissingCheckoutAction(params && (params as any).missingCheckoutAction);
+    const runProjectPath = this.ensureRunnableProjectPath(job);
 
     // Resuming a job should bring it back onto the board so it's visible while running.
     if (job.box && job.box !== "board") {
@@ -2380,34 +2562,6 @@ export class JobsManager {
     const text = String(params && params.prompt ? params.prompt : "").trim();
     if (!text) return { ok: false, error: "Prompt is empty" };
     if (text.length > 200_000) return { ok: false, error: "Prompt is too large" };
-
-    // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
-    // When idle, a thread id is required to resume.
-    if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
-
-    // If the dedicated worktree checkout was cleaned up, ask the UI what to do.
-    if (!isRunning) {
-      const missingWorktree = this.detectMissingManagedWorktreeForJob(job);
-      if (missingWorktree) {
-        if (missingCheckoutAction === "ask") {
-          return {
-            ok: true,
-            needsCheckoutDecision: {
-              kind: "recreate_worktree",
-              missingPath: missingWorktree.missingPath,
-              projectPath: missingWorktree.projectPath
-            }
-          };
-        }
-
-        if (missingCheckoutAction === "recreate_worktree") {
-          const recreated = await this.recreateManagedWorktreeForJob(job);
-          if (!recreated.ok) return recreated;
-        }
-      }
-    }
-
-    const runProjectPath = this.ensureRunnableProjectPath(job);
 
     let images = normalizeImagePaths((params && (params as any).images) || [], runProjectPath);
     if (images.length > 16) images = images.slice(0, 16);
