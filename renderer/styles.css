@@ -2002,9 +2002,10 @@ body::before {
 }
 
 .followup__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
-  align-items: flex-end;
+  align-items: end;
   min-width: 0;
 }
 
@@ -2015,7 +2016,13 @@ body::before {
 
 .followup__row .btn {
   white-space: nowrap;
-  align-self: flex-end;
+  align-self: end;
+}
+
+@media (max-width: 640px) {
+  .followup__row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
 }
 
 .dialog {
