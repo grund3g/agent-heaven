@@ -1868,6 +1868,16 @@ export async function startApp(): Promise<void> {
       };
     }
 
+    // Keep a visible chat trail that this integration action was requested.
+    try {
+      jobsManager.appendActionPrompt(
+        jobId,
+        `Integrate this checkout into the project's default branch "${targetBranch}" and commit any required local changes.`
+      );
+    } catch {
+      // Best-effort only; integration should not fail if chat logging fails.
+    }
+
     // Prefer the worktree where the default branch is actually checked out (avoids switching a random worktree).
     let targetDir = projectPath;
     try {

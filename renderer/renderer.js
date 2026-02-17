@@ -3471,7 +3471,8 @@ function laneElForJob(job) {
   }
 
   // state.view === "board"
-  return laneElForStatus(job.status);
+  // Use full job object so UI-only running markers (integratingToDefault) map to the Running lane immediately.
+  return laneElForStatus(job);
 }
 
 function isDemoJob(job) {
@@ -6182,7 +6183,10 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
         try {
           await api.jobsArchive(id);
           integrateDialogArchived = true;
-          showToast(`${msg} Ticket archived.`);
+          showToast(msg, null, 2400);
+          window.setTimeout(() => {
+            showToast("Ticket archived.");
+          }, 950);
         } catch (err) {
           const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
           const first = (full.split("\n")[0] || "").trim() || "Failed to archive.";

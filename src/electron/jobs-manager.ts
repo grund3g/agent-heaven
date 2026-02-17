@@ -407,6 +407,30 @@ export class JobsManager {
     return { ok: true };
   }
 
+  appendActionPrompt(jobId: unknown, prompt: unknown) {
+    const id = String(jobId || "").trim();
+    if (!id) return { ok: false, error: "Missing jobId" };
+    const job = this.jobs.get(id);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const text = typeof prompt === "string" ? prompt.trim() : "";
+    if (!text) return { ok: false, error: "Prompt is empty" };
+
+    const ts = new Date().toISOString();
+    job.prompts = Array.isArray(job.prompts) ? job.prompts : [];
+    job.prompts.push({ ts, text, images: [] });
+
+    const meta = snapshotJobMeta(job);
+    this.sendJobEvent({
+      jobId: id,
+      kind: "meta",
+      patch: { prompts: job.prompts, promptPreview: meta.promptPreview }
+    });
+    this.markJobDirty(id);
+    this.tryPersistJobNow(job);
+    return { ok: true };
+  }
+
   setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
     const id = String(jobId || "").trim();
     if (!id) return { ok: false, error: "Missing jobId" };
