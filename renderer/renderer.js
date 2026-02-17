@@ -5243,6 +5243,7 @@ function renderCard(job) {
   const tokHiddenAttr = tok ? "" : " hidden";
   const tokText = tok ? tok.text : "";
   const tokTitle = tok ? tok.title : "";
+  const metaHiddenAttr = isRunningUi || tok ? "" : " hidden";
   // On the Board, the lane already conveys status (Running/Needs Attention/Done).
   // Keep the pill for non-board views (Archive/Trash) where lanes aren't status-based.
   const showStatusPill = state.view !== "board";
@@ -5259,11 +5260,11 @@ function renderCard(job) {
             )}</span>
           </div>
         </div>
-        <div class="card__status">
-          ${showStatusPill ? fmtStatusPill(job) : ""}
-          <div class="card__duration"${durHiddenAttr} data-job-duration>${escapeHtml(dur)}</div>
-          <div class="card__tokens"${tokHiddenAttr} data-job-tokens title="${escapeHtml(oneLine(tokTitle))}">${escapeHtml(tokText)}</div>
-        </div>
+        ${showStatusPill ? `<div class="card__status">${fmtStatusPill(job)}</div>` : ""}
+      </div>
+      <div class="card__meta"${metaHiddenAttr} data-job-meta>
+        <div class="card__tokens"${tokHiddenAttr} data-job-tokens title="${escapeHtml(oneLine(tokTitle))}">${escapeHtml(tokText)}</div>
+        <div class="card__duration"${durHiddenAttr} data-job-duration>${escapeHtml(dur)}</div>
       </div>
 	      <div class="card__preview${liveCls}">${renderMarkdownInlineSafeHtml(prev.text || "…")}</div>
 	    </article>
@@ -5536,18 +5537,31 @@ function updateCardEl(job) {
           ? "pill pill--done"
           : s === "needs_attention" || s === "failed" || s === "cancelled"
             ? "pill pill--attn"
-            : "pill";
+          : "pill";
   }
+
+  const ensureMetaWrap = () => {
+    let wrap = existing.querySelector("[data-job-meta]");
+    if (wrap) return wrap;
+    wrap = document.createElement("div");
+    wrap.className = "card__meta";
+    wrap.setAttribute("data-job-meta", "");
+    wrap.hidden = true;
+    const previewEl = existing.querySelector(".card__preview");
+    if (previewEl && previewEl.parentElement === existing) existing.insertBefore(wrap, previewEl);
+    else existing.appendChild(wrap);
+    return wrap;
+  };
 
   let durEl = existing.querySelector("[data-job-duration]");
   if (!durEl) {
-    const statusWrap = existing.querySelector(".card__status");
-    if (statusWrap) {
+    const metaWrap = ensureMetaWrap();
+    if (metaWrap) {
       durEl = document.createElement("div");
       durEl.className = "card__duration";
       durEl.setAttribute("data-job-duration", "");
       durEl.hidden = true;
-      statusWrap.appendChild(durEl);
+      metaWrap.appendChild(durEl);
     }
   }
   if (durEl) {
@@ -5565,13 +5579,13 @@ function updateCardEl(job) {
 
   let tokEl = existing.querySelector("[data-job-tokens]");
   if (!tokEl) {
-    const statusWrap = existing.querySelector(".card__status");
-    if (statusWrap) {
+    const metaWrap = ensureMetaWrap();
+    if (metaWrap) {
       tokEl = document.createElement("div");
       tokEl.className = "card__tokens";
       tokEl.setAttribute("data-job-tokens", "");
       tokEl.hidden = true;
-      statusWrap.appendChild(tokEl);
+      metaWrap.appendChild(tokEl);
     }
   }
   if (tokEl) {
@@ -5585,6 +5599,13 @@ function updateCardEl(job) {
       tokEl.textContent = "";
       tokEl.title = "";
     }
+  }
+
+  const metaWrap = existing.querySelector("[data-job-meta]");
+  if (metaWrap) {
+    const hideTokens = !tokEl || tokEl.hidden;
+    const hideDuration = !durEl || durEl.hidden;
+    metaWrap.hidden = hideTokens && hideDuration;
   }
 
   const previewEl = existing.querySelector(".card__preview");
