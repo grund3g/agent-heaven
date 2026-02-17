@@ -494,6 +494,44 @@ body::before {
 .sidebar__footer {
   flex-direction: row;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sidebar__footerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar__toggle {
+  margin-left: auto;
+}
+
+.sidebarToggleIcon {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+}
+
+.sidebarToggleIcon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sidebarToggleIcon__arrow {
+  transform-origin: 50% 50%;
+  transition: transform 140ms ease;
+}
+
+:root[data-sidebar="collapsed"] .sidebarToggleIcon__arrow {
+  transform: scaleX(-1);
 }
 
 .projects {
@@ -689,6 +727,7 @@ body::before {
 }
 
 .viewbar__toggle {
+  display: none;
   margin-right: 0;
 }
 
@@ -3110,6 +3149,9 @@ body::before {
   #openStatusSidebarBtn {
     display: none;
   }
+  .viewbar__toggle {
+    display: none !important;
+  }
   .composer__row {
     grid-template-columns: 1fr;
   }
@@ -3127,6 +3169,10 @@ body::before {
 
 :root[data-sidebar="collapsed"] #openStatusBtn {
   display: inline-flex;
+}
+
+:root[data-sidebar="collapsed"] .viewbar__toggle {
+  display: grid;
 }
 
 :root[data-sidebar="collapsed"] #openStatusSidebarBtn {

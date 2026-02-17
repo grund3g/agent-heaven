@@ -10,6 +10,7 @@ const api = window.agentHeaven;
 	  openStatusBtn: document.getElementById("openStatusBtn"),
 	  openStatusSidebarBtn: document.getElementById("openStatusSidebarBtn"),
 	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
+	  toggleSidebarCollapsedBtn: document.getElementById("toggleSidebarCollapsedBtn"),
   tableScopeCtl: document.getElementById("tableScopeCtl"),
   tableScopeSelect: document.getElementById("tableScopeSelect"),
   sortSelect: document.getElementById("sortSelect"),
@@ -1205,12 +1206,14 @@ function isSidebarCollapsed() {
 }
 
 function syncSidebarToggleBtn() {
-  if (!els.toggleSidebarBtn) return;
   const collapsed = isSidebarCollapsed();
   const label = collapsed ? "Show sidebar" : "Hide sidebar";
-  els.toggleSidebarBtn.title = label;
-  els.toggleSidebarBtn.setAttribute("aria-label", label);
-  els.toggleSidebarBtn.setAttribute("aria-pressed", collapsed ? "true" : "false");
+  [els.toggleSidebarBtn, els.toggleSidebarCollapsedBtn].forEach((btn) => {
+    if (!btn) return;
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("aria-pressed", collapsed ? "true" : "false");
+  });
 }
 
 function applySidebarCollapsed(collapsed) {
@@ -8603,9 +8606,10 @@ function wireUi() {
   }
 
   // Sidebar collapse/expand.
-  if (els.toggleSidebarBtn) {
-    els.toggleSidebarBtn.addEventListener("click", () => toggleSidebarCollapsed());
-  }
+  [els.toggleSidebarBtn, els.toggleSidebarCollapsedBtn].forEach((btn) => {
+    if (!btn) return;
+    btn.addEventListener("click", () => toggleSidebarCollapsed());
+  });
 
 		  // Lane popouts (Running / Needs Attention / Done) into separate windows (useful for multi-monitor setups).
 		  document.addEventListener("click", async (e) => {

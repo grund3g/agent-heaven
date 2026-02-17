@@ -56,10 +56,28 @@
 		        </div>
 
 	        <div class="sidebar__section sidebar__section--bottom sidebar__footer">
-	          <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>
-	          <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">⌘</button>
-	          <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">⚙</button>
-	          <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">◔</button>
+	          <div class="sidebar__footerActions">
+	            <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>
+	            <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">⌘</button>
+	            <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">⚙</button>
+	            <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">◔</button>
+	          </div>
+	          <button
+	            id="toggleSidebarBtn"
+	            class="iconbtn sidebar__toggle"
+	            type="button"
+	            title="Hide sidebar"
+	            aria-label="Hide sidebar"
+	            aria-pressed="false"
+	          >
+	            <span class="sidebarToggleIcon" aria-hidden="true">
+	              <svg viewBox="0 0 20 20" focusable="false">
+	                <rect x="2.5" y="3" width="15" height="14" rx="3.2"></rect>
+	                <path d="M7.2 3v14"></path>
+	                <path class="sidebarToggleIcon__arrow" d="M12.4 7.6L9.5 10l2.9 2.4"></path>
+	              </svg>
+	            </span>
+	          </button>
 	        </div>
 	      </aside>
 
@@ -90,17 +108,23 @@
           <div class="composer__hint" id="composerHint"></div>
         </header>
 
-		        <div class="viewbar" aria-label="View switcher">
-		          <button
-		            id="toggleSidebarBtn"
-		            class="iconbtn viewbar__toggle"
-		            type="button"
-		            title="Toggle sidebar"
-		            aria-label="Toggle sidebar"
-		            aria-pressed="false"
-		          >
-		            <span aria-hidden="true">☰</span>
-		          </button>
+			        <div class="viewbar" aria-label="View switcher">
+			          <button
+			            id="toggleSidebarCollapsedBtn"
+			            class="iconbtn viewbar__toggle"
+			            type="button"
+			            title="Show sidebar"
+			            aria-label="Show sidebar"
+			            aria-pressed="true"
+			          >
+			            <span class="sidebarToggleIcon" aria-hidden="true">
+			              <svg viewBox="0 0 20 20" focusable="false">
+			                <rect x="2.5" y="3" width="15" height="14" rx="3.2"></rect>
+			                <path d="M7.2 3v14"></path>
+			                <path class="sidebarToggleIcon__arrow" d="M12.4 7.6L9.5 10l2.9 2.4"></path>
+			              </svg>
+			            </span>
+			          </button>
 	          <div class="seg" role="tablist" aria-label="Views">
 		            <button type="button" class="seg__btn seg__btn--active" data-view="board" aria-selected="true">
 		              Board
