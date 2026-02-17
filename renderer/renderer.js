@@ -6099,6 +6099,8 @@ function showIntegrateDialogDetails() {
 }
 
 let integrateToDefaultInFlight = false;
+let integrateToDefaultInFlightJobId = "";
+let queuedIntegrateToDefaultJobId = "";
 async function startIntegrateToDefaultFromDialog(opts = {}) {
   const o = opts && typeof opts === "object" ? opts : {};
   const toastOnly = !!o.toastOnly;
@@ -6136,8 +6138,24 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     return;
   }
 
-  if (integrateToDefaultInFlight) return;
+  if (integrateToDefaultInFlight) {
+    const busyMessage =
+      integrateToDefaultInFlightJobId && integrateToDefaultInFlightJobId !== id
+        ? "Another integration is currently running. Please wait."
+        : "Integration already running for this ticket.";
+    if (toastOnly) {
+      showToast(busyMessage);
+    } else {
+      setIntegrateDialogPhase("error", {
+        status: "Integration already running",
+        message: busyMessage,
+        errorFull: busyMessage
+      });
+    }
+    return;
+  }
   integrateToDefaultInFlight = true;
+  integrateToDefaultInFlightJobId = id;
 
   integrateDialogResultText = "";
   integrateDialogErrorFull = "";
@@ -6250,7 +6268,20 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     else setIntegrateDialogPhase("error", { status: "Integration failed", message: first, errorFull: full, details: full });
   } finally {
     integrateToDefaultInFlight = false;
+    integrateToDefaultInFlightJobId = "";
     syncIntegrateDialogUi();
+
+    const queuedId = String(queuedIntegrateToDefaultJobId || "").trim();
+    if (queuedId && queuedId !== id) {
+      queuedIntegrateToDefaultJobId = "";
+      window.setTimeout(() => {
+        runIntegrateToDefaultAction(queuedId).catch((err) => {
+          showToast(String(err && err.message ? err.message : err) || "Integration failed.");
+        });
+      }, 0);
+    } else if (queuedId === id) {
+      queuedIntegrateToDefaultJobId = "";
+    }
   }
 }
 
@@ -6309,10 +6340,20 @@ async function runIntegrateToDefaultAction(jobId, opts = {}) {
   }
 
   if (integrateToDefaultInFlight) {
-    showToast("Integration already running.");
+    if (integrateToDefaultInFlightJobId === id) {
+      showToast("Integration already running for this ticket.");
+      return;
+    }
+    if (queuedIntegrateToDefaultJobId === id) {
+      showToast("This ticket is already queued for integration.");
+      return;
+    }
+    queuedIntegrateToDefaultJobId = id;
+    showToast("Integration already running. This ticket will run next.");
     return;
   }
 
+  if (queuedIntegrateToDefaultJobId === id) queuedIntegrateToDefaultJobId = "";
   integrateDialogJobId = id;
   integrateDialogArchived = false;
   integrateDialogErrorFull = "";
