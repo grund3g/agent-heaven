@@ -1584,10 +1584,11 @@ export class JobsManager {
     const threadId = agent === "claude" ? randomUUID() : "";
 
     const createdAt = new Date().toISOString();
+    const fallbackTitle = truncateText(promptSummary(prompt), 120);
 
     const job: Job = {
       id: jobId,
-      title: "",
+      title: fallbackTitle,
       titleLlm: "",
       status: "running",
       box: "board",

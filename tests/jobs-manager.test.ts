@@ -88,6 +88,8 @@ describe("electron/jobs-manager", () => {
     const startRes = await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] });
     expect(startRes).toEqual({ ok: true, jobId: "job1" });
     expect(events.some((e) => e.kind === "created" && e.jobId === "job1")).toBe(true);
+    const createdEvent = events.find((e) => e.kind === "created" && e.jobId === "job1");
+    expect(createdEvent && createdEvent.job && createdEvent.job.title).toBe("Do the thing");
     expect(saved.length).toBeGreaterThan(0);
 
     expect(execOnEvent).not.toBeNull();
@@ -103,6 +105,7 @@ describe("electron/jobs-manager", () => {
     const snap = jm.getJob("job1");
     expect(snap.ok).toBe(true);
     expect((snap as any).job.threadId).toBe("t123");
+    expect((snap as any).job.title).toBe("Do the thing");
     expect((snap as any).job.status).toBe("done");
 
     const sendRes = jm.send({ jobId: "job1", prompt: "follow up", images: [] });
