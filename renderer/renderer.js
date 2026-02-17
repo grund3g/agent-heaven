@@ -6755,7 +6755,11 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  const integrateToDefault = isIntegrateToDefaultAction(action);
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
+  }
 
   const builtIn = builtInActionKindFromCommand(cmd);
   if (builtIn === "integrate_to_default") {
@@ -6774,17 +6778,6 @@ async function runJobActionById(actionId) {
   if (job && jobStatusForUi(job) === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
     if (!ok) return;
-  }
-
-  if (integrateToDefault) {
-    await runIntegrateToDefaultAction(job);
-    return;
-  }
-
-  const cmd = String(action.command || "").trimEnd();
-  if (!cmd) {
-    showToast("Action has no command.");
-    return;
   }
 
   // Actions run via the per-job terminal session so interactive commands work
@@ -7889,27 +7882,10 @@ function renderJobDialogMeta(job) {
   {
     const ctx = jobContextUsage(job);
     if (ctx) {
-      const value = `${fmtPctCompact(ctx.percent)} · ${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in`;
-      const title = `context ${fmtPctCompact(ctx.percent)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
-      pushChip("context", value, { title, tooltip: true });
+      bits.push(`context=${fmtPctCompact(ctx.percent)} (${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in)`);
     }
   }
-  if (chips.length === 0) {
-    els.jobDialogMeta.removeAttribute(TOKEN_TOOLTIP_ATTR);
-    els.jobDialogMeta.removeAttribute("title");
-    els.jobDialogMeta.textContent = "";
-    return;
-  }
-  const chipsHtml = chips
-    .map((chip) => {
-      const classes = ["jobmeta__chip"];
-      if (chip.long) classes.push("jobmeta__chip--long");
-      if (chip.tone === "run" || chip.tone === "done" || chip.tone === "attn") classes.push(`jobmeta__chip--${chip.tone}`);
-      const tooltipAttr = chip.title ? ` ${TOKEN_TOOLTIP_ATTR}="${escapeHtml(chip.title)}"` : "";
-      return `<span class="${classes.join(" ")}"${tooltipAttr}><span class="jobmeta__key">${escapeHtml(chip.key)}</span><span class="jobmeta__value">${escapeHtml(chip.value)}</span></span>`;
-    })
-    .join("");
-  els.jobDialogMeta.innerHTML = `<div class="jobmeta">${chipsHtml}</div>`;
+  els.jobDialogMeta.textContent = bits.join("  ");
 }
 
 function setActiveTab(tab) {
@@ -11930,9 +11906,8 @@ function resolveModelContextWindow(modelName) {
 function jobContextUsage(job) {
   if (!job || typeof job !== "object") return null;
 
-  const directLimit = toPositiveInt(job.modelContextWindow);
   const model = String(job.model || "").trim();
-  if (!model && directLimit <= 0) return null;
+  if (!model) return null;
 
   const usage = job.usage && typeof job.usage === "object" ? job.usage : null;
   let inputTokens = usage ? toPositiveInt(usage.input_tokens) : 0;
@@ -11946,7 +11921,7 @@ function jobContextUsage(job) {
 
   if (inputTokens <= 0) return null;
 
-  const limitTokens = directLimit > 0 ? directLimit : resolveModelContextWindow(model);
+  const limitTokens = resolveModelContextWindow(model);
   if (limitTokens <= 0) return null;
 
   return {
@@ -11954,40 +11929,6 @@ function jobContextUsage(job) {
     limit_tokens: limitTokens,
     percent: (inputTokens / limitTokens) * 100
   };
-}
-
-function jobContextStepper(job) {
-  const ctx = jobContextUsage(job);
-  if (!ctx) return null;
-
-  const rawPct = clampNumber(ctx.percent, 0, 100_000, 0);
-  const fillPct = clampNumber(rawPct, 0, 100, 0);
-  const tone = rawPct >= 90 ? "danger" : rawPct >= 75 ? "warning" : "normal";
-  const pctText = `${Math.round(rawPct)}%`;
-  const titleBits = [`context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`];
-  const tok = jobTokensCardText(job);
-  if (tok && tok.title) titleBits.push(tok.title);
-  const title = titleBits.join("  ·  ");
-
-  return { fillPct, pctText, title, tone };
-}
-
-function renderCardContextStepper(ctx) {
-  if (!ctx || typeof ctx !== "object") return "";
-  const fillPct = clampNumber(ctx.fillPct, 0, 100, 0);
-  const tone = String(ctx.tone || "normal");
-  const toneCls = tone === "danger" ? " card__contextFill--danger" : tone === "warning" ? " card__contextFill--warning" : "";
-  const pctText = typeof ctx.pctText === "string" ? ctx.pctText : "";
-  const title = typeof ctx.title === "string" ? ctx.title : "";
-
-  return `
-        <div class="card__context" data-job-context title="${escapeHtml(oneLine(title))}">
-          <span class="card__contextStepper" aria-hidden="true">
-            <span class="card__contextFill${toneCls}" data-job-context-fill style="width:${fillPct.toFixed(2)}%"></span>
-          </span>
-          <span class="card__contextPct" data-job-context-pct>${escapeHtml(pctText)}</span>
-        </div>
-  `;
 }
 
 function historyModelStrings(agentKey) {
