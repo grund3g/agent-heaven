@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.10.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.9.1...agent-heaven-v0.10.0) (2026-02-17)
+
+
+### Features
+
+* **integrate:** add agent mode with CLI fallback ([dfffd94](https://github.com/grund3g/agent-heaven/commit/dfffd94fc28f8a35a279611603a4b935fe75babc))
+* **integrate:** automate quick action commit and archive flow ([0971cbb](https://github.com/grund3g/agent-heaven/commit/0971cbb84870ddfc2d2c19b24381a4c0b0da7576))
+* **renderer:** add sessions table/list display mode ([8cc7b99](https://github.com/grund3g/agent-heaven/commit/8cc7b992704871da366b40c105eac1b48167c783))
+* **renderer:** update files ([af34450](https://github.com/grund3g/agent-heaven/commit/af344501cafccaeb2ff3f2c3f31edc88a5e86d9c))
+* **renderer:** update index layout, UI behavior, and styles ([7587d1e](https://github.com/grund3g/agent-heaven/commit/7587d1ea9d0a83a68f8de5c7b7d9157ad6233610))
+* **renderer:** update renderer.js ([b6cff07](https://github.com/grund3g/agent-heaven/commit/b6cff07a790182ea28a9b8afd0001e66842feb51))
+* **renderer:** update renderer.js ([3787e7c](https://github.com/grund3g/agent-heaven/commit/3787e7c04bae980f9cd81e1ed91801b4d8e8cef8))
+* **renderer:** update renderer.js ([2d6a434](https://github.com/grund3g/agent-heaven/commit/2d6a4348cd775ab0a3468f2a9fa4d373cbfb80cb))
+* **renderer:** update styles.css ([25fb283](https://github.com/grund3g/agent-heaven/commit/25fb283dd95e2f890d0ebdb65c33e1f679130750))
+* **renderer:** update styles.css ([05010b6](https://github.com/grund3g/agent-heaven/commit/05010b6cec4a8cb0599e473f89036276eec8f1ee))
+* **renderer:** update UI behavior and styles ([7b12e86](https://github.com/grund3g/agent-heaven/commit/7b12e86bab886ea072c52cb53201d63f2cc5616e))
+* **ui:** show context usage and fix integrate action trigger ([fbd4bba](https://github.com/grund3g/agent-heaven/commit/fbd4bba2a8488271c187fdd37b308f1ea797c06e))
+* update renderer and src ([deba378](https://github.com/grund3g/agent-heaven/commit/deba378aa01e58e327c5ba3c20e122466a223c55))
+* update renderer, src, and tests ([bc621e4](https://github.com/grund3g/agent-heaven/commit/bc621e4d5a2284feadbec271a067edf9924da146))
+* update renderer, src, and tests ([f6e4d8a](https://github.com/grund3g/agent-heaven/commit/f6e4d8a5c02bbe21e3fde3f05e71ef190be3db76))
+* update src and tests ([cfc5893](https://github.com/grund3g/agent-heaven/commit/cfc5893de41652308ef15ff25789adbb53e9e2aa))
+
+
+### Bug Fixes
+
+* **board:** keep empty lanes visible in kanban view ([75ab4a2](https://github.com/grund3g/agent-heaven/commit/75ab4a2c84a0ca4535220938d7648791782484bc))
+* **electron:** harden jobs manager startup and renderer initialization ([d2b1389](https://github.com/grund3g/agent-heaven/commit/d2b1389d1cb851f25aa57a7e66373c4b874ce9ff))
+* **electron:** stabilize jobs startup, terminals, and git normalization ([3411fbe](https://github.com/grund3g/agent-heaven/commit/3411fbe79e176902cbd5f370c4fd951949c68bad))
+* **integrate:** start action immediately and harden commit suggestions ([6d0b415](https://github.com/grund3g/agent-heaven/commit/6d0b415de614f3cb35e30f65ea467fc2c0c0c741))
+* **integrate:** sync running lane, archive toast, and action chat log ([120e27a](https://github.com/grund3g/agent-heaven/commit/120e27a9cf55235310ea076020cd8b115223bf49))
+* **renderer:** make board lanes horizontally scrollable on narrow screens ([3cb4f7c](https://github.com/grund3g/agent-heaven/commit/3cb4f7ccf26a3c2b46ff2ae11665471b7a8b3740))
+* **tests:** resolve merge conflict artifacts ([020889d](https://github.com/grund3g/agent-heaven/commit/020889d73dbda0ed242ccf7fba8e7e1de0966f2f))
+* **ui:** honor hidden state and contain table width ([e9634a4](https://github.com/grund3g/agent-heaven/commit/e9634a40ba46232ed5288b9b7269f23fa29422ce))
+
 ## [0.9.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.9.0...agent-heaven-v0.9.1) (2026-02-16)
 
 
