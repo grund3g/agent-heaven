@@ -736,16 +736,12 @@ body::before {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  align-content: flex-start;
-  column-gap: 10px;
-  row-gap: 8px;
-  flex-wrap: wrap;
+  gap: 10px;
   min-width: 0;
-  overflow: visible;
-}
-
-.viewbar > * {
-  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
 }
 
 .viewbar__toggle {
@@ -3521,15 +3517,6 @@ body::before {
   }
   .sidebar {
     display: none;
-  }
-  #openStatusBtn {
-    display: inline-flex;
-  }
-  #openStatusSidebarBtn {
-    display: none;
-  }
-  .viewbar__toggle {
-    display: none !important;
   }
   .composer__row {
     grid-template-columns: 1fr;
