@@ -6961,44 +6961,6 @@ function showIntegrateDialogDetails() {
 let integrateToDefaultInFlight = false;
 let integrateToDefaultInFlightJobId = "";
 let queuedIntegrateToDefaultJobId = "";
-
-function waitMs(ms) {
-  const delay = Math.max(0, Math.trunc(Number(ms) || 0));
-  if (!delay) return Promise.resolve();
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, delay);
-  });
-}
-
-async function archiveJobWithRetry(jobId, opts = {}) {
-  const id = String(jobId || "").trim();
-  if (!id) return { ok: false, error: "Missing job id." };
-  if (!api || typeof api.jobsArchive !== "function") return { ok: false, error: "Archive is not supported in this build." };
-
-  const o = opts && typeof opts === "object" ? opts : {};
-  const attemptsRaw = Number(o.attempts);
-  const attempts = Number.isFinite(attemptsRaw) ? Math.max(1, Math.min(10, Math.trunc(attemptsRaw))) : 5;
-  const baseDelayRaw = Number(o.baseDelayMs);
-  const baseDelayMs = Number.isFinite(baseDelayRaw) ? Math.max(80, Math.min(2000, Math.trunc(baseDelayRaw))) : 220;
-
-  let lastErr = "";
-  for (let i = 0; i < attempts; i += 1) {
-    try {
-      await api.jobsArchive(id);
-      return { ok: true, error: "" };
-    } catch (err) {
-      const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
-      lastErr = full;
-      const low = full.toLowerCase();
-      const retryable = low.includes("job is running") || low.includes("integration already running");
-      if (!retryable || i >= attempts - 1) break;
-      await waitMs(baseDelayMs * (i + 1));
-    }
-  }
-
-  return { ok: false, error: lastErr || "Failed to archive." };
-}
-
 async function startIntegrateToDefaultFromDialog(opts = {}) {
   const o = opts && typeof opts === "object" ? opts : {};
   const toastOnly = !!o.toastOnly;
