@@ -386,6 +386,67 @@ function buildCommitMessageGeneratorPrompt(opts: {
   ].join("\n");
 }
 
+async function suggestCommitMessageForRepo(opts: {
+  repoDir: string;
+  settings: any;
+  forceEnglish?: boolean;
+}): Promise<string> {
+  const repoDir = String(opts && opts.repoDir ? opts.repoDir : "").trim() || process.cwd();
+  const settings = opts && typeof opts === "object" ? opts.settings : {};
+  const forceEnglish = !!(opts && opts.forceEnglish);
+
+  let changedPaths: string[] = [];
+  try {
+    changedPaths = await listChangedPaths(repoDir);
+  } catch {
+    changedPaths = [];
+  }
+
+  let recentSubjects: string[] = [];
+  try {
+    recentSubjects = await listRecentCommitSubjects(repoDir, 30);
+  } catch {
+    recentSubjects = [];
+  }
+
+  const style = inferCommitMessageStyleFromSubjects(recentSubjects);
+  const heuristicFallback =
+    suggestCommitMessage({
+      style,
+      changedPaths,
+      taskText: "",
+      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
+      allowTaskContext: false
+    }) || "Update local changes";
+
+  let suggestion = heuristicFallback;
+  try {
+    const plan = await pickUiTextGenPlan(settings);
+    if (plan.ok) {
+      const prompt = buildCommitMessageGeneratorPrompt({
+        style,
+        changedPaths,
+        recentSubjects,
+        forceEnglish
+      });
+      const raw = await runUiTextPrompt({
+        settings,
+        codexSettings: plan.codexSettings,
+        claudeSettings: plan.claudeSettings,
+        agent: plan.agent,
+        model: plan.model,
+        prompt
+      });
+      const llmSuggestion = normalizeGeneratedCommitSubject(raw);
+      if (llmSuggestion) suggestion = llmSuggestion;
+    }
+  } catch {
+    // Keep fallback suggestion.
+  }
+
+  return suggestion || heuristicFallback || "Update local changes";
+}
+
 function buildActionGeneratorPrompt(opts: { userPrompt: string; platform: string; shell: string }): string {
   const userPrompt = String(opts.userPrompt || "").trim();
   const platform = String(opts.platform || "").trim();
@@ -1684,55 +1745,12 @@ export async function startApp(): Promise<void> {
     const info = await getGitInfo(sourceDir);
     if (!info.isGitRepo) return { ok: false, error: `Checkout is not a git repo: ${sourceDir}` };
 
-    let changedPaths: string[] = [];
-    try {
-      changedPaths = await listChangedPaths(sourceDir);
-    } catch {
-      changedPaths = [];
-    }
-
-    let recentSubjects: string[] = [];
-    try {
-      recentSubjects = await listRecentCommitSubjects(sourceDir, 30);
-    } catch {
-      recentSubjects = [];
-    }
-
-    const style = inferCommitMessageStyleFromSubjects(recentSubjects);
-    const heuristicFallback = suggestCommitMessage({
-      style,
-      changedPaths,
-      taskText: "",
-      // Keep integrate-flow suggestions language-stable (English), independent of localized job titles/prompts.
-      allowTaskContext: false
+    const settings = store.getSettings();
+    const suggestion = await suggestCommitMessageForRepo({
+      repoDir: sourceDir,
+      settings,
+      forceEnglish
     });
-
-    let suggestion = heuristicFallback;
-    try {
-      const settings = store.getSettings();
-      const plan = await pickUiTextGenPlan(settings);
-      if (plan.ok) {
-        const prompt = buildCommitMessageGeneratorPrompt({
-          style,
-          changedPaths,
-          recentSubjects,
-          forceEnglish
-        });
-        const raw = await runUiTextPrompt({
-          settings,
-          codexSettings: plan.codexSettings,
-          claudeSettings: plan.claudeSettings,
-          agent: plan.agent,
-          model: plan.model,
-          prompt
-        });
-        const llmSuggestion = normalizeGeneratedCommitSubject(raw);
-        if (llmSuggestion) suggestion = llmSuggestion;
-      }
-    } catch {
-      // Keep fallback suggestion.
-    }
-
     return { ok: true, suggestion };
   });
 
@@ -1880,12 +1898,6 @@ export async function startApp(): Promise<void> {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
 
-    if (tgtInfo.dirty) {
-      return {
-        ok: false,
-        error: `Default-branch checkout has uncommitted changes. Commit/stash them first:\n\n  ${targetDir}`
-      };
-    }
     if (tgtInfo.detached) {
       return {
         ok: false,
@@ -1905,20 +1917,29 @@ export async function startApp(): Promise<void> {
       }
     }
 
+    const settings = store.getSettings();
+
     let committed = false;
     let committedSha = "";
+    let usedCommitMessage = commitMessage;
     if (srcInfo.dirty) {
-      if (!commitMessage) return { ok: false, error: "Checkout has uncommitted changes. Provide a commit message first." };
+      if (!usedCommitMessage) {
+        usedCommitMessage = await suggestCommitMessageForRepo({
+          repoDir: sourceDir,
+          settings,
+          forceEnglish: true
+        });
+      }
+      if (!usedCommitMessage) return { ok: false, error: "Failed to generate a commit message for checkout changes." };
       try {
         await addAll(sourceDir);
-        committedSha = await commitWithMessage(sourceDir, commitMessage);
+        committedSha = await commitWithMessage(sourceDir, usedCommitMessage);
         committed = true;
       } catch (err: any) {
         return { ok: false, error: String(err && err.message ? err.message : err) };
       }
     }
 
-    const settings = store.getSettings();
     const integrateMode = normalizeIntegrateToDefaultMode((settings as any).integrateToDefaultMode);
 
     let commits: string[] = [];
@@ -1940,8 +1961,45 @@ export async function startApp(): Promise<void> {
         targetBranch,
         commitsApplied: 0,
         committed,
-        committedSha
+        committedSha,
+        targetCommitted: false,
+        targetCommittedSha: "",
+        targetCommitMessage: ""
       };
+    }
+
+    const targetReadyInfo = await getGitInfo(targetDir);
+    if (!targetReadyInfo.isGitRepo) return { ok: false, error: `Default-branch checkout is not a git repo: ${targetDir}` };
+    if (targetReadyInfo.detached) {
+      return {
+        ok: false,
+        error: `Default-branch checkout is in detached HEAD (${targetReadyInfo.sha || "?"}). Switch to ${targetBranch} first:\n\n  ${targetDir}`
+      };
+    }
+
+    let targetCommitted = false;
+    let targetCommittedSha = "";
+    let targetCommitMessage = "";
+    if (targetReadyInfo.dirty) {
+      targetCommitMessage = await suggestCommitMessageForRepo({
+        repoDir: targetDir,
+        settings,
+        forceEnglish: true
+      });
+      if (!targetCommitMessage) targetCommitMessage = "chore: checkpoint local changes before integration";
+
+      try {
+        await addAll(targetDir);
+        targetCommittedSha = await commitWithMessage(targetDir, targetCommitMessage);
+        targetCommitted = true;
+      } catch (err: any) {
+        return {
+          ok: false,
+          error:
+            `Default-branch checkout has uncommitted changes and automatic commit failed:\n\n  ${targetDir}\n\n` +
+            `${String(err && err.message ? err.message : err)}`
+        };
+      }
     }
 
     let integrationMethod = integrateMode === "agent" ? "agent" : "cli";
@@ -1996,6 +2054,9 @@ export async function startApp(): Promise<void> {
             commitsApplied: parsed.commitsApplied,
             committed,
             committedSha,
+            targetCommitted,
+            targetCommittedSha,
+            targetCommitMessage,
             integrationMethod: "agent"
           };
         }
@@ -2063,6 +2124,9 @@ export async function startApp(): Promise<void> {
         commitsApplied: commits.length,
         committed,
         committedSha,
+        targetCommitted,
+        targetCommittedSha,
+        targetCommitMessage,
         integrationMethod,
         agentFallbackReason
       };

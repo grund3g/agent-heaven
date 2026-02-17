@@ -5881,11 +5881,6 @@ function builtInActionKindFromCommand(command) {
   return "";
 }
 
-function defaultIntegrateCommitMessage(job) {
-  const msg = "Update local changes";
-  return msg.slice(0, 72);
-}
-
 function defaultCheckoutCommitMessage(job) {
   const msg = "Update local changes";
   return msg.slice(0, 72);
@@ -6080,6 +6075,7 @@ let integrateToDefaultInFlight = false;
 async function startIntegrateToDefaultFromDialog(opts = {}) {
   const o = opts && typeof opts === "object" ? opts : {};
   const toastOnly = !!o.toastOnly;
+  const forceAutoArchive = !!o.forceAutoArchive;
 
   const id = String(integrateDialogJobId || "").trim();
   if (!id) return;
@@ -6133,56 +6129,15 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
   if (toastOnly) showToast("Integrating into default branch…");
 
   try {
-    let res = null;
-    try {
-      res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
-    } catch (err) {
-      const msg = String(err && err.message ? err.message : err);
-      if (msg.includes("Provide a commit message first")) {
-        if (!toastOnly) {
-          setIntegrateDialogPhase("pending", {
-            status: "Commit message required",
-            message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:"
-          });
-        }
-
-        let suggested = "";
-        try {
-          if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
-            suggested = await api.checkoutsSuggestCommitMessage(id, { forceEnglish: true });
-          }
-        } catch {
-          suggested = "";
-        }
-
-        const entered = await promptText({
-          title: "Commit message",
-          message: "Checkout has uncommitted changes.\n\nEnter a commit message to commit them before integrating:",
-          label: "Commit message",
-          defaultValue: suggested || defaultIntegrateCommitMessage(job),
-          okLabel: "Continue",
-          cancelLabel: "Cancel"
-        });
-        const commitMessage = String(entered || "").trim();
-        if (!commitMessage) {
-          if (toastOnly) showToast("Integration cancelled.");
-          else setIntegrateDialogPhase("confirm", { status: "Cancelled", message: "Integration cancelled." });
-          return;
-        }
-
-        setIntegrateDialogPhase("pending", { status: "Integrating…", message: "Committing and integrating…" });
-        if (toastOnly) showToast("Committing and integrating…");
-        res = await api.checkoutsIntegrateToDefault(id, { commitMessage });
-      } else {
-        throw err;
-      }
-    }
+    const res = await api.checkoutsIntegrateToDefault(id, { commitMessage: "" });
 
     const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
     const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
     const targetPath = res && typeof res.targetPath === "string" ? res.targetPath : "";
     const committed = !!(res && res.committed === true);
     const committedSha = res && typeof res.committedSha === "string" ? res.committedSha : "";
+    const targetCommitted = !!(res && res.targetCommitted === true);
+    const targetCommittedSha = res && typeof res.targetCommittedSha === "string" ? res.targetCommittedSha : "";
     const integrationMethod = res && typeof res.integrationMethod === "string" ? String(res.integrationMethod || "").trim() : "";
     const agentFallbackReason = res && typeof res.agentFallbackReason === "string" ? String(res.agentFallbackReason || "").trim() : "";
 
@@ -6195,12 +6150,17 @@ async function startIntegrateToDefaultFromDialog(opts = {}) {
     integrateDialogTargetBranch = targetBranch;
 
     const canArchive = jobBox(job) === "board";
-    const autoArchive = canArchive && isIntegrateAutoArchiveEnabled();
+    const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
     const details = [
       targetBranch ? `Target branch: ${targetBranch}` : "",
       targetPath ? `Target path: ${targetPath}` : "",
       `Commits applied: ${applied}`,
       committed && committedSha ? `Committed local changes: ${committedSha}` : committed ? "Committed local changes: yes" : "",
+      targetCommitted && targetCommittedSha
+        ? `Committed default-branch local changes: ${targetCommittedSha}`
+        : targetCommitted
+          ? "Committed default-branch local changes: yes"
+          : "",
       integrationMethod ? `Integration mode: ${integrationMethod}` : "",
       agentFallbackReason ? `Agent fallback: ${agentFallbackReason}` : ""
     ]
@@ -6300,11 +6260,13 @@ async function archiveIntegrateDialogJob() {
   }
 }
 
-async function runIntegrateToDefaultAction(jobId) {
+async function runIntegrateToDefaultAction(jobId, opts = {}) {
   const id = String(jobId || "").trim();
   if (!id) return;
   const job = state.jobs.get(id);
   if (!job || isDemoJob(job)) return;
+  const o = opts && typeof opts === "object" ? opts : {};
+  const closeDialog = o.closeDialog !== false;
 
   if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
     showToast("Integration is not supported in this build.");
@@ -6327,7 +6289,8 @@ async function runIntegrateToDefaultAction(jobId) {
   integrateDialogResultText = "";
   integrateDialogTargetPath = "";
   integrateDialogTargetBranch = "";
-  await startIntegrateToDefaultFromDialog({ toastOnly: true });
+  if (closeDialog && state.selectedJobId === id && els.jobDialog && els.jobDialog.open) closeJobDialog();
+  await startIntegrateToDefaultFromDialog({ toastOnly: true, forceAutoArchive: true });
 }
 
 let checkoutCommitActionInFlight = false;
