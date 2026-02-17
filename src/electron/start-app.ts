@@ -1716,15 +1716,6 @@ export async function startApp(): Promise<void> {
     }
   });
 
-<<<<<<< HEAD
-=======
-  function normalizeBranchName(value: unknown): string {
-    const s = typeof value === "string" ? value.trim() : "";
-    if (!s) return "";
-    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
-    return stripped.slice(0, 200);
-  }
-
   type ManagedCheckoutKind = "worktree" | "clone";
 
   function resolveManagedCheckoutPath(opts: { projectId: string; jobId: string; kind: ManagedCheckoutKind }): string {
@@ -1878,8 +1869,6 @@ export async function startApp(): Promise<void> {
 
     await removeManagedCheckout({ projectId, jobId: id, kind: managed.kind, projectPath });
   }
-
->>>>>>> c4b7f80 (feat: update renderer, src, and tests)
   ipcMain.handle("checkouts:suggestCommitMessage", async (evt, payload) => {
     assertTrustedIpcSender(evt);
     const p = payload && typeof payload === "object" ? (payload as any) : {};
