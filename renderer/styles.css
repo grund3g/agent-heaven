@@ -736,16 +736,19 @@ body::before {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  gap: 10px;
+  align-content: flex-start;
+  column-gap: 10px;
+  row-gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
+}
+
+.viewbar > * {
+  min-width: 0;
 }
 
 .viewbar__toggle {
-  display: none;
   margin-right: 0;
 }
 
@@ -872,11 +875,10 @@ body::before {
 
 #openStatusBtn {
   white-space: nowrap;
-  display: none;
 }
 
 #openStatusSidebarBtn {
-  display: grid;
+  display: none;
 }
 
 .seg {
@@ -3524,6 +3526,20 @@ body::before {
   .sessiontable th,
   .sessiontable td {
     padding: 8px 10px;
+  }
+}
+
+@media (max-width: 1500px) and (min-width: 1101px) {
+  :root:not([data-sidebar="collapsed"]) #openStatusBtn {
+    display: none;
+  }
+
+  :root:not([data-sidebar="collapsed"]) #openStatusSidebarBtn {
+    display: grid;
+  }
+
+  .searchmeta {
+    display: none;
   }
 }
 
