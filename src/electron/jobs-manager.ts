@@ -306,6 +306,76 @@ export class JobsManager {
     return false;
   }
 
+  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
+    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
+    if (!text) return false;
+
+    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
+    const writePatterns = [
+      /\bfix\b/,
+      /\bimplement\b/,
+      /\badd\b/,
+      /\bupdate\b/,
+      /\bchange\b/,
+      /\bedit\b/,
+      /\brefactor\b/,
+      /\bpatch\b/,
+      /\bwrite\b/,
+      /\bcreate\b/,
+      /\bremove\b/,
+      /\brename\b/,
+      /\bmigrate\b/,
+      /\bcommit\b/,
+      /\bbugfix\b/,
+      /\bcode\s+change/,
+      /\bcode\s+changes/,
+      /\bmake\s+changes?\b/,
+      /\bbehebe\b/,
+      /\bfixe\b/,
+      /\bimplementier/,
+      /\bfu[eü]g(?:e|en)?\b/,
+      /\b[aä]nder(?:e|n|ung)/,
+      /\baktualisier/,
+      /\berstell(?:e|en)?\b/,
+      /\bschreib(?:e|en)?\b/,
+      /\brefaktorisier/,
+      /\bl[oö]sch(?:e|en)?\b/,
+      /\bumbau(?:en)?\b/,
+      /\bmigrier(?:e|en)?\b/
+    ];
+    if (writePatterns.some((re) => re.test(text))) return false;
+
+    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
+    const readOnlyPatterns = [
+      /\banalys(?:e|is|ier)/,
+      /\banaly[sz]e\b/,
+      /\bexplain\b/,
+      /\berkl[aä]r/,
+      /\breview\b/,
+      /\binspect\b/,
+      /\binvestigat/,
+      /\buntersuch/,
+      /\bcheck\b/,
+      /\bpr[uü]f(?:e|en)?\b/,
+      /\bwhy\b/,
+      /\bwarum\b/,
+      /\bwieso\b/,
+      /\bplan\b/,
+      /\bbrainstorm\b/,
+      /\bidee(?:n)?\b/,
+      /\bsummariz/,
+      /\bzusammenfass/,
+      /\bstatus\b/,
+      /\bcompare\b/,
+      /\bvergleich/
+    ];
+    if (readOnlyPatterns.some((re) => re.test(text))) return true;
+
+    // Questions without edit intent are typically informational.
+    if (text.endsWith("?")) return true;
+    return false;
+  }
+
   private normalizeBranchName(value: unknown): string {
     return normalizeGitBranchName(value);
   }
