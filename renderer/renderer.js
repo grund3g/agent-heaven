@@ -9734,7 +9734,7 @@ function renderHelperPanel(opts = {}) {
       rows.push(`
         <article class="helpermsg ${isAssistant ? "helpermsg--assistant" : "helpermsg--user"}">
           <div class="helpermsg__head">${escapeHtml(roleLabel)}${runner ? `<span class="helpermsg__meta">${escapeHtml(runner)}</span>` : ""}</div>
-          <div class="msg__text">${renderMarkdownInlineSafeHtml(String(m.text || ""))}</div>
+          <div class="msg__text">${renderMarkdownSafeHtml(String(m.text || ""))}</div>
         </article>
       `);
     }
