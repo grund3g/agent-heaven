@@ -217,10 +217,6 @@ const api = window.agentHeaven;
   helperPanelClose: document.getElementById("helperPanelClose"),
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
-  helperContextScopeSelect: document.getElementById("helperContextScopeSelect"),
-  helperSessionSelect: document.getElementById("helperSessionSelect"),
-  helperNewSessionBtn: document.getElementById("helperNewSessionBtn"),
-  helperClearSessionBtn: document.getElementById("helperClearSessionBtn"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
@@ -9830,12 +9826,6 @@ function helperCurrentAgentPref() {
   return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
 }
 
-function helperCurrentContextScope() {
-  const raw = els.helperContextScopeSelect ? String(els.helperContextScopeSelect.value || "") : "";
-  const fallbackProjectId = helperDefaultProjectIdForContext();
-  return normalizeHelperContextScope(raw || getStoredHelperContextScope(), { defaultProjectId: fallbackProjectId });
-}
-
 function isHelperClaudeFamilyModel(value) {
   const low = String(value || "")
     .trim()
@@ -10186,12 +10176,13 @@ function renderHelperPanel(opts = {}) {
 
   if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
   if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
-  if (els.helperSessionSelect) els.helperSessionSelect.disabled = !!state.helperPending;
-  if (els.helperNewSessionBtn) els.helperNewSessionBtn.disabled = !!state.helperPending;
-  if (els.helperClearSessionBtn) els.helperClearSessionBtn.disabled = !!state.helperPending || items.length === 0;
   if (els.helperToPromptBtn) {
     els.helperToPromptBtn.hidden = !hasAssistantReply;
     els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
+  }
+  if (els.helperCreateTaskBtn) {
+    els.helperCreateTaskBtn.hidden = !hasAssistantReply;
+    els.helperCreateTaskBtn.disabled = state.helperPending || !hasAssistantReply;
   }
 
   if (forceScroll || stick || state.helperPending) {
@@ -10318,6 +10309,12 @@ function appendHelperContextToComposer() {
   return true;
 }
 
+async function startTicketFromHelperContext() {
+  const ok = appendHelperContextToComposer();
+  if (!ok) return;
+  await startJobFromComposer();
+}
+
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
   const force = !!(opts && opts.force);
   const defAgent = helperDefaultAgentFromSettings(settings);
@@ -10326,7 +10323,6 @@ function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
     const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
     if (force || !cur) els.helperAgentSelect.value = defAgent;
   }
-  renderHelperContextScopeOptions({ forceStored: force, skipStore: true });
 }
 
 function clearHelperHistoryNow(opts = {}) {
@@ -11641,22 +11637,6 @@ function wireUi() {
     els.helperAgentSelect.addEventListener("change", () => {
       const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
       els.helperAgentSelect.value = next;
-      renderHelperPanel();
-    });
-  }
-  if (els.helperContextScopeSelect) {
-    els.helperContextScopeSelect.addEventListener("change", () => {
-      const fallbackProjectId = helperDefaultProjectIdForContext();
-      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value, { defaultProjectId: fallbackProjectId });
-      if (!selectHasOptionValue(els.helperContextScopeSelect, next)) {
-        renderHelperContextScopeOptions({ skipStore: true });
-        helperSetMeta(helperCurrentMetaStatusText());
-        renderHelperPanel();
-        return;
-      }
-      els.helperContextScopeSelect.value = next;
-      storeHelperContextScope(next);
-      helperSetMeta(helperCurrentMetaStatusText());
       renderHelperPanel();
     });
   }

@@ -920,22 +920,11 @@
         <button id="helperPanelClose" class="btn btn--ghost" type="button">Close</button>
       </div>
       <div class="helperpanel__runner">
-        <select id="helperAgentSelect" class="select" title="Chat runner">
+        <select id="helperAgentSelect" class="select" title="Helper runner">
           <option value="">Auto (Settings)</option>
           <option value="claude">Claude</option>
           <option value="codex">Codex</option>
         </select>
-        <select id="helperContextScopeSelect" class="select" title="Chat context scope">
-          <option value="project">Context: Project</option>
-          <option value="global">Context: Global</option>
-        </select>
-      </div>
-      <div class="helperpanel__sessions">
-        <select id="helperSessionSelect" class="select" title="Chat session">
-          <option value="">Session</option>
-        </select>
-        <button id="helperNewSessionBtn" class="btn btn--ghost" type="button">New session</button>
-        <button id="helperClearSessionBtn" class="btn btn--ghost" type="button">Clear</button>
       </div>
       <div id="helperMessages" class="helperpanel__messages" aria-live="polite"></div>
       <div class="helperpanel__footer">
