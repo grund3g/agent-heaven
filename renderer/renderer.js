@@ -11445,21 +11445,92 @@ function wireUi() {
     });
   }
 
-	  els.projectSelect.addEventListener("change", async () => {
-	    const v = String(els.projectSelect.value || "").trim();
-	    if (v === TEMP_PROJECT_OPTION_VALUE) {
-	      try {
-	        await createTemporaryProject();
-	      } catch (err) {
-	        setHint(String(err && err.message ? err.message : err), "error");
-	        els.projectSelect.value = "";
-	        syncComposerCheckoutModeUi();
-	      }
-	      return;
-	    }
-	    if (v && v !== "auto") storeProjectId(v);
-	    syncComposerCheckoutModeUi();
-	  });
+  if (els.helperBubbleBtn) {
+    els.helperBubbleBtn.addEventListener("click", () => toggleHelperPanel({ focus: true }));
+  }
+  if (els.helperThinkingIndicator) {
+    els.helperThinkingIndicator.addEventListener("click", () => toggleHelperPanel({ open: true, focus: true }));
+  }
+  if (els.helperPanelClose) {
+    els.helperPanelClose.addEventListener("click", () => toggleHelperPanel({ open: false }));
+  }
+  if (els.helperAgentSelect) {
+    els.helperAgentSelect.addEventListener("change", () => {
+      const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
+      els.helperAgentSelect.value = next;
+      renderHelperPanel();
+    });
+  }
+  if (els.helperContextScopeSelect) {
+    els.helperContextScopeSelect.addEventListener("change", () => {
+      const fallbackProjectId = helperDefaultProjectIdForContext();
+      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value, { defaultProjectId: fallbackProjectId });
+      if (!selectHasOptionValue(els.helperContextScopeSelect, next)) {
+        renderHelperContextScopeOptions({ skipStore: true });
+        helperSetMeta(helperCurrentMetaStatusText());
+        renderHelperPanel();
+        return;
+      }
+      els.helperContextScopeSelect.value = next;
+      storeHelperContextScope(next);
+      helperSetMeta(helperCurrentMetaStatusText());
+      renderHelperPanel();
+    });
+  }
+  if (els.helperSessionSelect) {
+    els.helperSessionSelect.addEventListener("change", () => {
+      const next = String(els.helperSessionSelect.value || "").trim();
+      if (!helperSelectSession(next, { focus: true })) renderHelperPanel();
+    });
+  }
+  if (els.helperNewSessionBtn) {
+    els.helperNewSessionBtn.addEventListener("click", () => helperNewSessionNow({ focus: true }));
+  }
+  if (els.helperClearSessionBtn) {
+    els.helperClearSessionBtn.addEventListener("click", () => clearHelperCurrentSessionNow());
+  }
+  if (els.helperInput) {
+    els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
+    els.helperInput.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        askHelperFromInput();
+        return;
+      }
+      if (e.key === "Escape" && state.helperOpen) {
+        e.preventDefault();
+        toggleHelperPanel({ open: false });
+      }
+    });
+  }
+  if (els.helperSendBtn) {
+    els.helperSendBtn.addEventListener("click", () => askHelperFromInput());
+  }
+  if (els.helperToPromptBtn) {
+    els.helperToPromptBtn.addEventListener("click", () => appendHelperContextToComposer());
+  }
+  if (els.settingsHelperClearHistoryBtn) {
+    els.settingsHelperClearHistoryBtn.addEventListener("click", () => clearHelperHistoryNow());
+  }
+
+  els.projectSelect.addEventListener("change", async () => {
+    const v = String(els.projectSelect.value || "").trim();
+    if (v === TEMP_PROJECT_OPTION_VALUE) {
+      try {
+        await createTemporaryProject();
+      } catch (err) {
+        setHint(String(err && err.message ? err.message : err), "error");
+        els.projectSelect.value = "";
+        syncComposerCheckoutModeUi();
+      }
+      schedulePromptPathSuggestRefresh({ immediate: true });
+      return;
+    }
+    if (v && v !== "auto") storeProjectId(v);
+    syncComposerCheckoutModeUi();
+    schedulePromptPathSuggestRefresh({ immediate: true });
+    helperSetMeta(helperCurrentMetaStatusText());
+  });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
   if (els.modelInput) codexModelComboboxComposer = attachCodexModelCombobox(els.modelInput, { ariaLabel: "Show models" });

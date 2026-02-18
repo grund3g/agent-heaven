@@ -4226,19 +4226,18 @@ body::before {
 }
 
 .helperbubble--pending {
-  border-color: rgba(var(--accent-rgb), 0.90);
-  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.50), 0 0 44px rgba(var(--accent-rgb), 0.34);
+  border-color: rgba(var(--accent-rgb), 0.88);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.5), 0 0 26px rgba(var(--accent-rgb), 0.3);
 }
 
 .helperbubble--pending::before {
-  opacity: 0.88;
-  animation-duration: 4.2s;
+  opacity: 0.82;
+  animation-duration: 3.6s;
 }
 
 .helperbubble--pending::after {
-  opacity: 0.95;
-  border-color: rgba(var(--accent-rgb), 0.44);
-  animation-duration: 1.5s;
+  opacity: 0.9;
+  animation-duration: 1.4s;
 }
 
 .helperthinking {
@@ -4513,6 +4512,29 @@ body::before {
   50% {
     opacity: 0.82;
     transform: scale(1.05);
+  }
+}
+
+@keyframes helperthinking-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes helperthinking-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+  }
+
+  50% {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(var(--accent-rgb), 0.22) inset;
   }
 }
 
