@@ -570,6 +570,37 @@
 		              <input id="settingsIntegrateAutoArchive" type="checkbox" />
 		              <div class="field__label field__label--inline">Integrate action: auto-archive ticket after success</div>
 		            </label>
+		            <label class="field">
+		              <div class="field__label">Integrate action mode</div>
+		              <select id="settingsIntegrateToDefaultMode" class="select">
+		                <option value="agent">Agent (recommended)</option>
+		                <option value="cli">CLI (git commands)</option>
+		              </select>
+		            </label>
+		            <div class="settings__note">Agent mode tries LLM-driven integration first and can fall back to CLI when safe.</div>
+
+                <div class="settings__divider"></div>
+
+                <div class="settings__groupTitle">Chat</div>
+                <label class="field">
+                  <div class="field__label">Default chat runner</div>
+                  <select id="settingsHelperDefaultAgent" class="select">
+                    <option value="">Auto (prefer Opus)</option>
+                    <option value="claude">Claude</option>
+                    <option value="codex">Codex</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <div class="field__label">Default chat model override</div>
+                  <input id="settingsHelperDefaultModel" class="input" placeholder="e.g. opus, sonnet, gpt-5" />
+                </label>
+                <label class="field field--row">
+                  <input id="settingsHelperPersistHistory" type="checkbox" />
+                  <div class="field__label field__label--inline">Persist chat history across app restarts</div>
+                </label>
+                <div class="settings__actions">
+                  <button id="settingsHelperClearHistoryBtn" class="btn btn--ghost" type="button">Clear chat history</button>
+                </div>
 		          </div>
 
 	          <div class="settings__section">
