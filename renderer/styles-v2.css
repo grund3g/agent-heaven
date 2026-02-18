@@ -370,7 +370,30 @@ body::before {
   flex-direction: column;
   gap: 14px;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+}
+
+:root[data-scheme="light"] .sidebar {
+  background: rgba(245, 245, 247, 0.90);
+  border-right-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Apple-style thin scrollbars */
+.projects::-webkit-scrollbar {
+  width: 6px;
+}
+
+.projects::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.projects::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+:root[data-scheme="light"] .projects::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .brand {
@@ -443,6 +466,11 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.sidebar__section--projects {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .sidebar__section--bottom {
@@ -534,7 +562,10 @@ body::before {
 .projects {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .project {
