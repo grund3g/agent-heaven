@@ -5900,7 +5900,7 @@ function renderCard(job) {
               integratedText
             )}</span>
           </div>
-          <div class="card__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</div>
+          <div class="card__title">${escapeHtml(title)}</div>
         </div>
         ${ctx ? renderCardContextStepper(ctx) : ""}
         ${showStatusPill ? `<div class="card__status">${fmtStatusPill(job)}</div>` : ""}
@@ -6138,7 +6138,7 @@ function updateCardEl(job) {
   if (titleEl) {
     const title = jobDisplayTitle(job);
     titleEl.textContent = title;
-    titleEl.title = oneLine(title);
+    titleEl.removeAttribute("title");
   }
 
   const subTextEl = existing.querySelector(".card__subtext") || existing.querySelector(".card__sub");

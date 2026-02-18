@@ -1133,7 +1133,6 @@ body::before {
 }
 
 .card:hover {
-  transform: translateY(-1px);
   border-color: var(--stroke-strong);
   background: var(--card-bg-hover);
 }
