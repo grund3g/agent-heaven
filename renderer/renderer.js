@@ -221,7 +221,6 @@ const api = window.agentHeaven;
   helperPanelClose: document.getElementById("helperPanelClose"),
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
-  helperModelInput: document.getElementById("helperModelInput"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
@@ -8193,8 +8192,21 @@ function helperCurrentAgentPref() {
   return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
 }
 
+function isHelperClaudeFamilyModel(value) {
+  const low = String(value || "")
+    .trim()
+    .toLowerCase();
+  return low === "opus" || low === "sonnet" || low === "haiku";
+}
+
 function helperCurrentModelPref() {
-  return normalizeHelperModelValue(els.helperModelInput && els.helperModelInput.value ? els.helperModelInput.value : "");
+  const selectedAgent = helperCurrentAgentPref();
+  const configured = normalizeHelperModelValue(state.settings && state.settings.helperDefaultModel ? state.settings.helperDefaultModel : "");
+
+  if (selectedAgent === "claude") return configured || "opus";
+  if (selectedAgent === "codex") return isHelperClaudeFamilyModel(configured) ? "" : configured;
+  if (configured) return configured;
+  return helperDefaultModelFromSettings(state.settings);
 }
 
 function helperRunnerText(agent, model) {
@@ -8305,6 +8317,7 @@ function renderHelperPanel(opts = {}) {
 
   const stick = isNearBottom(els.helperMessages);
   const items = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+  const hasAssistantReply = items.some((m) => m && m.role === "assistant");
 
   if (items.length === 0 && !state.helperPending) {
     els.helperMessages.innerHTML = `<div class="helperpanel__empty">Try quick questions, architecture checks, or ask for a clean task seed. You can move the result into the main prompt.</div>`;
@@ -8334,8 +8347,14 @@ function renderHelperPanel(opts = {}) {
 
   if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
   if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
-  if (els.helperToPromptBtn) els.helperToPromptBtn.disabled = state.helperPending || state.helperMessages.length === 0;
-  if (els.helperCreateTaskBtn) els.helperCreateTaskBtn.disabled = state.helperPending || state.helperMessages.length === 0;
+  if (els.helperToPromptBtn) {
+    els.helperToPromptBtn.hidden = !hasAssistantReply;
+    els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
+  }
+  if (els.helperCreateTaskBtn) {
+    els.helperCreateTaskBtn.hidden = !hasAssistantReply;
+    els.helperCreateTaskBtn.disabled = state.helperPending || !hasAssistantReply;
+  }
 
   if (forceScroll || stick || state.helperPending) {
     els.helperMessages.scrollTop = els.helperMessages.scrollHeight;
@@ -8458,31 +8477,14 @@ async function startTicketFromHelperContext() {
   await startJobFromComposer();
 }
 
-function syncHelperAgentUi() {
-  const agent = helperCurrentAgentPref();
-  if (!els.helperModelInput) return;
-  if (agent === "claude") els.helperModelInput.placeholder = "Model override (optional, e.g. opus)";
-  else if (agent === "codex") els.helperModelInput.placeholder = "Model override (optional, e.g. gpt-5)";
-  else els.helperModelInput.placeholder = "Model override (optional)";
-}
-
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
   const force = !!(opts && opts.force);
   const defAgent = helperDefaultAgentFromSettings(settings);
-  const defModel = helperDefaultModelFromSettings(settings);
 
   if (els.helperAgentSelect) {
     const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
     if (force || !cur) els.helperAgentSelect.value = defAgent;
   }
-  if (els.helperModelInput) {
-    const curModel = normalizeHelperModelValue(els.helperModelInput.value);
-    if (force || !curModel) {
-      els.helperModelInput.value = defModel;
-      if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
-    }
-  }
-  syncHelperAgentUi();
 }
 
 function clearHelperHistoryNow(opts = {}) {
@@ -9741,22 +9743,7 @@ function wireUi() {
     els.helperAgentSelect.addEventListener("change", () => {
       const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
       els.helperAgentSelect.value = next;
-      if (els.helperModelInput) {
-        const currentModel = String(els.helperModelInput.value || "").trim();
-        const low = currentModel.toLowerCase();
-        const looksClaudeModel = low === "opus" || low === "sonnet" || low === "haiku";
-        if (next === "claude" && !currentModel) {
-          els.helperModelInput.value = "opus";
-        } else if (next === "codex" && looksClaudeModel) {
-          els.helperModelInput.value = "";
-        }
-      }
-      syncHelperAgentUi();
-    });
-  }
-  if (els.helperModelInput) {
-    els.helperModelInput.addEventListener("change", () => {
-      els.helperModelInput.value = normalizeHelperModelValue(els.helperModelInput.value || "");
+      renderHelperPanel();
     });
   }
   if (els.helperInput) {

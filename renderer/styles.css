@@ -3266,36 +3266,86 @@ body::before {
   right: 18px;
   bottom: 18px;
   z-index: 10020;
+  width: 90px;
+  height: 90px;
   border: 1px solid var(--stroke-strong);
-  background: linear-gradient(180deg, rgba(var(--accent2-rgb), 0.2), rgba(var(--accent-rgb), 0.1));
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.34), transparent 45%),
+    radial-gradient(circle at 70% 74%, rgba(var(--accent-rgb), 0.25), transparent 54%),
+    linear-gradient(140deg, rgba(var(--accent2-rgb), 0.34), rgba(var(--accent-rgb), 0.24));
   color: var(--ink);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
+  border-radius: 50%;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
   backdrop-filter: blur(10px);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  padding: 10px 8px;
   font-size: 13px;
   cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  animation: helperbubble-float 8s ease-in-out infinite;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.helperbubble::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    rgba(var(--accent2-rgb), 0.40),
+    rgba(var(--accent-rgb), 0.22),
+    rgba(var(--accent2-rgb), 0.12),
+    rgba(var(--accent-rgb), 0.34),
+    rgba(var(--accent2-rgb), 0.40)
+  );
+  mix-blend-mode: screen;
+  opacity: 0.62;
+  animation: helperbubble-spin 12s linear infinite;
+}
+
+.helperbubble::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1px solid rgba(var(--accent2-rgb), 0.22);
+  opacity: 0.72;
+  animation: helperbubble-pulse 3.8s ease-in-out infinite;
+}
+
+.helperbubble > * {
+  position: relative;
+  z-index: 1;
 }
 
 .helperbubble__label {
   font-weight: 700;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.38);
 }
 
 .helperbubble__kbd {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 9px;
+  line-height: 1;
   color: var(--muted2);
-  border: 1px solid var(--stroke);
-  border-radius: 8px;
-  padding: 2px 6px;
-  background: var(--surface3);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 2px 5px;
+  background: rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(4px);
 }
 
 .helperbubble:hover {
-  border-color: rgba(var(--accent2-rgb), 0.55);
+  border-color: rgba(var(--accent2-rgb), 0.72);
+  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.48), 0 0 20px rgba(var(--accent2-rgb), 0.28);
+  transform: translateY(-2px) scale(1.03);
 }
 
 .helperbubble:focus-visible {
@@ -3304,15 +3354,17 @@ body::before {
 }
 
 .helperbubble--open {
-  border-color: rgba(var(--accent2-rgb), 0.6);
+  border-color: rgba(var(--accent2-rgb), 0.8);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.52), 0 0 24px rgba(var(--accent2-rgb), 0.34);
+  animation-duration: 6s;
 }
 
 .helperpanel {
   position: fixed;
   right: 18px;
-  bottom: 72px;
+  bottom: 116px;
   width: min(460px, calc(100vw - 24px));
-  height: min(640px, calc(100vh - 110px));
+  height: min(640px, calc(100vh - 154px));
   z-index: 10020;
   border-radius: 18px;
   border: 1px solid var(--dialog-border);
@@ -3347,7 +3399,7 @@ body::before {
 
 .helperpanel__runner {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -3421,6 +3473,9 @@ body::before {
   .helperbubble {
     right: 10px;
     bottom: 10px;
+    width: 80px;
+    height: 80px;
+    padding: 8px;
   }
 
   .helperbubble__kbd {
@@ -3431,12 +3486,58 @@ body::before {
     right: 10px;
     left: 10px;
     width: auto;
-    bottom: 60px;
-    height: min(620px, calc(100vh - 82px));
+    bottom: 90px;
+    height: min(620px, calc(100vh - 118px));
   }
 
   .helperpanel__runner {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .helperbubble,
+  .helperbubble::before,
+  .helperbubble::after {
+    animation: none !important;
+  }
+
+  .helperbubble {
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+}
+
+@keyframes helperbubble-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-3px) scale(1.02);
+  }
+}
+
+@keyframes helperbubble-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes helperbubble-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.74;
+    transform: scale(1.04);
   }
 }
 
