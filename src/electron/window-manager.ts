@@ -35,8 +35,13 @@ export class WindowManager {
   }
 
   private rendererDir(): string {
-    // renderer-v2 was an experimental UI. Keep the app stable by always loading v1.
     return path.join(__dirname, "..", "..", "renderer");
+  }
+
+  private rendererFile(): string {
+    const s = this.getSettings();
+    const version = s && typeof s.uiDesignVersion === "string" ? s.uiDesignVersion : "v1";
+    return version === "v2" ? "index-v2.html" : "index.html";
   }
 
   liveWindows(): BrowserWindow[] {
@@ -168,7 +173,7 @@ export class WindowManager {
 
     const win = new BrowserWindow(opts);
     win.__agentHeavenRole = "board";
-    win.loadFile(path.join(this.rendererDir(), "index.html"));
+    win.loadFile(path.join(this.rendererDir(), this.rendererFile()));
 
     // Keep a reasonable default parent window for dialogs, etc.
     win.on("focus", () => {
@@ -212,7 +217,7 @@ export class WindowManager {
     const win = new BrowserWindow(opts);
     win.__agentHeavenRole = "lane";
     win.__agentHeavenLane = lane;
-    win.loadFile(path.join(this.rendererDir(), "index.html"), { query: { mode: "lane", lane } });
+    win.loadFile(path.join(this.rendererDir(), this.rendererFile()), { query: { mode: "lane", lane } });
 
     return win;
   }
@@ -251,7 +256,7 @@ export class WindowManager {
     const win = new BrowserWindow(opts);
     win.__agentHeavenRole = "job";
     win.__agentHeavenJobId = id;
-    win.loadFile(path.join(this.rendererDir(), "index.html"), { query: { mode: "job", jobId: id } });
+    win.loadFile(path.join(this.rendererDir(), this.rendererFile()), { query: { mode: "job", jobId: id } });
 
     return win;
   }

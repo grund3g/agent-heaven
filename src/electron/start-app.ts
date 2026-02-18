@@ -83,8 +83,8 @@ function isTrustedRendererUrl(rawUrl: unknown): boolean {
   const u = safeParseUrl(rawUrl);
   if (!u) return false;
   if (u.protocol !== "file:") return false;
-  // All app windows load the same renderer entrypoint (with optional query params).
-  return u.pathname.endsWith("/renderer/index.html");
+  // All app windows load a renderer entrypoint (with optional query params).
+  return u.pathname.endsWith("/renderer/index.html") || u.pathname.endsWith("/renderer/index-v2.html");
 }
 
 function senderUrlFromIpcEvent(evt: any): string {
@@ -1227,6 +1227,14 @@ export async function startApp(): Promise<void> {
   const storePath = path.join(app.getPath("userData"), "agent-heaven.store.json");
   const store = new Store(storePath);
   store.load();
+
+  // CLI flag: --design=v2 overrides the persisted uiDesignVersion setting.
+  {
+    const designFlag = app.commandLine.getSwitchValue("design");
+    if (designFlag === "v2" || designFlag === "v1") {
+      store.updateSettings({ uiDesignVersion: designFlag });
+    }
+  }
 
   const windowManager = new WindowManager({ getSettings: () => store.getSettings() });
   const trayManager = new TrayManager({

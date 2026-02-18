@@ -24,6 +24,7 @@ export const DEFAULT_STATE = {
     uiModel: "",
     uiTheme: "heaven", // heaven | nord | gruvbox | solarized | dracula | ocean
     uiColorScheme: "dark", // system | dark | light
+    uiDesignVersion: "v1", // v1 | v2
     editorCommand: "", // command/binary for "Open in editor" (e.g. code, cursor, zed)
 
     // Global shortcuts
@@ -681,6 +682,15 @@ function ensureSettings(settings) {
   if (Object.prototype.hasOwnProperty.call(next, "uiLogoVariant")) {
     delete next.uiLogoVariant;
     changed = true;
+  }
+
+  {
+    const raw = typeof (next as any).uiDesignVersion === "string" ? (next as any).uiDesignVersion.trim().toLowerCase() : "";
+    const nextVersion = raw === "v2" ? "v2" : "v1";
+    if ((next as any).uiDesignVersion !== nextVersion) {
+      (next as any).uiDesignVersion = nextVersion;
+      changed = true;
+    }
   }
 
   if (typeof (next as any).integrateAutoArchive !== "boolean") {

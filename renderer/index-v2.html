@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; script-src 'self';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Heaven</title>
+    <link rel="stylesheet" href="./styles-v2.css" />
+    <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+  </head>
+  <body>
+    <div class="titlebarDrag" aria-hidden="true"></div>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true">
+            <svg id="brandLogo" class="brand__logo" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+              <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 24L16 10l6 14" />
+                <path d="M12.8 19h6.4" />
+                <ellipse cx="16" cy="8.2" rx="7.4" ry="3.1" opacity="0.55" />
+              </g>
+              <circle cx="16" cy="10.2" r="1" fill="currentColor" opacity="0.72" />
+            </svg>
+          </div>
+          <div class="brand__text">
+            <div class="brand__name">Agent Heaven</div>
+          </div>
+        </div>
+
+        <div class="sidebar__section">
+          <div class="sidebar__titleRow">
+            <div class="sidebar__title">Projects</div>
+            <div class="sidebar__titleActions">
+              <button
+                id="addTempProjectBtn"
+                class="iconbtn sidebar__titleIcon sidebar__titleIcon--text"
+                type="button"
+                title="Create temporary project (new empty folder)"
+                aria-label="Create temporary project (new empty folder)"
+              >
+                tmp
+              </button>
+              <button
+                id="addProjectBtn"
+                class="iconbtn sidebar__titleIcon"
+                type="button"
+                title="Add project folder"
+                aria-label="Add project folder"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div id="projectsList" class="projects"></div>
+        </div>
+
+        <div class="sidebar__section sidebar__section--bottom sidebar__footer">
+          <div class="sidebar__footerActions">
+            <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>
+            <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">⌘</button>
+            <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">⚙</button>
+            <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">◔</button>
+          </div>
+          <button
+            id="toggleSidebarBtn"
+            class="iconbtn sidebar__toggle"
+            type="button"
+            title="Hide sidebar"
+            aria-label="Hide sidebar"
+            aria-pressed="false"
+          >
+            <span class="sidebarToggleIcon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" focusable="false">
+                <rect x="2.5" y="3" width="15" height="14" rx="3.2"></rect>
+                <path d="M7.2 3v14"></path>
+                <path class="sidebarToggleIcon__arrow" d="M12.4 7.6L9.5 10l2.9 2.4"></path>
+              </svg>
+            </span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="composer">
+          <div class="composer__row">
+            <select id="projectSelect" class="select">
+              <option value="">Select project…</option>
+            </select>
+            <select id="agentSelect" class="select" title="Agent">
+              <option value="codex">Codex</option>
+              <option value="claude">Claude</option>
+            </select>
+            <select id="checkoutModeSelect" class="select" title="Checkout strategy">
+              <option value="inplace">In-place</option>
+              <option value="worktree">Worktree</option>
+              <option value="clone">Clone</option>
+            </select>
+            <input id="modelInput" class="input" placeholder="Model override (optional)" />
+            <button id="runBtn" class="btn btn--primary">Run</button>
+          </div>
+          <div id="promptDropwrap" class="dropwrap">
+            <textarea id="promptInput" class="textarea" rows="3" placeholder="Prompt… (⌘+P to focus, ⌘+Enter to run)"></textarea>
+            <div id="promptPathSuggest" class="combo__menu pathsuggest" role="listbox" aria-label="File suggestions" hidden></div>
+            <div id="promptBadge" class="attachbadge" hidden></div>
+          </div>
+          <div id="promptAttachments" class="attachments"></div>
+          <div class="composer__hint" id="composerHint"></div>
+        </header>
+
+        <div class="viewbar" aria-label="View switcher">
+          <button
+            id="toggleSidebarCollapsedBtn"
+            class="iconbtn viewbar__toggle"
+            type="button"
+            title="Show sidebar"
+            aria-label="Show sidebar"
+            aria-pressed="true"
+          >
+            <span class="sidebarToggleIcon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" focusable="false">
+                <rect x="2.5" y="3" width="15" height="14" rx="3.2"></rect>
+                <path d="M7.2 3v14"></path>
+                <path class="sidebarToggleIcon__arrow" d="M12.4 7.6L9.5 10l2.9 2.4"></path>
+              </svg>
+            </span>
+          </button>
+          <div class="seg" role="tablist" aria-label="Views">
+            <button type="button" class="seg__btn seg__btn--active" data-view="board" aria-selected="true">
+              Board
+            </button>
+            <button type="button" class="seg__btn" data-view="archive" aria-selected="false">Archive</button>
+            <button type="button" class="seg__btn" data-view="trash" aria-selected="false">Trash</button>
+          </div>
+          <div class="seg" role="tablist" aria-label="Display mode">
+            <button type="button" class="seg__btn seg__btn--active" data-display-mode="cards" aria-selected="true">
+              Cards
+            </button>
+            <button type="button" class="seg__btn" data-display-mode="table" aria-selected="false">Table</button>
+          </div>
+          <div id="tableScopeCtl" class="filterctl" aria-label="Table scope" hidden>
+            <span class="filterctl__label">Scope</span>
+            <select id="tableScopeSelect" class="select filterselect" title="Choose which sessions appear in table mode">
+              <option value="view">Current view</option>
+              <option value="all">All sessions</option>
+            </select>
+          </div>
+          <div class="filterctl" aria-label="Filter jobs by project">
+            <span class="filterctl__label">Project</span>
+            <select id="projectFilterSelect" class="select filterselect" title="Filter jobs by project">
+              <option value="">All projects</option>
+            </select>
+          </div>
+          <div class="sortctl" aria-label="Sort jobs">
+            <span class="sortctl__label">Sort</span>
+            <select id="sortSelect" class="select sortselect" title="Sort jobs within lanes">
+              <option value="lane_newest">Newest in lane</option>
+              <option value="lane_oldest">Oldest in lane</option>
+              <option value="duration_longest">Longest running</option>
+              <option value="created_newest">Created (newest)</option>
+              <option value="created_oldest">Created (oldest)</option>
+            </select>
+          </div>
+          <div class="searchctl" role="search" aria-label="Search sessions">
+            <input id="searchInput" class="searchctl__input" type="search" placeholder="Search sessions…" autocomplete="off" />
+            <button id="searchClearBtn" class="iconbtn searchctl__clear" type="button" title="Clear search (Esc)" aria-label="Clear search" hidden>
+              ×
+            </button>
+          </div>
+          <div id="searchMeta" class="searchmeta" aria-live="polite"></div>
+          <button id="openStatusBtn" class="btn btn--ghost" type="button" title="Show status + token usage">
+            Status
+          </button>
+        </div>
+
+        <section id="boardSection" class="board">
+          <div class="lane">
+            <div class="lane__title">
+              <span class="lane__titleText">Running</span>
+              <div class="lane__titleActions">
+                <button
+                  class="iconbtn lane__move"
+                  type="button"
+                  data-move-window
+                  title="Move window to display"
+                  aria-label="Move window to display"
+                >
+                  ⇆
+                </button>
+                <button
+                  class="iconbtn lane__pop"
+                  type="button"
+                  data-popout-lane="running"
+                  title="Open Running in new window"
+                  aria-label="Open Running in new window"
+                >
+                  ↗
+                </button>
+              </div>
+            </div>
+            <div id="laneRunning" class="cards"></div>
+          </div>
+          <div class="lane">
+            <div class="lane__title">
+              <span class="lane__titleText">Needs Attention</span>
+              <div class="lane__titleActions">
+                <button
+                  class="iconbtn lane__move"
+                  type="button"
+                  data-move-window
+                  title="Move window to display"
+                  aria-label="Move window to display"
+                >
+                  ⇆
+                </button>
+                <button
+                  class="iconbtn lane__pop"
+                  type="button"
+                  data-popout-lane="attention"
+                  title="Open Needs Attention in new window"
+                  aria-label="Open Needs Attention in new window"
+                >
+                  ↗
+                </button>
+              </div>
+            </div>
+            <div id="laneAttention" class="cards"></div>
+          </div>
+          <div class="lane">
+            <div class="lane__title">
+              <span class="lane__titleText">Done</span>
+              <div class="lane__titleActions">
+                <button
+                  class="iconbtn lane__move"
+                  type="button"
+                  data-move-window
+                  title="Move window to display"
+                  aria-label="Move window to display"
+                >
+                  ⇆
+                </button>
+                <button
+                  class="iconbtn lane__pop"
+                  type="button"
+                  data-popout-lane="done"
+                  title="Open Done in new window"
+                  aria-label="Open Done in new window"
+                >
+                  ↗
+                </button>
+              </div>
+            </div>
+            <div id="laneDone" class="cards"></div>
+          </div>
+        </section>
+        <section id="sessionsTableSection" class="sessiontablewrap" hidden>
+          <div id="sessionsTableMeta" class="sessiontablemeta"></div>
+          <div class="sessiontablescroll">
+            <table class="sessiontable" aria-label="Sessions">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Box</th>
+                  <th>Title</th>
+                  <th>Project</th>
+                  <th>Agent</th>
+                  <th>Model</th>
+                  <th>Created</th>
+                  <th>Finished</th>
+                  <th>Duration</th>
+                  <th>Tokens</th>
+                  <th>Thread</th>
+                  <th>Exit</th>
+                  <th>Integrated</th>
+                </tr>
+              </thead>
+              <tbody id="sessionsTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="jobDialog" class="dialog dialog--slide">
+      <div class="dialog__inner">
+        <div class="dialog__header">
+          <div class="dialog__title" id="jobDialogTitle">Job</div>
+          <div class="dialog__headerActions">
+            <button id="jobDialogPopout" class="btn btn--ghost" type="button" title="Open in new window">
+              ↗
+            </button>
+            <button id="jobDialogMove" class="btn btn--ghost" type="button" title="Move this window to a display" hidden>
+              Move
+            </button>
+            <button id="jobDialogClose" class="btn btn--ghost" type="button">Close</button>
+          </div>
+        </div>
+        <div class="dialog__meta" id="jobDialogMeta"></div>
+        <div class="dialog__body">
+          <div class="jobtools">
+            <div class="tabs">
+              <button class="tab tab--active" data-tab="chat">Chat</button>
+              <button class="tab" data-tab="live">Live</button>
+              <button class="tab" data-tab="logs">Logs</button>
+              <button class="tab" data-tab="term">Terminal</button>
+            </div>
+            <div class="jobsearchctl" role="search" aria-label="Search in current job tab">
+              <input
+                id="jobSearchInput"
+                class="jobsearchctl__input"
+                type="search"
+                placeholder="Find in tab…"
+                autocomplete="off"
+              />
+              <div id="jobSearchMeta" class="jobsearchctl__meta" aria-live="polite"></div>
+              <button
+                id="jobSearchPrevBtn"
+                class="iconbtn jobsearchctl__nav"
+                type="button"
+                title="Previous match (Shift+Enter)"
+                aria-label="Previous match"
+              >
+                ↑
+              </button>
+              <button
+                id="jobSearchNextBtn"
+                class="iconbtn jobsearchctl__nav"
+                type="button"
+                title="Next match (Enter)"
+                aria-label="Next match"
+              >
+                ↓
+              </button>
+              <button
+                id="jobSearchClearBtn"
+                class="iconbtn jobsearchctl__clear"
+                type="button"
+                title="Clear search (Esc)"
+                aria-label="Clear search"
+                hidden
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <div id="jobDialogChat" class="panel panel--active"></div>
+          <div id="jobDialogLive" class="panel panel--terminal"></div>
+          <div id="jobDialogLogs" class="panel panel--terminal"></div>
+          <div id="jobDialogTerm" class="panel panel--terminal panel--xterm"></div>
+        </div>
+        <div class="dialog__footer dialog__footer--job">
+          <div class="followup">
+            <div class="followup__row">
+              <div id="followupDropwrap" class="dropwrap dropwrap--sm">
+                <textarea id="followupInput" class="textarea textarea--sm" rows="2" placeholder="Follow-up… (⌘+Enter)"></textarea>
+                <div id="followupBadge" class="attachbadge" hidden></div>
+              </div>
+              <button id="sendFollowupBtn" class="btn btn--primary">Send</button>
+              <button id="cancelJobBtn" class="btn btn--danger">Stop</button>
+            </div>
+          </div>
+          <div class="dialog__actions">
+            <button
+              id="jobMoreBtn"
+              class="iconbtn"
+              type="button"
+              title="More actions"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              <span aria-hidden="true">⋯</span>
+            </button>
+            <div id="jobMoreMenu" class="ctxmenu" hidden role="menu" aria-label="More job actions">
+              <button type="button" class="ctxmenu__item" data-jobmore-action="actions">Actions…</button>
+              <button type="button" class="ctxmenu__item" data-jobmore-action="rerun">Rerun…</button>
+              <button type="button" class="ctxmenu__item" data-jobmore-action="restore" hidden>Restore</button>
+              <button type="button" class="ctxmenu__item" data-jobmore-action="archive" hidden>Archive</button>
+              <button type="button" class="ctxmenu__item" data-jobmore-action="trash" hidden>Trash</button>
+              <div class="ctxmenu__sep" data-jobmore-sep="danger" role="separator"></div>
+              <button type="button" class="ctxmenu__item ctxmenu__item--danger" data-jobmore-action="delete" hidden>Delete</button>
+            </div>
+            <div id="jobActionsMenu" class="ctxmenu" hidden role="menu" aria-label="Job actions"></div>
+          </div>
+          <div id="followupAttachments" class="attachments attachments--sm"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="rerunDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--rerun">
+        <div class="dialog__header">
+          <div class="dialog__title">Rerun</div>
+          <button id="rerunDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="rerunDialogMeta"></div>
+        <div class="settings">
+          <div class="settings__section">
+            <label class="field">
+              <div class="field__label">Agent</div>
+              <select id="rerunAgentSelect" class="select" title="Agent">
+                <option value="codex">Codex</option>
+                <option value="claude">Claude</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Model override (optional)</div>
+              <input id="rerunModelInput" class="input" placeholder="Model override (optional)" />
+            </label>
+            <label class="field">
+              <div class="field__label">Prompt source</div>
+              <select id="rerunPromptSelect" class="select" title="Prompt source">
+                <option value="all">All prompts (combined)</option>
+                <option value="last">Last prompt</option>
+                <option value="first">First prompt</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="rerunStartBtn" class="btn btn--primary" type="button">Start rerun</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="settingsDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--settings">
+        <div class="dialog__header">
+          <div class="dialog__title">Settings</div>
+          <button id="settingsDialogClose" class="btn btn--ghost">Close</button>
+        </div>
+        <div class="settings">
+          <div class="settings__section">
+            <div class="settings__sectionTitle">Agents</div>
+
+            <div class="settings__groupTitle">Codex</div>
+            <label class="field">
+              <div class="field__label">Codex path</div>
+              <input id="settingsCodexPath" class="input" placeholder="Leave empty to use PATH (codex)" />
+            </label>
+            <label class="field">
+              <div class="field__label">Default model</div>
+              <input
+                id="settingsCodexModel"
+                class="input"
+                placeholder="e.g. gpt-5.3-codex, ..."
+              />
+            </label>
+            <label class="field">
+              <div class="field__label">Transport</div>
+              <select id="settingsCodexTransport" class="select">
+                <option value="exec_json">exec --json (stable)</option>
+                <option value="app_server">app-server (experimental)</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Sandbox mode</div>
+              <select id="settingsCodexSandboxMode" class="select">
+                <option value="read-only">read-only</option>
+                <option value="workspace-write">workspace-write</option>
+                <option value="danger-full-access">danger-full-access</option>
+              </select>
+            </label>
+            <label class="field field--row">
+              <input id="settingsCodexSkipGitRepoCheck" type="checkbox" />
+              <div class="field__label field__label--inline">Allow running outside git repo (--skip-git-repo-check)</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsCodexBypass" type="checkbox" />
+              <div class="field__label field__label--inline">Danger: bypass approvals + sandbox</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Codex color (--color)</div>
+              <select id="settingsCodexColor" class="select">
+                <option value="auto">auto</option>
+                <option value="always">always</option>
+                <option value="never">never</option>
+              </select>
+            </label>
+
+            <div class="settings__divider"></div>
+
+            <div class="settings__groupTitle">Claude</div>
+            <label class="field">
+              <div class="field__label">Claude path</div>
+              <input id="settingsClaudePath" class="input" placeholder="Leave empty to use PATH (claude)" />
+            </label>
+            <label class="field">
+              <div class="field__label">Default model</div>
+              <input id="settingsClaudeModel" class="input" placeholder="e.g. opus, sonnet, ..." />
+            </label>
+            <label class="field">
+              <div class="field__label">Permission mode</div>
+              <select id="settingsClaudePermissionMode" class="select">
+                <option value="acceptEdits">acceptEdits (recommended)</option>
+                <option value="default">default</option>
+                <option value="plan">plan</option>
+                <option value="bypassPermissions">bypassPermissions</option>
+              </select>
+            </label>
+            <label class="field field--row">
+              <input id="settingsClaudeSkipPermissions" type="checkbox" />
+              <div class="field__label field__label--inline">Danger: skip permissions (--dangerously-skip-permissions)</div>
+            </label>
+          </div>
+
+          <div class="settings__section">
+            <div class="settings__sectionTitle">UI</div>
+            <label class="field">
+              <div class="field__label">UI model (router/summaries later)</div>
+              <select id="settingsUiModel" class="select">
+                <option value="">Unset (default)</option>
+                <optgroup id="settingsUiModelCodexGroup" label="Codex (detected)"></optgroup>
+                <optgroup label="OpenAI">
+                  <option value="o3">o3</option>
+                  <option value="o3-mini">o3-mini</option>
+                  <option value="gpt-5">gpt-5</option>
+                  <option value="gpt-5-mini">gpt-5-mini</option>
+                </optgroup>
+                <optgroup label="Anthropic">
+                  <option value="opus">opus</option>
+                  <option value="sonnet">sonnet</option>
+                  <option value="haiku">haiku</option>
+                </optgroup>
+                <option value="__custom__">Custom...</option>
+              </select>
+              <input id="settingsUiModelCustom" class="input" placeholder="Custom model..." hidden />
+            </label>
+            <label class="field">
+              <div class="field__label">Theme</div>
+              <select id="settingsTheme" class="select">
+                <option value="heaven">Heaven</option>
+                <option value="nord">Nord</option>
+                <option value="gruvbox">Gruvbox</option>
+                <option value="solarized">Solarized</option>
+                <option value="dracula">Dracula</option>
+                <option value="ocean">Ocean</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Color scheme</div>
+              <select id="settingsColorScheme" class="select">
+                <option value="system">System</option>
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Editor preset</div>
+              <select id="settingsEditorPreset" class="select">
+                <option value="">Select preset…</option>
+                <option value="code">Visual Studio Code</option>
+                <option value="cursor">Cursor</option>
+                <option value="windsurf">Windsurf</option>
+                <option value="zed">Zed</option>
+                <option value="subl">Sublime Text</option>
+                <option value="nvim">Neovim</option>
+                <option value="vim">Vim</option>
+                <option value="idea">IntelliJ IDEA</option>
+                <option value="webstorm">WebStorm</option>
+                <option value="pycharm">PyCharm</option>
+                <option value="goland">GoLand</option>
+                <option value="__custom__">Custom…</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Editor command (task: Open in editor)</div>
+              <input id="settingsEditorCommand" class="input" placeholder="e.g. code, cursor, zed, code --reuse-window" />
+            </label>
+            <div class="settings__note">
+              Pick a preset or use a custom command. The task path is appended automatically unless your command already passes a target
+              (for example <code class="md-inline">.</code>) or uses <code class="md-inline">{path}</code>.
+            </div>
+            <label class="field field--row">
+              <input id="settingsMenuBarMode" type="checkbox" />
+              <div class="field__label field__label--inline">macOS: Run as menu bar app (hide Dock icon, close-to-hide)</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsStartAtLogin" type="checkbox" />
+              <div class="field__label field__label--inline">macOS: Start at login (best in packaged apps)</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsOpenOnAllDisplays" type="checkbox" />
+              <div class="field__label field__label--inline">Open a window on every display</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Board: max Done cards (0 = unlimited)</div>
+              <input id="settingsBoardDoneLimit" class="input" type="number" min="0" max="5000" step="25" />
+            </label>
+            <label class="field field--row">
+              <input id="settingsAttentionOnQuestionPrompts" type="checkbox" />
+              <div class="field__label field__label--inline">Board: send question prompts to Needs Attention</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsIntegrateAutoArchive" type="checkbox" />
+              <div class="field__label field__label--inline">Integrate action: auto-archive ticket after success</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Integrate action mode</div>
+              <select id="settingsIntegrateToDefaultMode" class="select">
+                <option value="agent">Agent (recommended)</option>
+                <option value="cli">CLI (git commands)</option>
+              </select>
+            </label>
+            <div class="settings__note">Agent mode tries LLM-driven integration first and can fall back to CLI when safe.</div>
+
+            <div class="settings__divider"></div>
+
+            <div class="settings__groupTitle">Helper chat</div>
+            <label class="field">
+              <div class="field__label">Default helper runner</div>
+              <select id="settingsHelperDefaultAgent" class="select">
+                <option value="">Auto (prefer Opus)</option>
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Default helper model override</div>
+              <input id="settingsHelperDefaultModel" class="input" placeholder="e.g. opus, sonnet, gpt-5" />
+            </label>
+            <label class="field field--row">
+              <input id="settingsHelperPersistHistory" type="checkbox" />
+              <div class="field__label field__label--inline">Persist helper chat history across app restarts</div>
+            </label>
+            <div class="settings__actions">
+              <button id="settingsHelperClearHistoryBtn" class="btn btn--ghost" type="button">Clear helper history</button>
+            </div>
+          </div>
+
+          <div class="settings__section">
+            <div class="settings__sectionTitle">Shortcuts</div>
+            <label class="field field--row">
+              <input id="settingsGlobalHotkeyEnabled" type="checkbox" />
+              <div class="field__label field__label--inline">Enable global hotkey (show app + focus prompt)</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Global hotkey</div>
+              <input id="settingsGlobalHotkeyAccelerator" class="input" placeholder="CommandOrControl+Shift+P" />
+            </label>
+            <label class="field field--row">
+              <input id="settingsGlobalHotkeyUseClipboard" type="checkbox" />
+              <div class="field__label field__label--inline">On hotkey: paste clipboard into prompt</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsGlobalHotkeyStartWisprHandsFree" type="checkbox" />
+              <div class="field__label field__label--inline">On hotkey: start Wispr hands-free dictation (macOS)</div>
+            </label>
+            <div class="settings__note">Accelerator format uses Electron syntax (e.g. CommandOrControl+Shift+P).</div>
+          </div>
+
+          <div class="settings__section">
+            <div class="settings__sectionTitle">Notifications</div>
+            <label class="field field--row">
+              <input id="settingsSoundNeedsAttention" type="checkbox" />
+              <div class="field__label field__label--inline">Play sound when a job enters Needs Attention</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsSoundDone" type="checkbox" />
+              <div class="field__label field__label--inline">Play sound when a job is Done</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Sound</div>
+              <select id="settingsSoundPreset" class="select">
+                <option value="classic">Classic beeps</option>
+                <option value="chime">Chime</option>
+                <option value="pop">Pop</option>
+                <option value="bell">Bell</option>
+                <option value="arcade">Arcade</option>
+              </select>
+            </label>
+            <label class="field">
+              <div class="field__label">Sound volume (0-100)</div>
+              <input id="settingsSoundVolume" class="input" type="number" min="0" max="100" step="5" />
+            </label>
+            <div class="field">
+              <div class="field__label">Test sound</div>
+              <div class="settings__actions">
+                <button id="settingsTestSoundAttention" class="btn btn--ghost" type="button">Test Needs Attention</button>
+                <button id="settingsTestSoundDone" class="btn btn--ghost" type="button">Test Done</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="saveSettingsBtn" class="btn btn--primary">Save</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="actionsDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--settings">
+        <div class="dialog__header">
+          <div class="dialog__title">Actions</div>
+          <button id="actionsDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="settings">
+          <div class="settings__section">
+            <div class="settings__sectionTitle">Actions</div>
+            <div class="settings__note">
+              Saved commands you can run from a job card. Shell commands run in that job's checkout folder via the Terminal tab. Commands starting with <code class="md-inline">ah:</code> run as built-in app actions.
+            </div>
+            <div id="settingsActionsList" class="actionslist"></div>
+            <div class="settings__actions">
+              <button id="settingsActionsAddBtn" class="btn btn--ghost" type="button">Add action</button>
+              <button id="settingsActionsPromptBtn" class="btn btn--ghost" type="button" title="Generate an action with an LLM">Prompt…</button>
+            </div>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="saveActionsBtn" class="btn btn--primary" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="actionPromptDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--rerun">
+        <div class="dialog__header">
+          <div class="dialog__title">Action prompt</div>
+          <button id="actionPromptDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="actionPromptDialogMeta"></div>
+        <div class="settings">
+          <div class="settings__section">
+            <label class="field">
+              <div class="field__label">Describe the action</div>
+              <textarea id="actionPromptInput" class="textarea" rows="3" placeholder="e.g. Create an action that stages all changes, opens the commit editor, then pushes"></textarea>
+            </label>
+            <div class="settings__note">The result will be added to Actions. Don't forget to Save.</div>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="actionPromptGenerateBtn" class="btn btn--primary" type="button">Generate</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="textPromptDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--rerun">
+        <div class="dialog__header">
+          <div class="dialog__title" id="textPromptDialogTitle">Input</div>
+          <button id="textPromptDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="settings">
+          <div class="settings__section">
+            <div id="textPromptDialogMessage" class="settings__note settings__note--prewrap"></div>
+            <label class="field">
+              <div class="field__label" id="textPromptDialogLabel">Value</div>
+              <input id="textPromptDialogInput" class="input" />
+            </label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="textPromptDialogCancel" class="btn btn--ghost" type="button">Cancel</button>
+            <button id="textPromptDialogOk" class="btn btn--primary" type="button">OK</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="projectRemoveDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--rerun">
+        <div class="dialog__header">
+          <div class="dialog__title">Remove project</div>
+          <button id="projectRemoveDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="settings">
+          <div class="settings__section">
+            <div id="projectRemoveDialogMessage" class="settings__note settings__note--prewrap"></div>
+            <label id="projectRemoveDialogDeleteRow" class="field field--row" hidden>
+              <input id="projectRemoveDialogDeleteFolder" type="checkbox" />
+              <div class="field__label field__label--inline">Also delete temporary folder from disk</div>
+            </label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="projectRemoveDialogCancel" class="btn btn--ghost" type="button">Cancel</button>
+            <button id="projectRemoveDialogRemove" class="btn btn--danger" type="button">Remove</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="projectDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--project">
+        <div class="dialog__header">
+          <div class="dialog__title" id="projectDialogTitle">Project</div>
+          <button id="projectDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="projectDialogMeta"></div>
+        <div class="settings">
+          <div class="settings__section">
+            <div class="settings__sectionTitle">Project</div>
+            <label class="field">
+              <div class="field__label">Name</div>
+              <input id="projectNameInput" class="input" placeholder="Project name" />
+            </label>
+            <label class="field">
+              <div class="field__label">Short name / Kürzel (optional)</div>
+              <input id="projectShortNameInput" class="input" placeholder="e.g. API, FE, ..." />
+            </label>
+            <label class="field">
+              <div class="field__label">Default branch (optional)</div>
+              <input id="projectDefaultBranchInput" class="input" placeholder="e.g. main, master, develop" />
+            </label>
+            <label class="field">
+              <div class="field__label">Checkout strategy for new prompts</div>
+              <select id="projectCheckoutModeSelect" class="select">
+                <option value="inplace">Use project folder (current checkout)</option>
+                <option value="worktree">Git worktree (created for edit prompts)</option>
+                <option value="clone">Dedicated clone (isolated per job)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--left">
+            <button id="projectDialogCheckoutsBtn" class="btn btn--ghost" type="button">Manage checkouts…</button>
+            <button id="projectDialogRemoveBtn" class="btn btn--danger" type="button" title="Remove project from the sidebar list">Remove project</button>
+          </div>
+          <div class="dialog__actions dialog__actions--right">
+            <button id="projectDialogSave" class="btn btn--primary" type="button">Save</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="checkoutsDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--checkouts">
+        <div class="dialog__header">
+          <div class="dialog__title">Checkouts</div>
+          <button id="checkoutsDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="checkoutsDialogMeta"></div>
+        <div class="dialog__body dialog__body--checkouts">
+          <div id="checkoutsDialogBody" class="checkoutlist"></div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--left">
+            <button id="checkoutsDialogRefresh" class="btn btn--ghost" type="button">Refresh</button>
+          </div>
+          <div class="dialog__actions dialog__actions--right">
+            <button id="checkoutsDialogClose2" class="btn btn--ghost" type="button">Close</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="branchDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--branch">
+        <div class="dialog__header">
+          <div class="dialog__title">Not On Default Branch / Nicht im Default-Branch</div>
+          <button id="branchDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="branchDialogMeta"></div>
+        <div class="dialog__body dialog__body--branch">
+          <div id="branchDialogText" class="logline"></div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--right">
+            <button id="branchDialogCheckoutBtn" class="btn btn--primary" type="button">Checkout Default</button>
+            <button id="branchDialogRunBtn" class="btn btn--ghost" type="button">Run Anyway</button>
+            <button id="branchDialogRunNoAskBtn" class="btn btn--ghost" type="button" title="Run anyway and don't ask again for this branch">Run Anyway (Don't ask again)</button>
+            <button id="branchDialogCancelBtn" class="btn btn--ghost" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="integrateDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--integrate">
+        <div class="dialog__header">
+          <div class="dialog__title" id="integrateDialogTitle">Integrate to default branch</div>
+          <button id="integrateDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="integrateDialogMeta"></div>
+        <div class="dialog__body dialog__body--integrate">
+          <div class="integrate">
+            <div class="integrate__top">
+              <div id="integrateDialogIcon" class="integrate__icon integrate__icon--idle" aria-hidden="true"></div>
+              <div class="integrate__texts">
+                <div id="integrateDialogStatus" class="integrate__status">Ready</div>
+                <div id="integrateDialogMessage" class="integrate__message settings__note settings__note--prewrap"></div>
+              </div>
+            </div>
+            <div id="integrateDialogResultWrap" class="integrate__result" hidden>
+              <div class="integrate__resultTitle">Details</div>
+              <div id="integrateDialogResult" class="integrate__resultText"></div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <div class="dialog__actions dialog__actions--left">
+            <button id="integrateDialogRevealBtn" class="btn btn--ghost" type="button" hidden>Reveal target</button>
+            <button id="integrateDialogDetailsBtn" class="btn btn--ghost" type="button" hidden>Details</button>
+          </div>
+          <div class="dialog__actions dialog__actions--right">
+            <button id="integrateDialogCancelBtn" class="btn btn--ghost" type="button">Cancel</button>
+            <button id="integrateDialogStartBtn" class="btn btn--primary" type="button">Integrate</button>
+            <button id="integrateDialogArchiveBtn" class="btn btn--primary" type="button" hidden>Archive ticket</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="shortcutsDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--shortcuts">
+        <div class="dialog__header">
+          <div class="dialog__title">Shortcuts</div>
+          <button id="shortcutsDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__body dialog__body--shortcuts">
+          <div id="shortcutsDialogBody" class="shortcuts"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="statusDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--status">
+        <div class="dialog__header">
+          <div class="dialog__title">Status</div>
+          <button id="statusDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="statusDialogMeta"></div>
+        <div class="dialog__body dialog__body--status">
+          <div id="statusDialogBody" class="status"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="agentsInstallDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--status">
+        <div class="dialog__header">
+          <div class="dialog__title">Install agent CLIs</div>
+          <button id="agentsInstallDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="dialog__meta" id="agentsInstallDialogMeta"></div>
+        <div class="dialog__body dialog__body--status">
+          <div id="agentsInstallDialogBody" class="status"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="imageDialog" class="dialog">
+      <div class="dialog__inner dialog__inner--image">
+        <div class="dialog__header">
+          <div class="dialog__title" id="imageDialogTitle">Image</div>
+          <button id="imageDialogClose" class="btn btn--ghost" type="button">Close</button>
+        </div>
+        <div class="imgpreview">
+          <img id="imageDialogImg" class="imgpreview__img" alt="" />
+        </div>
+      </div>
+    </dialog>
+
+    <button id="helperBubbleBtn" class="helperbubble" type="button" title="Helper chat (⌘+K)" aria-label="Helper chat">
+      <span class="helperbubble__label">Helper</span>
+      <span class="helperbubble__kbd">⌘K</span>
+    </button>
+
+    <section id="helperPanel" class="helperpanel" aria-label="Helper chat" hidden>
+      <div class="helperpanel__header">
+        <div>
+          <div class="helperpanel__title">Helper Chat</div>
+          <div id="helperMeta" class="helperpanel__meta">Quick questions without opening a task.</div>
+        </div>
+        <button id="helperPanelClose" class="btn btn--ghost" type="button">Close</button>
+      </div>
+      <div class="helperpanel__runner">
+        <select id="helperAgentSelect" class="select" title="Helper runner">
+          <option value="">Auto (Settings)</option>
+          <option value="claude">Claude</option>
+          <option value="codex">Codex</option>
+        </select>
+        <select id="helperContextScopeSelect" class="select" title="Helper context scope">
+          <option value="project">Context: Project</option>
+          <option value="global">Context: Global</option>
+        </select>
+      </div>
+      <div id="helperMessages" class="helperpanel__messages" aria-live="polite"></div>
+      <div class="helperpanel__footer">
+        <textarea id="helperInput" class="textarea textarea--sm" rows="3" placeholder="Ask quickly… (⌘+Enter to send)"></textarea>
+        <div class="helperpanel__actions">
+          <button id="helperToPromptBtn" class="btn btn--ghost" type="button">Use in prompt</button>
+          <button id="helperCreateTaskBtn" class="btn btn--ghost" type="button">Start ticket</button>
+          <button id="helperSendBtn" class="btn btn--primary" type="button">Ask</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="cardContextMenu" class="ctxmenu" hidden role="menu" aria-label="Job actions">
+      <button type="button" class="ctxmenu__item" data-ctx-action="open">Open</button>
+      <button type="button" class="ctxmenu__item" data-ctx-action="open_in_editor" hidden>Open in editor</button>
+      <div class="ctxmenu__sep" data-ctx-sep="main" role="separator"></div>
+      <button type="button" class="ctxmenu__item" data-ctx-action="rerun" hidden>Rerun…</button>
+      <button type="button" class="ctxmenu__item" data-ctx-action="stop" hidden>Stop</button>
+      <button type="button" class="ctxmenu__item" data-ctx-action="restore" hidden>Restore</button>
+      <button type="button" class="ctxmenu__item" data-ctx-action="archive" hidden>Archive</button>
+      <button type="button" class="ctxmenu__item" data-ctx-action="trash" hidden>Trash</button>
+      <button type="button" class="ctxmenu__item ctxmenu__item--danger" data-ctx-action="delete" hidden>Delete</button>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <datalist id="codexModelsList"></datalist>
+
+    <script src="./renderer.js" type="module"></script>
+  </body>
+</html>
