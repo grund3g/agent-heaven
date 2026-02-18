@@ -3441,7 +3441,7 @@ body::before {
   box-shadow: var(--shadow);
   padding: 12px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 10px;
 }
 
@@ -3499,6 +3499,7 @@ body::before {
   border: 1px solid var(--stroke);
   border-radius: 14px;
   background: var(--surface2);
+  min-height: 0;
   padding: 10px;
   overflow: auto;
 }
