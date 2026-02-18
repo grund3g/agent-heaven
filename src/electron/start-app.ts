@@ -1228,12 +1228,12 @@ export async function startApp(): Promise<void> {
   const store = new Store(storePath);
   store.load();
 
-  // CLI flag: --design=v2 overrides the persisted uiDesignVersion setting.
+  // CLI flag: --design=v1|v2 selects the UI version for this session.
+  // Without the flag, always default to v1.
   {
     const designFlag = app.commandLine.getSwitchValue("design");
-    if (designFlag === "v2" || designFlag === "v1") {
-      store.updateSettings({ uiDesignVersion: designFlag });
-    }
+    const version = designFlag === "v2" ? "v2" : "v1";
+    store.updateSettings({ uiDesignVersion: version });
   }
 
   const windowManager = new WindowManager({ getSettings: () => store.getSettings() });
