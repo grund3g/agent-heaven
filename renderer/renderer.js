@@ -225,8 +225,7 @@ const api = window.agentHeaven;
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
-  helperToPromptBtn: document.getElementById("helperToPromptBtn"),
-  helperCreateTaskBtn: document.getElementById("helperCreateTaskBtn")
+  helperToPromptBtn: document.getElementById("helperToPromptBtn")
 };
 
 const state = {
@@ -8455,7 +8454,7 @@ function renderHelperPanel(opts = {}) {
     const rows = [];
     for (const m of items) {
       const isAssistant = m.role === "assistant";
-      const roleLabel = isAssistant ? "Helper" : "You";
+      const roleLabel = isAssistant ? "Chat" : "You";
       const runner = isAssistant ? helperRunnerText(m.agent, m.model) : "";
       rows.push(`
         <article class="helpermsg ${isAssistant ? "helpermsg--assistant" : "helpermsg--user"}">
@@ -8467,7 +8466,7 @@ function renderHelperPanel(opts = {}) {
     if (state.helperPending) {
       rows.push(`
         <article class="helpermsg helpermsg--assistant">
-          <div class="helpermsg__head">Helper</div>
+          <div class="helpermsg__head">Chat</div>
           <div class="msg__text">Thinking…</div>
         </article>
       `);
@@ -8480,10 +8479,6 @@ function renderHelperPanel(opts = {}) {
   if (els.helperToPromptBtn) {
     els.helperToPromptBtn.hidden = !hasAssistantReply;
     els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
-  }
-  if (els.helperCreateTaskBtn) {
-    els.helperCreateTaskBtn.hidden = !hasAssistantReply;
-    els.helperCreateTaskBtn.disabled = state.helperPending || !hasAssistantReply;
   }
 
   if (forceScroll || stick || state.helperPending) {
@@ -8513,7 +8508,7 @@ function toggleHelperPanel(opts = {}) {
 async function askHelperFromInput() {
   if (state.helperPending) return;
   if (!api || typeof api.helperAsk !== "function") {
-    showToast("Helper chat is not supported in this build.");
+    showToast("Chat is not supported in this build.");
     return;
   }
   const text = String(els.helperInput && els.helperInput.value ? els.helperInput.value : "").trim();
@@ -8548,9 +8543,9 @@ async function askHelperFromInput() {
     state.helperLastRunner = agent ? agentDisplayName(agent) : "Auto";
     helperSetMeta(`Last reply: ${state.helperLastRunner}`);
   } catch (err) {
-    const msg = String(err && err.message ? err.message : err).trim() || "Helper request failed.";
+    const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
     helperPushMessage("assistant", `Error: ${msg}`);
-    helperSetMeta("Helper request failed.");
+    helperSetMeta("Chat request failed.");
   } finally {
     state.helperPending = false;
     renderHelperPanel({ forceScroll: true });
@@ -8568,7 +8563,7 @@ function helperContextSnippetForComposer() {
   const arr = helperMessagesForApi();
   if (arr.length === 0) return "";
   const picked = arr.slice(-8);
-  const out = ["[Helper context]"];
+  const out = ["[Chat context]"];
   for (const m of picked) {
     out.push(m.role === "assistant" ? "Assistant:" : "User:");
     out.push(m.text);
@@ -8581,7 +8576,7 @@ function helperContextSnippetForComposer() {
 function appendHelperContextToComposer() {
   const snippet = helperContextSnippetForComposer();
   if (!snippet) {
-    showToast("No helper context yet.");
+    showToast("No chat context yet.");
     return false;
   }
   if (!els.promptInput) return false;
@@ -8597,14 +8592,8 @@ function appendHelperContextToComposer() {
   } catch {
     // ignore
   }
-  showToast("Helper context added to prompt.");
+  showToast("Chat context added to prompt.");
   return true;
-}
-
-async function startTicketFromHelperContext() {
-  const ok = appendHelperContextToComposer();
-  if (!ok) return;
-  await startJobFromComposer();
 }
 
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
@@ -8625,7 +8614,7 @@ function clearHelperHistoryNow(opts = {}) {
   clearStoredHelperHistory();
   helperSetMeta("");
   renderHelperPanel({ forceScroll: true });
-  if (showToastMsg) showToast("Helper history cleared.");
+  if (showToastMsg) showToast("Chat history cleared.");
 }
 
 function initHelperUi() {
@@ -8633,7 +8622,7 @@ function initHelperUi() {
   applyHelperDefaultsToPanel(state.settings, { force: true });
   if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
   if (els.helperBubbleBtn) {
-    els.helperBubbleBtn.title = `Helper chat (${mod}+K)`;
+    els.helperBubbleBtn.title = `Chat (${mod}+K)`;
     const kbd = els.helperBubbleBtn.querySelector(".helperbubble__kbd");
     if (kbd) kbd.textContent = `${mod}K`;
   }
@@ -9912,11 +9901,6 @@ function wireUi() {
   }
   if (els.helperToPromptBtn) {
     els.helperToPromptBtn.addEventListener("click", () => appendHelperContextToComposer());
-  }
-  if (els.helperCreateTaskBtn) {
-    els.helperCreateTaskBtn.addEventListener("click", () => {
-      startTicketFromHelperContext();
-    });
   }
   if (els.settingsHelperClearHistoryBtn) {
     els.settingsHelperClearHistoryBtn.addEventListener("click", () => clearHelperHistoryNow());
@@ -12152,10 +12136,10 @@ function renderShortcutsDialog() {
 
   body.push(`
     <div class="shortcutsection">
-      <div class="shortcutsection__title">Helper</div>
+      <div class="shortcutsection__title">Chat</div>
       <div class="shortcutlist">
-        ${row(`${mod}+K`, "Toggle helper chat")}
-        ${row(`${mod}+Enter`, "Send question (when helper input is focused)")}
+        ${row(`${mod}+K`, "Toggle chat")}
+        ${row(`${mod}+Enter`, "Send question (when chat input is focused)")}
       </div>
     </div>
   `);
