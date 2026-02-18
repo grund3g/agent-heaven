@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.10.0...agent-heaven-v0.11.0) (2026-02-18)
+
+
+### Miscellaneous Chores
+
+* release 0.11.0 (no user-facing changes)
+
 ## [0.10.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.9.1...agent-heaven-v0.10.0) (2026-02-17)
 
 
