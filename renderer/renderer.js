@@ -153,6 +153,11 @@ const api = window.agentHeaven;
 	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
 	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
+	  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
+  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
+  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
+  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
+  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -211,17 +216,17 @@ const api = window.agentHeaven;
   imageDialogClose: document.getElementById("imageDialogClose"),
   imageDialogImg: document.getElementById("imageDialogImg"),
 
-  helperThinkingIndicator: document.getElementById("helperThinkingIndicator"),
   helperBubbleBtn: document.getElementById("helperBubbleBtn"),
   helperPanel: document.getElementById("helperPanel"),
   helperPanelClose: document.getElementById("helperPanelClose"),
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
-  helperContextScopeSelect: document.getElementById("helperContextScopeSelect"),
+  helperModelInput: document.getElementById("helperModelInput"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
-  helperToPromptBtn: document.getElementById("helperToPromptBtn")
+  helperToPromptBtn: document.getElementById("helperToPromptBtn"),
+  helperCreateTaskBtn: document.getElementById("helperCreateTaskBtn")
 };
 
 const state = {
@@ -279,8 +284,6 @@ const state = {
 
   helperOpen: false,
   helperPending: false,
-  helperSessions: [],
-  helperSessionId: "",
   helperMessages: [],
   helperLastRunner: ""
 };
@@ -309,8 +312,7 @@ const STORAGE = {
   composerDraft: "agentHeaven.draft.composer",
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
   onboardingSeen: "agentHeaven.onboarding.seen.v1",
-  helperHistory: "agentHeaven.helper.history.v1",
-  helperContextScope: "agentHeaven.helper.contextScope.v1"
+  helperHistory: "agentHeaven.helper.history.v1"
 };
 
 const DEMO = {
@@ -1377,32 +1379,6 @@ function normalizeHelperModelValue(value) {
     .slice(0, 160);
 }
 
-function normalizeHelperContextScope(value) {
-  const s = String(value || "")
-    .trim()
-    .toLowerCase();
-  if (s === "global") return "global";
-  return "project";
-}
-
-function getStoredHelperContextScope() {
-  try {
-    const raw = window.localStorage.getItem(STORAGE.helperContextScope) || "";
-    return normalizeHelperContextScope(raw);
-  } catch {
-    return "project";
-  }
-}
-
-function storeHelperContextScope(scope) {
-  try {
-    const v = normalizeHelperContextScope(scope);
-    window.localStorage.setItem(STORAGE.helperContextScope, v);
-  } catch {
-    // ignore
-  }
-}
-
 function helperDefaultAgentFromSettings(settings = state.settings) {
   const s = settings && typeof settings === "object" ? settings : {};
   return normalizeHelperAgentSelection(s.helperDefaultAgent);
@@ -1421,128 +1397,43 @@ function helperPersistHistoryFromSettings(settings = state.settings) {
   return s.helperPersistHistory !== false;
 }
 
-function normalizeHelperMessageItem(item) {
-  if (!item || typeof item !== "object") return null;
-  const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
-  if (!role) return null;
-  const text = String(item.text || "").trim();
-  if (!text) return null;
-  return {
-    id: typeof item.id === "string" ? item.id : safeUuid(),
-    role,
-    text: text.slice(0, HELPER_SESSION_TEXT_MAX),
-    ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
-    agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
-    model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
-  };
-}
-
-function normalizeHelperMessages(messages, limit = HELPER_SESSION_MESSAGES_MAX) {
-  const arr = Array.isArray(messages) ? messages : [];
-  const out = [];
-  for (const item of arr) {
-    const next = normalizeHelperMessageItem(item);
-    if (!next) continue;
-    out.push(next);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
-function helperRunnerFromMessages(messages) {
-  const arr = Array.isArray(messages) ? messages : [];
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const m = arr[i];
-    if (!m || m.role !== "assistant") continue;
-    const agent = normalizeAgentKey(m.agent || "");
-    if (agent) return agentDisplayName(agent);
-  }
-  return "";
-}
-
-function normalizeHelperSessionRecord(item) {
-  if (!item || typeof item !== "object") return null;
-  const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : safeUuid();
-  const messages = normalizeHelperMessages(item.messages);
-  const fallbackTs = new Date().toISOString();
-  const createdAtRaw = typeof item.createdAt === "string" ? item.createdAt : "";
-  const updatedAtRaw = typeof item.updatedAt === "string" ? item.updatedAt : "";
-  const createdAt = createdAtRaw || (messages.length > 0 && messages[0].ts ? messages[0].ts : fallbackTs);
-  const updatedAt = updatedAtRaw || (messages.length > 0 && messages[messages.length - 1].ts ? messages[messages.length - 1].ts : createdAt);
-  const lastRunnerRaw = typeof item.lastRunner === "string" ? item.lastRunner.trim() : "";
-  const lastRunner = lastRunnerRaw || helperRunnerFromMessages(messages);
-  return { id, createdAt, updatedAt, lastRunner: lastRunner.slice(0, 64), messages };
-}
-
-function normalizeHelperSessions(sessions, activeSessionId = "") {
-  const arr = Array.isArray(sessions) ? sessions : [];
-  const seen = new Set();
-  const out = [];
-  for (const item of arr) {
-    const next = normalizeHelperSessionRecord(item);
-    if (!next) continue;
-    if (seen.has(next.id)) continue;
-    seen.add(next.id);
-    out.push(next);
-  }
-  out.sort((a, b) => {
-    const ta = Number(new Date(a.updatedAt || a.createdAt || 0).getTime()) || 0;
-    const tb = Number(new Date(b.updatedAt || b.createdAt || 0).getTime()) || 0;
-    return tb - ta;
-  });
-
-  let trimmed = out;
-  if (out.length > HELPER_SESSION_MAX) {
-    if (activeSessionId && out.some((s) => s.id === activeSessionId)) {
-      const keep = out.filter((s) => s.id === activeSessionId).slice(0, 1);
-      const rest = out.filter((s) => s.id !== activeSessionId).slice(0, HELPER_SESSION_MAX - 1);
-      trimmed = [...keep, ...rest];
-      trimmed.sort((a, b) => {
-        const ta = Number(new Date(a.updatedAt || a.createdAt || 0).getTime()) || 0;
-        const tb = Number(new Date(b.updatedAt || b.createdAt || 0).getTime()) || 0;
-        return tb - ta;
-      });
-    } else {
-      trimmed = out.slice(0, HELPER_SESSION_MAX);
-    }
-  }
-
-  let active = String(activeSessionId || "").trim();
-  if (!active || !trimmed.some((s) => s.id === active)) active = trimmed[0] ? trimmed[0].id : "";
-  return { sessions: trimmed, activeSessionId: active };
-}
-
-function createHelperSessionRecord(opts = {}) {
-  const now = new Date().toISOString();
-  const rawMessages = Array.isArray(opts.messages) ? opts.messages : [];
-  const messages = normalizeHelperMessages(rawMessages);
-  const id = typeof opts.id === "string" && opts.id.trim() ? opts.id.trim() : safeUuid();
-  return {
-    id,
-    createdAt: typeof opts.createdAt === "string" && opts.createdAt ? opts.createdAt : now,
-    updatedAt: typeof opts.updatedAt === "string" && opts.updatedAt ? opts.updatedAt : now,
-    lastRunner: typeof opts.lastRunner === "string" ? String(opts.lastRunner).trim().slice(0, 64) : helperRunnerFromMessages(messages),
-    messages
-  };
-}
-
 function clearStoredHelperHistory() {
   try {
     window.localStorage.removeItem(STORAGE.helperHistory);
-    window.localStorage.removeItem(STORAGE.helperSessions);
   } catch {
     // ignore
   }
 }
 
 function storeHelperHistory(messages) {
-  const out = normalizeHelperMessages(messages);
-  if (out.length === 0) {
-    clearStoredHelperHistory();
-    return;
+  const arr = Array.isArray(messages) ? messages : [];
+  const out = [];
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
+    if (!role) continue;
+    const text = String(item.text || "").trim();
+    if (!text) continue;
+    out.push({
+      id: typeof item.id === "string" ? item.id : safeUuid(),
+      role,
+      text: text.slice(0, 12000),
+      ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
+      agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
+      model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
+    });
+    if (out.length >= 80) break;
   }
-  const seeded = createHelperSessionRecord({ messages: out });
-  storeHelperSessions([seeded], seeded.id);
+
+  try {
+    if (out.length === 0) {
+      clearStoredHelperHistory();
+      return;
+    }
+    window.localStorage.setItem(STORAGE.helperHistory, JSON.stringify(out));
+  } catch {
+    // ignore
+  }
 }
 
 function getStoredHelperHistory() {
@@ -1551,61 +1442,27 @@ function getStoredHelperHistory() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const arr = Array.isArray(parsed) ? parsed : [];
-    return normalizeHelperMessages(arr);
+    const out = [];
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
+      if (!role) continue;
+      const text = String(item.text || "").trim();
+      if (!text) continue;
+      out.push({
+        id: typeof item.id === "string" ? item.id : safeUuid(),
+        role,
+        text: text.slice(0, 12000),
+        ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
+        agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
+        model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
+      });
+      if (out.length >= 80) break;
+    }
+    return out;
   } catch {
     return [];
   }
-}
-
-function storeHelperSessions(sessions, activeSessionId = "") {
-  const normalized = normalizeHelperSessions(sessions, activeSessionId);
-  try {
-    if (!normalized.sessions || normalized.sessions.length === 0) {
-      window.localStorage.removeItem(STORAGE.helperSessions);
-      window.localStorage.removeItem(STORAGE.helperHistory);
-      return;
-    }
-    window.localStorage.setItem(
-      STORAGE.helperSessions,
-      JSON.stringify({
-        sessions: normalized.sessions,
-        activeSessionId: normalized.activeSessionId
-      })
-    );
-    // Keep key cleanup for migrated installs.
-    window.localStorage.removeItem(STORAGE.helperHistory);
-  } catch {
-    // ignore
-  }
-}
-
-function getStoredHelperSessions() {
-  try {
-    const raw = window.localStorage.getItem(STORAGE.helperSessions) || "";
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const sessions = Array.isArray(parsed)
-        ? parsed
-        : parsed && typeof parsed === "object" && Array.isArray(parsed.sessions)
-          ? parsed.sessions
-          : [];
-      const activeSessionId = parsed && typeof parsed === "object" ? String(parsed.activeSessionId || "").trim() : "";
-      return normalizeHelperSessions(sessions, activeSessionId);
-    }
-  } catch {
-    // ignore
-  }
-
-  const legacy = getStoredHelperHistory();
-  if (!Array.isArray(legacy) || legacy.length === 0) return { sessions: [], activeSessionId: "" };
-  const seeded = createHelperSessionRecord({
-    messages: legacy,
-    createdAt: legacy[0] && legacy[0].ts ? String(legacy[0].ts) : "",
-    updatedAt: legacy[legacy.length - 1] && legacy[legacy.length - 1].ts ? String(legacy[legacy.length - 1].ts) : ""
-  });
-  const normalized = normalizeHelperSessions([seeded], seeded.id);
-  storeHelperSessions(normalized.sessions, normalized.activeSessionId);
-  return normalized;
 }
 
 function getStoredAgentBinariesToastAtMs() {
@@ -9009,26 +8866,8 @@ function helperCurrentAgentPref() {
   return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
 }
 
-function helperCurrentContextScope() {
-  const raw = els.helperContextScopeSelect ? String(els.helperContextScopeSelect.value || "") : "";
-  return normalizeHelperContextScope(raw || getStoredHelperContextScope());
-}
-
-function isHelperClaudeFamilyModel(value) {
-  const low = String(value || "")
-    .trim()
-    .toLowerCase();
-  return low === "opus" || low === "sonnet" || low === "haiku";
-}
-
 function helperCurrentModelPref() {
-  const selectedAgent = helperCurrentAgentPref();
-  const configured = normalizeHelperModelValue(state.settings && state.settings.helperDefaultModel ? state.settings.helperDefaultModel : "");
-
-  if (selectedAgent === "claude") return configured || "opus";
-  if (selectedAgent === "codex") return isHelperClaudeFamilyModel(configured) ? "" : configured;
-  if (configured) return configured;
-  return helperDefaultModelFromSettings(state.settings);
+  return normalizeHelperModelValue(els.helperModelInput && els.helperModelInput.value ? els.helperModelInput.value : "");
 }
 
 function helperRunnerText(agent, model) {
@@ -9038,31 +8877,35 @@ function helperRunnerText(agent, model) {
   return `${aLabel || "auto"}${m ? ` · ${m}` : ""}`;
 }
 
-function helperSelectedProjectForContext(scopeValue = helperCurrentContextScope()) {
-  const projectId = helperProjectIdFromContextValue(scopeValue);
-  if (!projectId) return null;
-  return helperProjectById(projectId);
+function helperSelectedProjectForContext() {
+  const selected = String(els.projectSelect && els.projectSelect.value ? els.projectSelect.value : "").trim();
+  if (selected && selected !== "auto" && selected !== TEMP_PROJECT_OPTION_VALUE) {
+    const hit = state.projects.find((p) => p && p.id === selected) || null;
+    if (hit) return hit;
+  }
+
+  const stored = getStoredProjectId();
+  if (stored) {
+    const hit = state.projects.find((p) => p && p.id === stored) || null;
+    if (hit) return hit;
+  }
+
+  if (state.projects.length === 1) return state.projects[0];
+  return null;
 }
 
-function helperSelectedJobForContext(projectId = "") {
+function helperSelectedJobForContext() {
   const selected = String(state.selectedJobId || "").trim();
   if (selected) {
     const hit = state.jobs.get(selected);
-    if (hit && !isDemoJob(hit)) {
-      if (!projectId) return hit;
-      const hitProjectId = String(hit.projectId || "").trim();
-      if (!hitProjectId || hitProjectId !== String(projectId).trim()) return null;
-      return hit;
-    }
+    if (hit && !isDemoJob(hit)) return hit;
   }
   return null;
 }
 
 function buildHelperContextPayload() {
-  const scope = helperCurrentContextScope();
-  const useProjectContext = scope !== "global";
-  const project = useProjectContext ? helperSelectedProjectForContext() : null;
-  const job = useProjectContext ? helperSelectedJobForContext() : null;
+  const project = helperSelectedProjectForContext();
+  const job = helperSelectedJobForContext();
   const composerAgent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
   const composerModel = String(els.modelInput && els.modelInput.value ? els.modelInput.value : "").trim();
   const promptPreview = job && typeof job.promptPreview === "string" ? job.promptPreview.trim() : "";
@@ -9084,192 +8927,6 @@ function buildHelperContextPayload() {
     selectedJobModel: job && job.model ? String(job.model) : "",
     selectedJobPrompt: preview
   };
-}
-
-function helperSessionById(sessionId) {
-  const id = String(sessionId || "").trim();
-  if (!id) return null;
-  return Array.isArray(state.helperSessions) ? state.helperSessions.find((s) => s && s.id === id) || null : null;
-}
-
-function helperSessionPreviewText(session) {
-  const messages = session && Array.isArray(session.messages) ? session.messages : [];
-  const seed = messages.find((m) => m && m.role === "user" && String(m.text || "").trim()) || messages[0];
-  const raw = seed && typeof seed.text === "string" ? oneLine(seed.text) : "";
-  return raw ? truncateText(raw, 56) : "New session";
-}
-
-function helperSessionUpdatedLabel(session) {
-  const raw = session && session.updatedAt ? String(session.updatedAt) : session && session.createdAt ? String(session.createdAt) : "";
-  if (!raw) return "";
-  const ms = Date.parse(raw);
-  if (!Number.isFinite(ms)) return "";
-  const d = new Date(ms);
-  try {
-    return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return d.toISOString();
-  }
-}
-
-function helperSessionOptionLabel(session, idx) {
-  const title = helperSessionPreviewText(session);
-  const when = helperSessionUpdatedLabel(session);
-  const prefix = `Session ${idx + 1}`;
-  return when ? `${prefix}: ${title} · ${when}` : `${prefix}: ${title}`;
-}
-
-function renderHelperSessionOptions() {
-  if (!els.helperSessionSelect) return;
-  const sessions = Array.isArray(state.helperSessions) ? state.helperSessions : [];
-  if (sessions.length === 0) {
-    els.helperSessionSelect.innerHTML = `<option value="">No sessions</option>`;
-    els.helperSessionSelect.value = "";
-    return;
-  }
-
-  const options = sessions
-    .map((session, idx) => `<option value="${escapeHtml(session.id)}">${escapeHtml(helperSessionOptionLabel(session, idx))}</option>`)
-    .join("");
-  els.helperSessionSelect.innerHTML = options;
-
-  let active = String(state.helperSessionId || "").trim();
-  if (!active || !sessions.some((s) => s && s.id === active)) active = sessions[0].id;
-  state.helperSessionId = active;
-  if (active) els.helperSessionSelect.value = active;
-}
-
-function helperPersistSessionsState() {
-  if (!helperPersistHistoryFromSettings()) {
-    clearStoredHelperHistory();
-    return;
-  }
-  storeHelperSessions(state.helperSessions, state.helperSessionId);
-}
-
-function syncActiveHelperSessionFromState(opts = {}) {
-  const touch = !(opts && opts.touch === false);
-  const persist = !(opts && opts.persist === false);
-
-  state.helperSessions = Array.isArray(state.helperSessions) ? state.helperSessions : [];
-  state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
-
-  let activeId = String(state.helperSessionId || "").trim();
-  let active = helperSessionById(activeId);
-  if (!active) {
-    const seeded = createHelperSessionRecord({ messages: state.helperMessages, lastRunner: state.helperLastRunner });
-    state.helperSessions.unshift(seeded);
-    active = seeded;
-    activeId = seeded.id;
-  }
-
-  const normalizedMessages = normalizeHelperMessages(state.helperMessages);
-  const next = {
-    ...active,
-    messages: normalizedMessages,
-    lastRunner: String(state.helperLastRunner || helperRunnerFromMessages(normalizedMessages))
-      .trim()
-      .slice(0, 64)
-  };
-  if (touch) next.updatedAt = new Date().toISOString();
-
-  state.helperSessions = state.helperSessions.map((s) => (s && s.id === activeId ? next : s));
-  const normalized = normalizeHelperSessions(state.helperSessions, activeId);
-  state.helperSessions = normalized.sessions;
-  state.helperSessionId = normalized.activeSessionId;
-
-  if (persist) helperPersistSessionsState();
-}
-
-function loadHelperSessionsFromStorage() {
-  if (!helperPersistHistoryFromSettings()) {
-    clearStoredHelperHistory();
-    const seeded = createHelperSessionRecord({});
-    state.helperSessions = [seeded];
-    state.helperSessionId = seeded.id;
-    state.helperMessages = [];
-    state.helperLastRunner = "";
-    return;
-  }
-
-  const stored = getStoredHelperSessions();
-  if (!Array.isArray(stored.sessions) || stored.sessions.length === 0) {
-    const seeded = createHelperSessionRecord({});
-    state.helperSessions = [seeded];
-    state.helperSessionId = seeded.id;
-    state.helperMessages = [];
-    state.helperLastRunner = "";
-    helperPersistSessionsState();
-    return;
-  }
-
-  state.helperSessions = stored.sessions;
-  state.helperSessionId = stored.activeSessionId || (stored.sessions[0] && stored.sessions[0].id ? stored.sessions[0].id : "");
-  const active = helperSessionById(state.helperSessionId) || stored.sessions[0];
-  state.helperSessionId = active && active.id ? active.id : "";
-  state.helperMessages = active && Array.isArray(active.messages) ? normalizeHelperMessages(active.messages) : [];
-  state.helperLastRunner = String(active && active.lastRunner ? active.lastRunner : helperRunnerFromMessages(state.helperMessages)).trim().slice(0, 64);
-  helperPersistSessionsState();
-}
-
-function helperSelectSession(sessionId, opts = {}) {
-  if (state.helperPending) return false;
-  const id = String(sessionId || "").trim();
-  syncActiveHelperSessionFromState({ touch: false });
-  const next = helperSessionById(id);
-  if (!next) return false;
-  state.helperSessionId = next.id;
-  state.helperMessages = Array.isArray(next.messages) ? normalizeHelperMessages(next.messages) : [];
-  state.helperLastRunner = String(next.lastRunner || helperRunnerFromMessages(state.helperMessages)).trim().slice(0, 64);
-  helperPersistSessionsState();
-  helperSetMeta(helperCurrentMetaStatusText());
-  renderHelperPanel({ forceScroll: true });
-
-  if (opts && opts.focus && els.helperInput) {
-    try {
-      els.helperInput.focus();
-    } catch {
-      // ignore
-    }
-  }
-  return true;
-}
-
-function helperNewSessionNow(opts = {}) {
-  if (state.helperPending) return false;
-  syncActiveHelperSessionFromState({ touch: false });
-
-  const created = createHelperSessionRecord({});
-  const merged = normalizeHelperSessions([created, ...(Array.isArray(state.helperSessions) ? state.helperSessions : [])], created.id);
-  state.helperSessions = merged.sessions;
-  state.helperSessionId = merged.activeSessionId || created.id;
-  state.helperMessages = [];
-  state.helperLastRunner = "";
-  helperPersistSessionsState();
-  helperSetMeta(helperCurrentMetaStatusText());
-  renderHelperPanel({ forceScroll: true });
-
-  if (!(opts && opts.toast === false)) showToast("New chat session started.");
-  if (opts && opts.focus && els.helperInput) {
-    try {
-      els.helperInput.focus();
-    } catch {
-      // ignore
-    }
-  }
-  return true;
-}
-
-function clearHelperCurrentSessionNow(opts = {}) {
-  const showToastMsg = !(opts && opts.toast === false);
-  if (state.helperPending) return false;
-  state.helperMessages = [];
-  state.helperLastRunner = "";
-  syncActiveHelperSessionFromState({ touch: true });
-  helperSetMeta(helperCurrentMetaStatusText());
-  renderHelperPanel({ forceScroll: true });
-  if (showToastMsg) showToast("Current chat session cleared.");
-  return true;
 }
 
 function helperMessagesForApi() {
@@ -9298,43 +8955,29 @@ function helperPushMessage(role, text, meta = {}) {
   };
   state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
   state.helperMessages.push(item);
-  const MAX = HELPER_SESSION_MESSAGES_MAX;
+  const MAX = 80;
   if (state.helperMessages.length > MAX) state.helperMessages.splice(0, state.helperMessages.length - MAX);
-  syncActiveHelperSessionFromState({ touch: true });
+  if (helperPersistHistoryFromSettings()) storeHelperHistory(state.helperMessages);
 }
 
 function helperSetMeta(text) {
   if (!els.helperMeta) return;
-  const scope = helperCurrentContextScope();
-  const project = scope === "project" ? helperSelectedProjectForContext() : null;
-  const projectName = project && project.name ? String(project.name).trim() : "";
-  const contextText = scope === "global" ? "Context: Global" : projectName ? `Context: Project · ${projectName}` : "Context: Project";
+  const fallback = "Quick questions without opening a task.";
   const msg = String(text || "").trim();
-  els.helperMeta.textContent = msg ? `${msg} · ${contextText}` : contextText;
-}
-
-function helperCurrentMetaStatusText() {
-  if (state.helperPending) return "Thinking…";
-  if (state.helperLastRunner) return `Last reply: ${state.helperLastRunner}`;
-  return "";
+  els.helperMeta.textContent = msg || fallback;
 }
 
 function renderHelperPanel(opts = {}) {
   const forceScroll = !!(opts && opts.forceScroll);
-  const showClosedPending = !!state.helperPending && !state.helperOpen;
   if (els.helperBubbleBtn) {
     els.helperBubbleBtn.classList.toggle("helperbubble--open", !!state.helperOpen);
-    els.helperBubbleBtn.classList.toggle("helperbubble--pending", showClosedPending);
     els.helperBubbleBtn.setAttribute("aria-pressed", state.helperOpen ? "true" : "false");
   }
-  if (els.helperThinkingIndicator) els.helperThinkingIndicator.hidden = !showClosedPending;
   if (els.helperPanel) els.helperPanel.hidden = !state.helperOpen;
-  renderHelperSessionOptions();
   if (!els.helperMessages) return;
 
   const stick = isNearBottom(els.helperMessages);
   const items = Array.isArray(state.helperMessages) ? state.helperMessages : [];
-  const hasAssistantReply = items.some((m) => m && m.role === "assistant");
 
   if (items.length === 0 && !state.helperPending) {
     els.helperMessages.innerHTML = `<div class="helperpanel__empty">Try quick questions, architecture checks, or ask for a clean task seed. You can move the result into the main prompt.</div>`;
@@ -9342,19 +8985,19 @@ function renderHelperPanel(opts = {}) {
     const rows = [];
     for (const m of items) {
       const isAssistant = m.role === "assistant";
-      const roleLabel = isAssistant ? "Chat" : "You";
+      const roleLabel = isAssistant ? "Helper" : "You";
       const runner = isAssistant ? helperRunnerText(m.agent, m.model) : "";
       rows.push(`
         <article class="helpermsg ${isAssistant ? "helpermsg--assistant" : "helpermsg--user"}">
           <div class="helpermsg__head">${escapeHtml(roleLabel)}${runner ? `<span class="helpermsg__meta">${escapeHtml(runner)}</span>` : ""}</div>
-          <div class="msg__text">${renderMarkdownSafeHtml(String(m.text || ""))}</div>
+          <div class="msg__text">${renderMarkdownInlineSafeHtml(String(m.text || ""))}</div>
         </article>
       `);
     }
     if (state.helperPending) {
       rows.push(`
         <article class="helpermsg helpermsg--assistant">
-          <div class="helpermsg__head">Chat</div>
+          <div class="helpermsg__head">Helper</div>
           <div class="msg__text">Thinking…</div>
         </article>
       `);
@@ -9364,13 +9007,8 @@ function renderHelperPanel(opts = {}) {
 
   if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
   if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
-  if (els.helperSessionSelect) els.helperSessionSelect.disabled = !!state.helperPending;
-  if (els.helperNewSessionBtn) els.helperNewSessionBtn.disabled = !!state.helperPending;
-  if (els.helperClearSessionBtn) els.helperClearSessionBtn.disabled = !!state.helperPending || items.length === 0;
-  if (els.helperToPromptBtn) {
-    els.helperToPromptBtn.hidden = !hasAssistantReply;
-    els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
-  }
+  if (els.helperToPromptBtn) els.helperToPromptBtn.disabled = state.helperPending || state.helperMessages.length === 0;
+  if (els.helperCreateTaskBtn) els.helperCreateTaskBtn.disabled = state.helperPending || state.helperMessages.length === 0;
 
   if (forceScroll || stick || state.helperPending) {
     els.helperMessages.scrollTop = els.helperMessages.scrollHeight;
@@ -9378,10 +9016,7 @@ function renderHelperPanel(opts = {}) {
 }
 
 function setHelperOpen(open, opts = {}) {
-  const nextOpen = !!open;
-  if (!nextOpen && state.helperPending) state.helperReopenOnReply = true;
-  if (nextOpen) state.helperReopenOnReply = false;
-  state.helperOpen = nextOpen;
+  state.helperOpen = !!open;
   renderHelperPanel();
   if (state.helperOpen && opts && opts.focus && els.helperInput) {
     try {
@@ -9402,7 +9037,7 @@ function toggleHelperPanel(opts = {}) {
 async function askHelperFromInput() {
   if (state.helperPending) return;
   if (!api || typeof api.helperAsk !== "function") {
-    showToast("Chat is not supported in this build.");
+    showToast("Helper chat is not supported in this build.");
     return;
   }
   const text = String(els.helperInput && els.helperInput.value ? els.helperInput.value : "").trim();
@@ -9434,19 +9069,14 @@ async function askHelperFromInput() {
     const agent = normalizeAgentKey(res && res.agent ? res.agent : "");
     const model = String(res && res.model ? res.model : "").trim();
     helperPushMessage("assistant", answer, { agent, model });
-    state.helperLastRunner = agent ? agentDisplayName(agent) : "Auto";
+    state.helperLastRunner = helperRunnerText(agent, model);
     helperSetMeta(`Last reply: ${state.helperLastRunner}`);
   } catch (err) {
-    const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
+    const msg = String(err && err.message ? err.message : err).trim() || "Helper request failed.";
     helperPushMessage("assistant", `Error: ${msg}`);
-    syncActiveHelperSessionFromState({ touch: false });
-    helperSetMeta("Chat request failed.");
+    helperSetMeta("Helper request failed.");
   } finally {
     state.helperPending = false;
-    if (!state.helperOpen && state.helperReopenOnReply) {
-      state.helperOpen = true;
-    }
-    state.helperReopenOnReply = false;
     renderHelperPanel({ forceScroll: true });
     if (state.helperOpen && els.helperInput) {
       try {
@@ -9462,7 +9092,7 @@ function helperContextSnippetForComposer() {
   const arr = helperMessagesForApi();
   if (arr.length === 0) return "";
   const picked = arr.slice(-8);
-  const out = ["[Chat context]"];
+  const out = ["[Helper context]"];
   for (const m of picked) {
     out.push(m.role === "assistant" ? "Assistant:" : "User:");
     out.push(m.text);
@@ -9475,7 +9105,7 @@ function helperContextSnippetForComposer() {
 function appendHelperContextToComposer() {
   const snippet = helperContextSnippetForComposer();
   if (!snippet) {
-    showToast("No chat context yet.");
+    showToast("No helper context yet.");
     return false;
   }
   if (!els.promptInput) return false;
@@ -9491,37 +9121,51 @@ function appendHelperContextToComposer() {
   } catch {
     // ignore
   }
-  showToast("Chat context added to prompt.");
+  showToast("Helper context added to prompt.");
   return true;
+}
+
+async function startTicketFromHelperContext() {
+  const ok = appendHelperContextToComposer();
+  if (!ok) return;
+  await startJobFromComposer();
+}
+
+function syncHelperAgentUi() {
+  const agent = helperCurrentAgentPref();
+  if (!els.helperModelInput) return;
+  if (agent === "claude") els.helperModelInput.placeholder = "Model override (optional, e.g. opus)";
+  else if (agent === "codex") els.helperModelInput.placeholder = "Model override (optional, e.g. gpt-5)";
+  else els.helperModelInput.placeholder = "Model override (optional)";
 }
 
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
   const force = !!(opts && opts.force);
   const defAgent = helperDefaultAgentFromSettings(settings);
-  const defScope = getStoredHelperContextScope();
+  const defModel = helperDefaultModelFromSettings(settings);
 
   if (els.helperAgentSelect) {
     const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
     if (force || !cur) els.helperAgentSelect.value = defAgent;
   }
-  if (els.helperContextScopeSelect) {
-    const curRaw = String(els.helperContextScopeSelect.value || "").trim();
-    if (force || !curRaw) els.helperContextScopeSelect.value = defScope;
+  if (els.helperModelInput) {
+    const curModel = normalizeHelperModelValue(els.helperModelInput.value);
+    if (force || !curModel) {
+      els.helperModelInput.value = defModel;
+      if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+    }
   }
+  syncHelperAgentUi();
 }
 
 function clearHelperHistoryNow(opts = {}) {
   const showToastMsg = !(opts && opts.toast === false);
-  clearStoredHelperHistory();
-  const seeded = createHelperSessionRecord({});
-  state.helperSessions = [seeded];
-  state.helperSessionId = seeded.id;
   state.helperMessages = [];
   state.helperLastRunner = "";
-  helperPersistSessionsState();
+  clearStoredHelperHistory();
   helperSetMeta("");
   renderHelperPanel({ forceScroll: true });
-  if (showToastMsg) showToast("Chat history cleared.");
+  if (showToastMsg) showToast("Helper history cleared.");
 }
 
 function initHelperUi() {
@@ -9529,7 +9173,7 @@ function initHelperUi() {
   applyHelperDefaultsToPanel(state.settings, { force: true });
   if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
   if (els.helperBubbleBtn) {
-    els.helperBubbleBtn.title = `Chat (${mod}+K)`;
+    els.helperBubbleBtn.title = `Helper chat (${mod}+K)`;
     const kbd = els.helperBubbleBtn.querySelector(".helperbubble__kbd");
     if (kbd) kbd.textContent = `${mod}K`;
   }
@@ -9538,7 +9182,8 @@ function initHelperUi() {
   }
   state.helperOpen = false;
   state.helperPending = false;
-  loadHelperSessionsFromStorage();
+  state.helperMessages = helperPersistHistoryFromSettings() ? getStoredHelperHistory() : [];
+  state.helperLastRunner = "";
   helperSetMeta("");
   renderHelperPanel();
 }
@@ -10792,9 +10437,6 @@ function wireUi() {
   if (els.helperBubbleBtn) {
     els.helperBubbleBtn.addEventListener("click", () => toggleHelperPanel({ focus: true }));
   }
-  if (els.helperThinkingIndicator) {
-    els.helperThinkingIndicator.addEventListener("click", () => toggleHelperPanel({ open: true, focus: true }));
-  }
   if (els.helperPanelClose) {
     els.helperPanelClose.addEventListener("click", () => toggleHelperPanel({ open: false }));
   }
@@ -10802,16 +10444,22 @@ function wireUi() {
     els.helperAgentSelect.addEventListener("change", () => {
       const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
       els.helperAgentSelect.value = next;
-      renderHelperPanel();
+      if (els.helperModelInput) {
+        const currentModel = String(els.helperModelInput.value || "").trim();
+        const low = currentModel.toLowerCase();
+        const looksClaudeModel = low === "opus" || low === "sonnet" || low === "haiku";
+        if (next === "claude" && !currentModel) {
+          els.helperModelInput.value = "opus";
+        } else if (next === "codex" && looksClaudeModel) {
+          els.helperModelInput.value = "";
+        }
+      }
+      syncHelperAgentUi();
     });
   }
-  if (els.helperContextScopeSelect) {
-    els.helperContextScopeSelect.addEventListener("change", () => {
-      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value);
-      els.helperContextScopeSelect.value = next;
-      storeHelperContextScope(next);
-      helperSetMeta(helperCurrentMetaStatusText());
-      renderHelperPanel();
+  if (els.helperModelInput) {
+    els.helperModelInput.addEventListener("change", () => {
+      els.helperModelInput.value = normalizeHelperModelValue(els.helperModelInput.value || "");
     });
   }
   if (els.helperInput) {
@@ -10833,6 +10481,11 @@ function wireUi() {
   }
   if (els.helperToPromptBtn) {
     els.helperToPromptBtn.addEventListener("click", () => appendHelperContextToComposer());
+  }
+  if (els.helperCreateTaskBtn) {
+    els.helperCreateTaskBtn.addEventListener("click", () => {
+      startTicketFromHelperContext();
+    });
   }
   if (els.settingsHelperClearHistoryBtn) {
     els.settingsHelperClearHistoryBtn.addEventListener("click", () => clearHelperHistoryNow());
@@ -11562,6 +11215,16 @@ function wireUi() {
 					      boardDoneLimit: clampNumber(els.settingsBoardDoneLimit.value, 0, 5000, 250),
 					      attentionOnQuestionPrompts: !!els.settingsAttentionOnQuestionPrompts.checked,
 					      integrateAutoArchive: !!els.settingsIntegrateAutoArchive.checked,
+					      integrateToDefaultMode: normalizeIntegrateToDefaultMode(
+					        els.settingsIntegrateToDefaultMode ? els.settingsIntegrateToDefaultMode.value : ""
+					      ),
+                helperDefaultAgent: normalizeHelperAgentSelection(
+                  els.settingsHelperDefaultAgent ? els.settingsHelperDefaultAgent.value : ""
+                ),
+                helperDefaultModel: normalizeHelperModelValue(
+                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
+                ),
+                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
 					      agents: {
 				        codex: {
 				          path: els.settingsCodexPath.value.trim(),
@@ -11579,14 +11242,14 @@ function wireUi() {
 		        }
 		      }
 		    };
-        state.settings = await api.settingsUpdate(patch);
-        applyThemeFromSettings(state.settings);
+		    state.settings = await api.settingsUpdate(patch);
+		    applyThemeFromSettings(state.settings);
         applyHelperDefaultsToPanel(state.settings, { force: true });
         if (!helperPersistHistoryFromSettings(state.settings)) clearHelperHistoryNow({ toast: false });
-        else syncActiveHelperSessionFromState({ touch: false });
-        renderBoard();
-		    els.settingsDialog.close();
-		  });
+        else if (Array.isArray(state.helperMessages) && state.helperMessages.length > 0) storeHelperHistory(state.helperMessages);
+		    renderBoard();
+			    els.settingsDialog.close();
+			  });
 
 	  if (els.saveActionsBtn) {
 	    els.saveActionsBtn.addEventListener("click", async () => {
@@ -12546,6 +12209,18 @@ function closeSettings() {
 					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
 					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
 					  els.settingsIntegrateAutoArchive.checked = s.integrateAutoArchive !== false;
+					  if (els.settingsIntegrateToDefaultMode) {
+					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
+					  }
+            if (els.settingsHelperDefaultAgent) {
+              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
+            }
+            if (els.settingsHelperDefaultModel) {
+              els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
+            }
+            if (els.settingsHelperPersistHistory) {
+              els.settingsHelperPersistHistory.checked = helperPersistHistoryFromSettings(s);
+            }
 
 		  refreshCodexModelsDatalist({ showErrors: true });
 
@@ -13171,10 +12846,10 @@ function renderShortcutsDialog() {
 
   body.push(`
     <div class="shortcutsection">
-      <div class="shortcutsection__title">Chat</div>
+      <div class="shortcutsection__title">Helper</div>
       <div class="shortcutlist">
-        ${row(`${mod}+K`, "Toggle chat")}
-        ${row(`${mod}+Enter`, "Send question (when chat input is focused)")}
+        ${row(`${mod}+K`, "Toggle helper chat")}
+        ${row(`${mod}+Enter`, "Send question (when helper input is focused)")}
       </div>
     </div>
   `);
@@ -13287,7 +12962,10 @@ async function init() {
       applyXtermTheme();
       if (!state.helperOpen && !state.helperPending) applyHelperDefaultsToPanel(next, { force: true });
       if (!helperPersistHistoryFromSettings(next)) clearHelperHistoryNow({ toast: false });
-      else syncActiveHelperSessionFromState({ touch: false });
+      else if ((!Array.isArray(state.helperMessages) || state.helperMessages.length === 0) && !state.helperPending) {
+        state.helperMessages = getStoredHelperHistory();
+        renderHelperPanel();
+      }
       renderBoard();
 	      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
 	        const job = state.jobs.get(state.selectedJobId);

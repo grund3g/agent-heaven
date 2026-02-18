@@ -574,6 +574,37 @@
 		              <input id="settingsIntegrateAutoArchive" type="checkbox" />
 		              <div class="field__label field__label--inline">Integrate action: auto-archive ticket after success</div>
 		            </label>
+		            <label class="field">
+		              <div class="field__label">Integrate action mode</div>
+		              <select id="settingsIntegrateToDefaultMode" class="select">
+		                <option value="agent">Agent (recommended)</option>
+		                <option value="cli">CLI (git commands)</option>
+		              </select>
+		            </label>
+		            <div class="settings__note">Agent mode tries LLM-driven integration first and can fall back to CLI when safe.</div>
+
+                <div class="settings__divider"></div>
+
+                <div class="settings__groupTitle">Helper chat</div>
+                <label class="field">
+                  <div class="field__label">Default helper runner</div>
+                  <select id="settingsHelperDefaultAgent" class="select">
+                    <option value="">Auto (prefer Opus)</option>
+                    <option value="claude">Claude</option>
+                    <option value="codex">Codex</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <div class="field__label">Default helper model override</div>
+                  <input id="settingsHelperDefaultModel" class="input" placeholder="e.g. opus, sonnet, gpt-5" />
+                </label>
+                <label class="field field--row">
+                  <input id="settingsHelperPersistHistory" type="checkbox" />
+                  <div class="field__label field__label--inline">Persist helper chat history across app restarts</div>
+                </label>
+                <div class="settings__actions">
+                  <button id="settingsHelperClearHistoryBtn" class="btn btn--ghost" type="button">Clear helper history</button>
+                </div>
 		          </div>
 
 	          <div class="settings__section">
@@ -909,35 +940,33 @@
 	      </div>
 	    </dialog>
 
-    <button id="helperBubbleBtn" class="helperbubble" type="button" title="Chat (⌘+K)" aria-label="Chat">
-      <span class="helperbubble__label">Chat</span>
+    <button id="helperBubbleBtn" class="helperbubble" type="button" title="Helper chat (⌘+K)" aria-label="Helper chat">
+      <span class="helperbubble__label">Helper</span>
       <span class="helperbubble__kbd">⌘K</span>
     </button>
 
-    <section id="helperPanel" class="helperpanel" aria-label="Chat" hidden>
+    <section id="helperPanel" class="helperpanel" aria-label="Helper chat" hidden>
       <div class="helperpanel__header">
         <div>
-          <div class="helperpanel__title">Chat</div>
+          <div class="helperpanel__title">Helper Chat</div>
           <div id="helperMeta" class="helperpanel__meta">Quick questions without opening a task.</div>
         </div>
         <button id="helperPanelClose" class="btn btn--ghost" type="button">Close</button>
       </div>
       <div class="helperpanel__runner">
-        <select id="helperAgentSelect" class="select" title="Chat runner">
-          <option value="">Auto (Settings)</option>
+        <select id="helperAgentSelect" class="select" title="Helper runner">
+          <option value="">Auto (prefer Opus)</option>
           <option value="claude">Claude</option>
           <option value="codex">Codex</option>
         </select>
-        <select id="helperContextScopeSelect" class="select" title="Helper context scope">
-          <option value="project">Context: Project</option>
-          <option value="global">Context: Global</option>
-        </select>
+        <input id="helperModelInput" class="input" placeholder="Model override (optional)" />
       </div>
       <div id="helperMessages" class="helperpanel__messages" aria-live="polite"></div>
       <div class="helperpanel__footer">
         <textarea id="helperInput" class="textarea textarea--sm" rows="3" placeholder="Ask quickly… (⌘+Enter to send)"></textarea>
         <div class="helperpanel__actions">
           <button id="helperToPromptBtn" class="btn btn--ghost" type="button">Use in prompt</button>
+          <button id="helperCreateTaskBtn" class="btn btn--ghost" type="button">Start ticket</button>
           <button id="helperSendBtn" class="btn btn--primary" type="button">Ask</button>
         </div>
       </div>
