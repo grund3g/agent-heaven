@@ -1965,26 +1965,20 @@ body::before {
 }
 
 .followup__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
   gap: 10px;
   align-items: flex-end;
   min-width: 0;
 }
 
 .followup__row .dropwrap {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .followup__row .btn {
   white-space: nowrap;
   align-self: flex-end;
-}
-
-@media (max-width: 640px) {
-  .followup__row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
 }
 
 .dialog {
@@ -2929,12 +2923,13 @@ body::before {
 }
 
 .dialog__footer--job {
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   grid-template-areas:
     "follow actions"
     "attach attach";
   /* Align controls to the bottom edge of the follow-up textarea. */
-  align-items: flex-end;
+  align-items: end;
 }
 
 .dialog__footer--job .followup {
@@ -2943,7 +2938,7 @@ body::before {
 
 .dialog__footer--job .dialog__actions {
   grid-area: actions;
-  align-self: flex-end;
+  align-self: end;
   flex-wrap: nowrap;
   align-items: flex-end;
 }
