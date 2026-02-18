@@ -223,4 +223,72 @@ describe("store", () => {
     const updated = s.updateSettings({ agents: { codex: { transport: "wat" } } });
     expect((updated as any).agents.codex.transport).toBe("exec_json");
   });
+
+  it("defaults uiDesignVersion to v1 and normalizes invalid values", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    // No uiDesignVersion set => defaults to v1
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ settings: {}, projects: [] }, null, 2),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect((s.getSettings() as any).uiDesignVersion).toBe("v1");
+  });
+
+  it("normalizes uiDesignVersion to v1 for invalid values", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ settings: { uiDesignVersion: "v99" }, projects: [] }, null, 2),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect((s.getSettings() as any).uiDesignVersion).toBe("v1");
+  });
+
+  it("preserves uiDesignVersion v2 when set", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ settings: { uiDesignVersion: "v2" }, projects: [] }, null, 2),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect((s.getSettings() as any).uiDesignVersion).toBe("v2");
+  });
+
+  it("allows updating uiDesignVersion via updateSettings", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ settings: {}, projects: [] }, null, 2),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect((s.getSettings() as any).uiDesignVersion).toBe("v1");
+
+    const updated = s.updateSettings({ uiDesignVersion: "v2" });
+    expect((updated as any).uiDesignVersion).toBe("v2");
+
+    // Invalid value falls back to v1
+    const updated2 = s.updateSettings({ uiDesignVersion: "garbage" });
+    expect((updated2 as any).uiDesignVersion).toBe("v1");
+  });
 });
