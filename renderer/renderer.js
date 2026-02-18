@@ -10171,10 +10171,6 @@ function renderHelperPanel(opts = {}) {
     els.helperToPromptBtn.hidden = !hasAssistantReply;
     els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
   }
-  if (els.helperCreateTaskBtn) {
-    els.helperCreateTaskBtn.hidden = !hasAssistantReply;
-    els.helperCreateTaskBtn.disabled = state.helperPending || !hasAssistantReply;
-  }
 
   if (forceScroll || stick || state.helperPending) {
     els.helperMessages.scrollTop = els.helperMessages.scrollHeight;
@@ -10244,7 +10240,6 @@ async function askHelperFromInput() {
   } catch (err) {
     const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
     helperPushMessage("assistant", `Error: ${msg}`);
-    syncActiveHelperSessionFromState({ touch: false });
     helperSetMeta("Chat request failed.");
   } finally {
     state.helperPending = false;
@@ -10298,12 +10293,6 @@ function appendHelperContextToComposer() {
   }
   showToast("Chat context added to prompt.");
   return true;
-}
-
-async function startTicketFromHelperContext() {
-  const ok = appendHelperContextToComposer();
-  if (!ok) return;
-  await startJobFromComposer();
 }
 
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
