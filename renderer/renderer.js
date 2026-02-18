@@ -821,21 +821,9 @@ function stashTitlesInTree(root) {
   for (const node of matches) stashNativeTitle(node);
 }
 
-function tooltipHostForElement(el) {
+function ensureTokenTooltipEl() {
+  if (tokenTooltip.root) return tokenTooltip.root;
   if (!document || !document.body) return null;
-  if (!el || typeof el.closest !== "function") return document.body;
-  const dlg = el.closest("dialog[open]");
-  if (dlg && dlg.nodeType === Node.ELEMENT_NODE) return dlg;
-  return document.body;
-}
-
-function ensureTokenTooltipEl(hostEl) {
-  if (!document || !document.body) return null;
-  const host = hostEl && hostEl.nodeType === Node.ELEMENT_NODE ? hostEl : document.body;
-  if (tokenTooltip.root) {
-    if (tokenTooltip.root.parentElement !== host) host.appendChild(tokenTooltip.root);
-    return tokenTooltip.root;
-  }
   const wrap = document.createElement("div");
   wrap.className = "tokenTooltip";
   wrap.setAttribute("role", "tooltip");
@@ -843,7 +831,7 @@ function ensureTokenTooltipEl(hostEl) {
   const text = document.createElement("div");
   text.className = "tokenTooltip__text";
   wrap.appendChild(text);
-  host.appendChild(wrap);
+  document.body.appendChild(wrap);
   tokenTooltip.root = wrap;
   tokenTooltip.textEl = text;
   return wrap;
@@ -865,10 +853,9 @@ function hideTokenTooltip() {
 }
 
 function positionTokenTooltip() {
+  const root = tokenTooltip.root;
   const activeEl = tokenTooltip.activeEl;
-  if (!activeEl) return;
-  const root = ensureTokenTooltipEl(tooltipHostForElement(activeEl));
-  if (!root) return;
+  if (!root || !activeEl) return;
   if (!document.body || !document.body.contains(activeEl)) {
     hideTokenTooltip();
     return;
@@ -930,7 +917,7 @@ function showTokenTooltipFor(target) {
     hideTokenTooltip();
     return;
   }
-  if (!ensureTokenTooltipEl(tooltipHostForElement(target))) return;
+  if (!ensureTokenTooltipEl()) return;
   tokenTooltip.activeEl = target;
   if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
   scheduleTokenTooltipPosition();
