@@ -3610,71 +3610,138 @@ body::before {
   bottom: 16px;
   right: 16px;
   z-index: 50;
-  padding: 7px 14px;
-  border-radius: var(--radius-pill);
-  border: 0.5px solid var(--stroke2);
-  background: var(--bg1);
-  color: var(--muted);
+  width: 80px;
+  height: 80px;
+  padding: 8px 7px;
+  border-radius: 50%;
+  border: 0.5px solid rgba(var(--accent-rgb), 0.32);
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.42), transparent 44%),
+    radial-gradient(circle at 72% 76%, rgba(var(--accent2-rgb), 0.30), transparent 54%),
+    linear-gradient(145deg, rgba(var(--accent-rgb), 0.34), rgba(var(--accent2-rgb), 0.24));
+  color: var(--ink);
   cursor: pointer;
-  display: inline-flex;
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 4px;
   font-size: 12px;
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  transition: all var(--duration) var(--ease);
+  box-shadow:
+    0 16px 34px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 0 28px rgba(var(--accent-rgb), 0.24);
+  backdrop-filter: blur(12px) saturate(1.6);
+  -webkit-backdrop-filter: blur(12px) saturate(1.6);
+  overflow: hidden;
+  isolation: isolate;
+  animation: helperbubble-float 8.6s ease-in-out infinite;
+  transition:
+    transform 180ms var(--ease-spring),
+    border-color 180ms var(--ease),
+    box-shadow 180ms var(--ease);
 }
 
 .helperbubble::before {
   content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-pill);
-  background: rgb(var(--accent2-rgb));
-  box-shadow: 0 0 0 2px rgba(var(--accent2-rgb), 0.15);
-  flex-shrink: 0;
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 34%, rgba(255, 255, 255, 0.35), transparent 55%),
+    conic-gradient(
+      from 0deg,
+      rgba(var(--accent2-rgb), 0.42),
+      rgba(var(--accent-rgb), 0.26),
+      rgba(var(--accent2-rgb), 0.16),
+      rgba(var(--accent-rgb), 0.38),
+      rgba(var(--accent2-rgb), 0.42)
+    );
+  mix-blend-mode: screen;
+  opacity: 0.72;
+  filter: blur(0.35px);
+  animation: helperbubble-spin 9.4s linear infinite;
+}
+
+.helperbubble::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1px solid rgba(var(--accent-rgb), 0.24);
+  box-shadow: 0 0 30px rgba(var(--accent-rgb), 0.20);
+  opacity: 0.74;
+  animation: helperbubble-pulse 3.8s ease-in-out infinite;
 }
 
 .helperbubble > * {
   position: relative;
+  z-index: 1;
 }
 
 .helperbubble__label {
-  font-weight: 500;
-  font-size: 12px;
+  margin-top: 5px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.40);
 }
 
 .helperbubble__kbd {
+  margin-top: auto;
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--muted2);
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 0.5px solid var(--stroke);
-  background: var(--surface1);
+  color: var(--ink);
+  padding: 3px 6px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.30);
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .helperbubble:hover {
-  border-color: var(--stroke-strong);
-  background: var(--surface2);
-  box-shadow: var(--shadow);
-  transform: translateY(-1px);
+  border-color: rgba(var(--accent2-rgb), 0.74);
+  box-shadow:
+    0 20px 42px rgba(0, 0, 0, 0.48),
+    0 0 36px rgba(var(--accent2-rgb), 0.28);
+  transform: translateY(-2px) scale(1.03);
 }
 
 :root[data-scheme="light"] .helperbubble {
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 2px 10px rgba(0, 0, 0, 0.06);
+  border-color: rgba(var(--accent-rgb), 0.28);
+  background:
+    radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.95), transparent 46%),
+    radial-gradient(circle at 70% 78%, rgba(var(--accent2-rgb), 0.26), transparent 54%),
+    linear-gradient(145deg, rgba(var(--accent-rgb), 0.26), rgba(var(--accent2-rgb), 0.22));
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.14),
+    0 0 18px rgba(var(--accent-rgb), 0.20);
+}
+
+:root[data-scheme="light"] .helperbubble::before {
+  mix-blend-mode: normal;
+  opacity: 0.64;
+}
+
+:root[data-scheme="light"] .helperbubble::after {
+  border-color: rgba(var(--accent-rgb), 0.30);
+  box-shadow: 0 0 22px rgba(var(--accent-rgb), 0.18);
 }
 
 :root[data-scheme="light"] .helperbubble:hover {
-  background: rgba(255, 255, 255, 1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.18),
+    0 0 28px rgba(var(--accent2-rgb), 0.22);
 }
 
 .helperbubble:focus-visible {
-  outline: 2px solid rgba(var(--accent-rgb), 0.50);
+  outline: 2px solid rgba(var(--accent-rgb), 0.54);
   outline-offset: 2px;
 }
 
@@ -3682,8 +3749,22 @@ body::before {
   display: none;
 }
 
+.helperbubble--pending {
+  border-color: rgba(var(--accent-rgb), 0.90);
+  box-shadow:
+    0 22px 46px rgba(0, 0, 0, 0.50),
+    0 0 44px rgba(var(--accent-rgb), 0.34);
+}
+
 .helperbubble--pending::before {
-  animation: blink 1.2s ease-in-out infinite;
+  opacity: 0.88;
+  animation-duration: 4.2s;
+}
+
+.helperbubble--pending::after {
+  opacity: 0.95;
+  border-color: rgba(var(--accent-rgb), 0.44);
+  animation-duration: 1.5s;
 }
 
 .helperpanel {
@@ -3807,6 +3888,58 @@ body::before {
 
 .helpermsg .msg__text pre.md-code code {
   font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .helperbubble {
+    right: 10px;
+    bottom: 10px;
+    width: 72px;
+    height: 72px;
+    padding: 6px;
+  }
+
+  .helperbubble__kbd {
+    display: none;
+  }
+}
+
+@keyframes helperbubble-float {
+  0%,
+  100% {
+    background-position: 32% 26%, 72% 76%, 0% 0%;
+  }
+
+  50% {
+    background-position: 38% 34%, 64% 68%, 100% 100%;
+  }
+}
+
+@keyframes helperbubble-spin {
+  from {
+    transform: rotate(0deg) scale(0.98);
+  }
+
+  50% {
+    transform: rotate(180deg) scale(1.06);
+  }
+
+  to {
+    transform: rotate(360deg) scale(0.98);
+  }
+}
+
+@keyframes helperbubble-pulse {
+  0%,
+  100% {
+    opacity: 0.26;
+    transform: scale(0.95);
+  }
+
+  50% {
+    opacity: 0.82;
+    transform: scale(1.05);
+  }
 }
 
 /* ── 36. Guided Tour ────────────────────────────────────────────────────── */
