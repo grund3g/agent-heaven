@@ -216,6 +216,7 @@ const api = window.agentHeaven;
   imageDialogClose: document.getElementById("imageDialogClose"),
   imageDialogImg: document.getElementById("imageDialogImg"),
 
+  helperThinkingIndicator: document.getElementById("helperThinkingIndicator"),
   helperBubbleBtn: document.getElementById("helperBubbleBtn"),
   helperPanel: document.getElementById("helperPanel"),
   helperPanelClose: document.getElementById("helperPanelClose"),
@@ -285,6 +286,7 @@ const state = {
 
   helperOpen: false,
   helperPending: false,
+  helperReopenOnReply: false,
   helperSessions: [],
   helperSessionId: "",
   helperMessages: [],
@@ -8751,10 +8753,13 @@ function helperCurrentMetaStatusText() {
 
 function renderHelperPanel(opts = {}) {
   const forceScroll = !!(opts && opts.forceScroll);
+  const showClosedPending = !!state.helperPending && !state.helperOpen;
   if (els.helperBubbleBtn) {
     els.helperBubbleBtn.classList.toggle("helperbubble--open", !!state.helperOpen);
+    els.helperBubbleBtn.classList.toggle("helperbubble--pending", showClosedPending);
     els.helperBubbleBtn.setAttribute("aria-pressed", state.helperOpen ? "true" : "false");
   }
+  if (els.helperThinkingIndicator) els.helperThinkingIndicator.hidden = !showClosedPending;
   if (els.helperPanel) els.helperPanel.hidden = !state.helperOpen;
   renderHelperSessionOptions();
   if (!els.helperMessages) return;
@@ -8805,7 +8810,10 @@ function renderHelperPanel(opts = {}) {
 }
 
 function setHelperOpen(open, opts = {}) {
-  state.helperOpen = !!open;
+  const nextOpen = !!open;
+  if (!nextOpen && state.helperPending) state.helperReopenOnReply = true;
+  if (nextOpen) state.helperReopenOnReply = false;
+  state.helperOpen = nextOpen;
   renderHelperPanel();
   if (state.helperOpen && opts && opts.focus && els.helperInput) {
     try {
@@ -8868,6 +8876,10 @@ async function askHelperFromInput() {
     helperSetMeta("Chat request failed.");
   } finally {
     state.helperPending = false;
+    if (!state.helperOpen && state.helperReopenOnReply) {
+      state.helperOpen = true;
+    }
+    state.helperReopenOnReply = false;
     renderHelperPanel({ forceScroll: true });
     if (state.helperOpen && els.helperInput) {
       try {
@@ -8955,6 +8967,7 @@ function initHelperUi() {
   }
   state.helperOpen = false;
   state.helperPending = false;
+  state.helperReopenOnReply = false;
   loadHelperSessionsFromStorage();
   helperSetMeta("");
   renderHelperPanel();
@@ -10178,6 +10191,9 @@ function wireUi() {
 
   if (els.helperBubbleBtn) {
     els.helperBubbleBtn.addEventListener("click", () => toggleHelperPanel({ focus: true }));
+  }
+  if (els.helperThinkingIndicator) {
+    els.helperThinkingIndicator.addEventListener("click", () => toggleHelperPanel({ open: true, focus: true }));
   }
   if (els.helperPanelClose) {
     els.helperPanelClose.addEventListener("click", () => toggleHelperPanel({ open: false }));
