@@ -5886,7 +5886,6 @@ function renderCard(job) {
     <article class="${cardCls}" data-job-id="${escapeHtml(job.id)}" style="--proj-color: ${escapeHtml(projColor)}">
       <div class="card__top">
         <div class="card__head">
-          <div class="card__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</div>
           <div class="card__sub">
             <span class="projdot" aria-hidden="true"></span>
             <span class="card__subtext" title="${escapeHtml(oneLine(subTitle))}">${escapeHtml(sub)}</span>
@@ -5894,6 +5893,7 @@ function renderCard(job) {
               integratedText
             )}</span>
           </div>
+          <div class="card__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</div>
         </div>
         ${ctx ? renderCardContextStepper(ctx) : ""}
         ${showStatusPill ? `<div class="card__status">${fmtStatusPill(job)}</div>` : ""}

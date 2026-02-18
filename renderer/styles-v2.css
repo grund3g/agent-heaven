@@ -1229,18 +1229,23 @@ body::before {
 }
 
 .card__top {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "sub ctx status"
+    "title title title";
+  column-gap: 8px;
+  row-gap: 5px;
+  align-items: center;
   min-width: 0;
 }
 
 .card__head {
-  flex: 1 1 auto;
-  min-width: 0;
+  display: contents;
 }
 
 .card__title {
+  grid-area: title;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
@@ -1252,10 +1257,10 @@ body::before {
 }
 
 .card__sub {
+  grid-area: sub;
   display: flex;
   gap: 5px;
   align-items: center;
-  margin-top: 3px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -1295,6 +1300,8 @@ body::before {
 }
 
 .card__context {
+  grid-area: ctx;
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1357,6 +1364,8 @@ body::before {
 }
 
 .card__status {
+  grid-area: status;
+  justify-self: end;
   flex: 0 0 auto;
 }
 
