@@ -153,9 +153,15 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     const res = await invokeOk("jobs:start", params);
     return res.jobId;
   },
-  jobsSend: async (jobId, prompt, images) => {
-    await invokeOk("jobs:send", { jobId, prompt, images });
-    return true;
+  jobsSend: async (jobId, prompt, images, opts) => {
+    const o = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("jobs:send", {
+      jobId,
+      prompt,
+      images,
+      missingCheckoutAction: o.missingCheckoutAction
+    });
+    return res && typeof res === "object" ? res : { ok: true };
   },
   jobsCancel: (jobId) => ipcRenderer.invoke("jobs:cancel", jobId),
   jobsArchive: async (jobId) => {

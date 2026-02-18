@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import * as git from "../src/electron/git";
 import { JobsManager } from "../src/electron/jobs-manager";
 
 class FakeChild extends EventEmitter {
@@ -22,6 +23,7 @@ describe("electron/jobs-manager", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it("validates start params", async () => {
@@ -119,7 +121,7 @@ describe("electron/jobs-manager", () => {
     expect((snap as any).job.title).toBe("Do the thing");
     expect((snap as any).job.status).toBe("done");
 
-    const sendRes = jm.send({ jobId: "job1", prompt: "follow up", images: [] });
+    const sendRes = await jm.send({ jobId: "job1", prompt: "follow up", images: [] });
     expect(sendRes).toEqual({ ok: true });
     expect(resumeOpts.threadId).toBe("t123");
 
@@ -173,12 +175,147 @@ describe("electron/jobs-manager", () => {
     // Simulate that an isolated checkout got removed during archive/trash cleanup.
     (jm as any).jobs.get("job1").projectPath = path.join(os.tmpdir(), "missing-checkout-path-does-not-exist");
 
-    expect(jm.send({ jobId: "job1", prompt: "follow up", images: [] })).toEqual({ ok: true });
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [] })).toEqual({ ok: true });
     expect(resumeOpts).not.toBeNull();
     expect(resumeOpts.cwd).toBe(projectPath);
 
     const snap = jm.getJob("job1") as any;
     expect(snap.job.projectPath).toBe(projectPath);
+  });
+
+  it("asks for a decision when a managed worktree checkout is missing", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ah-checkouts-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    const missingPath = path.join(checkoutsDir, "worktrees", "p1", "job1");
+    (jm as any).jobs.get("job1").projectPath = missingPath;
+    expect(fs.existsSync(missingPath)).toBe(false);
+
+    const askRes = await jm.send({ jobId: "job1", prompt: "follow up", images: [] });
+    expect(askRes).toMatchObject({
+      ok: true,
+      needsCheckoutDecision: { kind: "recreate_worktree", missingPath, projectPath }
+    });
+    expect(resumeOpts).toBeNull();
+
+    const snapAfterAsk = jm.getJob("job1") as any;
+    expect(Array.isArray(snapAfterAsk.job.queuedPrompts)).toBe(true);
+    expect(snapAfterAsk.job.queuedPrompts.length).toBe(0);
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [], missingCheckoutAction: "fallback_to_project" })).toEqual({ ok: true });
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(projectPath);
+
+    const snapAfterFallback = jm.getJob("job1") as any;
+    expect(snapAfterFallback.job.projectPath).toBe(projectPath);
+  });
+
+  it("can recreate a missing managed worktree checkout before resuming", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ah-checkouts-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const addWorktreeSpy = vi.spyOn(git, "addWorktree").mockImplementation(async (opts: any) => {
+      const wt = String(opts && opts.worktreeDir ? opts.worktreeDir : "").trim();
+      if (wt) fs.mkdirSync(wt, { recursive: true });
+    });
+
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    const missingPath = path.join(checkoutsDir, "worktrees", "p1", "job1");
+    (jm as any).jobs.get("job1").projectPath = missingPath;
+    expect(fs.existsSync(missingPath)).toBe(false);
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [], missingCheckoutAction: "recreate_worktree" })).toEqual({
+      ok: true
+    });
+    expect(addWorktreeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoDir: projectPath,
+        worktreeDir: missingPath,
+        branchName: "ah/job/job1"
+      })
+    );
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(missingPath);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.projectPath).toBe(missingPath);
   });
 
   it("tracks integrate-to-default progress as ephemeral metadata", async () => {
@@ -439,7 +576,7 @@ describe("electron/jobs-manager", () => {
     });
 
     // While running, send should queue (not error).
-    expect(jm.send({ jobId: "job1", prompt: "queued follow up", images: [] })).toEqual({ ok: true });
+    expect(await jm.send({ jobId: "job1", prompt: "queued follow up", images: [] })).toEqual({ ok: true });
     const snapQueued = jm.getJob("job1") as any;
     expect(snapQueued.job.status).toBe("running");
     expect(Array.isArray(snapQueued.job.queuedPrompts)).toBe(true);
@@ -648,7 +785,7 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.status).toBe("done");
     expect(snap.job.usageTotal.turns).toBe(1);
 
-    const sendRes = jm.send({ jobId: "job1", prompt: "follow up", images: [] });
+    const sendRes = await jm.send({ jobId: "job1", prompt: "follow up", images: [] });
     expect(sendRes).toEqual({ ok: true });
     expect(resumeOpts.sessionId).toBe("s123");
   });
@@ -773,7 +910,7 @@ describe("electron/jobs-manager", () => {
     snap = jm.getJob("job1") as any;
     expect(snap.job.status).toBe("done");
 
-    expect(jm.send({ jobId: "job1", prompt: "Now focus on deployment rollback for prod", images: [] })).toEqual({ ok: true });
+    expect(await jm.send({ jobId: "job1", prompt: "Now focus on deployment rollback for prod", images: [] })).toEqual({ ok: true });
     expect(resumeOpts.threadId).toBe("t123");
     expect(titleRuns.length).toBe(2);
     expect(titleRuns[1].prompt).toContain("Now focus on deployment rollback for prod");

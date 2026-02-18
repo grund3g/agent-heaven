@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
-import { cherryPick } from "../src/electron/git";
+import { addWorktree, cherryPick } from "../src/electron/git";
 
 function runGit(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
@@ -73,5 +73,23 @@ describe("electron/git cherryPick", () => {
 
     runGit(dir, ["cherry-pick", "--abort"]);
     expect(hasCherryPickInProgress(dir)).toBe(false);
+  });
+});
+
+describe("electron/git addWorktree", () => {
+  it("reuses an existing task branch when recreating a worktree", async () => {
+    const dir = initRepo();
+
+    const wt1 = path.join(dir, "..", `ah-wt-${Date.now()}-1`);
+    const wt2 = path.join(dir, "..", `ah-wt-${Date.now()}-2`);
+    const branchName = "ah/job/test";
+
+    await addWorktree({ repoDir: dir, worktreeDir: wt1, branchName, baseRef: "main" });
+    runGit(dir, ["worktree", "remove", "--force", wt1]);
+
+    await addWorktree({ repoDir: dir, worktreeDir: wt2, branchName, baseRef: "main" });
+
+    const checkedOut = runGit(wt2, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+    expect(checkedOut).toBe(branchName);
   });
 });

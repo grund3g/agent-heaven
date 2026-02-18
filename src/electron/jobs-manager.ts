@@ -96,6 +96,15 @@ export class JobsManager {
     return normalizeGitCheckoutMode(value);
   }
 
+  private normalizeMissingCheckoutAction(value: unknown): "ask" | "fallback_to_project" | "recreate_worktree" {
+    const raw = String(value || "")
+      .trim()
+      .toLowerCase();
+    if (raw === "fallback_to_project" || raw === "fallback" || raw === "inplace") return "fallback_to_project";
+    if (raw === "recreate_worktree" || raw === "recreate" || raw === "worktree") return "recreate_worktree";
+    return "ask";
+  }
+
   private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
     const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
     if (!text) return false;
@@ -319,6 +328,60 @@ export class JobsManager {
     const projects = this.store && typeof this.store.listProjects === "function" ? this.store.listProjects() : [];
     if (!Array.isArray(projects)) return null;
     return projects.find((p: any) => p && String(p.id || "").trim() === id) || null;
+  }
+
+  private detectMissingManagedWorktreeForJob(job: Job): { missingPath: string; projectPath: string } | null {
+    if (!job || typeof job !== "object") return null;
+
+    const missingPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!missingPath || fs.existsSync(missingPath)) return null;
+
+    const projectId = String(job.projectId || "").trim();
+    const jobId = String(job.id || "").trim();
+    if (!projectId || !jobId) return null;
+
+    const normalizedMissing = path.resolve(missingPath);
+    const normalizedMissingPosix = normalizedMissing.replace(/\\/g, "/").toLowerCase();
+
+    let isManagedWorktree = false;
+    if (this.checkoutsDir) {
+      const expected = path.resolve(this.checkoutsDir, "worktrees", projectId, jobId);
+      if (normalizedMissing === expected) isManagedWorktree = true;
+    }
+
+    if (!isManagedWorktree) {
+      const suffix = path.join("worktrees", projectId, jobId).replace(/\\/g, "/").toLowerCase();
+      if (normalizedMissingPosix.endsWith(`/${suffix}`) || normalizedMissingPosix === suffix) isManagedWorktree = true;
+    }
+
+    if (!isManagedWorktree) return null;
+
+    const project = this.projectById(projectId);
+    const projectPath = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    return { missingPath, projectPath };
+  }
+
+  private async recreateManagedWorktreeForJob(job: Job): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!job || typeof job !== "object") return { ok: false, error: "Unknown job" };
+
+    const project = this.projectById(job.projectId);
+    if (!project) return { ok: false, error: "Project not found" };
+
+    try {
+      const run = await this.prepareCheckout(project, job.id, "", "worktree");
+      const nextPath = typeof run.projectPath === "string" ? run.projectPath.trim() : "";
+      if (!nextPath) return { ok: false, error: "Failed to recreate worktree checkout" };
+
+      if (nextPath !== job.projectPath) {
+        job.projectPath = nextPath;
+        this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: job.projectPath } });
+        this.markJobDirty(job.id);
+        this.tryPersistJobNow(job);
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
   }
 
   private ensureRunnableProjectPath(job: Job): string {
@@ -1791,12 +1854,12 @@ export class JobsManager {
     return { ok: true, jobId };
   }
 
-  send(params: { jobId: string; prompt: string; images?: any }) {
+  async send(params: { jobId: string; prompt: string; images?: any; missingCheckoutAction?: unknown }) {
     const jobId = params && params.jobId ? String(params.jobId) : "";
     const job = this.jobs.get(jobId);
     if (!job) return { ok: false, error: "Unknown job" };
     const isRunning = this.procs.has(jobId) || job.status === "running";
-    const runProjectPath = this.ensureRunnableProjectPath(job);
+    const missingCheckoutAction = this.normalizeMissingCheckoutAction(params && (params as any).missingCheckoutAction);
 
     // Resuming a job should bring it back onto the board so it's visible while running.
     if (job.box && job.box !== "board") {
@@ -1816,6 +1879,34 @@ export class JobsManager {
     if (!text) return { ok: false, error: "Prompt is empty" };
     if (text.length > 200_000) return { ok: false, error: "Prompt is too large" };
 
+    // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
+    // When idle, a thread id is required to resume.
+    if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
+
+    // If the dedicated worktree checkout was cleaned up, ask the UI what to do.
+    if (!isRunning) {
+      const missingWorktree = this.detectMissingManagedWorktreeForJob(job);
+      if (missingWorktree) {
+        if (missingCheckoutAction === "ask") {
+          return {
+            ok: true,
+            needsCheckoutDecision: {
+              kind: "recreate_worktree",
+              missingPath: missingWorktree.missingPath,
+              projectPath: missingWorktree.projectPath
+            }
+          };
+        }
+
+        if (missingCheckoutAction === "recreate_worktree") {
+          const recreated = await this.recreateManagedWorktreeForJob(job);
+          if (!recreated.ok) return recreated;
+        }
+      }
+    }
+
+    const runProjectPath = this.ensureRunnableProjectPath(job);
+
     let images = normalizeImagePaths((params && (params as any).images) || [], runProjectPath);
     if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
@@ -1829,10 +1920,6 @@ export class JobsManager {
       });
       this.markJobDirty(jobId);
     }
-
-    // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
-    // When idle, a thread id is required to resume.
-    if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
 
     // Re-evaluate card title for every accepted follow-up prompt (focus can shift over time).
     this.kickoffTitleSummary(jobId, text, null);

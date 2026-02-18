@@ -231,8 +231,22 @@ export async function addWorktree(opts: { repoDir: string; worktreeDir: string; 
   if (!branchName) throw new Error("Missing branchName");
   if (!baseRef) throw new Error("Missing baseRef");
 
-  const res = await git(["worktree", "add", "-b", branchName, worktreeDir, baseRef], { cwd: repoDir, timeoutMs: 5 * 60_000 });
-  if (!res.ok) throw new Error(res.error);
+  const created = await git(["worktree", "add", "-b", branchName, worktreeDir, baseRef], { cwd: repoDir, timeoutMs: 5 * 60_000 });
+  if (created.ok) return;
+
+  // Recreating a checkout for an existing task can reuse the existing branch.
+  const err = String(created.error || "").toLowerCase();
+  const branchAlreadyExists = err.includes("already exists") && err.includes("branch");
+  if (!branchAlreadyExists) throw new Error(created.error);
+
+  try {
+    await git(["worktree", "prune"], { cwd: repoDir, timeoutMs: 60_000 });
+  } catch {
+    // ignore
+  }
+
+  const reused = await git(["worktree", "add", worktreeDir, branchName], { cwd: repoDir, timeoutMs: 5 * 60_000 });
+  if (!reused.ok) throw new Error(reused.error);
 }
 
 export async function removeWorktree(opts: { repoDir: string; worktreeDir: string }): Promise<void> {

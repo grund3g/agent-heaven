@@ -9144,9 +9144,39 @@ async function sendFollowup() {
   try {
     setHint("");
     setView("board");
+
+    let sendRes = await api.jobsSend(jobId, prompt, images);
+    const decision =
+      sendRes && typeof sendRes === "object" && sendRes.needsCheckoutDecision && typeof sendRes.needsCheckoutDecision === "object"
+        ? sendRes.needsCheckoutDecision
+        : null;
+
+    if (decision && decision.kind === "recreate_worktree") {
+      const missingPath = typeof decision.missingPath === "string" ? decision.missingPath.trim() : "";
+      const projectPath = typeof decision.projectPath === "string" ? decision.projectPath.trim() : "";
+      const recreate = window.confirm(
+        `The previous worktree checkout for this task no longer exists.\n\n` +
+          `Missing checkout:\n${missingPath || "(unknown path)"}\n\n` +
+          `Create a new worktree for this follow-up?\n\n` +
+          `OK = create new worktree\nCancel = choose another option`
+      );
+      if (recreate) {
+        sendRes = await api.jobsSend(jobId, prompt, images, { missingCheckoutAction: "recreate_worktree" });
+      } else {
+        const proceedInProject = window.confirm(
+          `Continue this follow-up in the project checkout instead?\n\n` +
+            `${projectPath || "(project path unknown)"}\n\n` +
+            `This may run on the default branch.`
+        );
+        if (!proceedInProject) return;
+        sendRes = await api.jobsSend(jobId, prompt, images, { missingCheckoutAction: "fallback_to_project" });
+      }
+    }
+
+    if (sendRes && sendRes.ok === false) throw new Error(sendRes.error || "Failed to send follow-up");
+
     els.followupInput.value = "";
     scheduleAutosizeFollowupInput();
-    await api.jobsSend(jobId, prompt, images);
     setFollowupImages([]);
     setFollowupFiles([]);
     if (running) showToast("Queued follow-up.");

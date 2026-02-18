@@ -2608,9 +2608,15 @@ export async function startApp(): Promise<void> {
     assertTrustedIpcSender(evt);
     return jobsManager.start(params);
   });
-  ipcMain.handle("jobs:send", async (evt, { jobId, prompt, images }) => {
+  ipcMain.handle("jobs:send", async (evt, payload) => {
     assertTrustedIpcSender(evt);
-    return jobsManager.send({ jobId, prompt, images });
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    return jobsManager.send({
+      jobId: p.jobId,
+      prompt: p.prompt,
+      images: p.images,
+      missingCheckoutAction: p.missingCheckoutAction
+    });
   });
   ipcMain.handle("jobs:archive", async (evt, payload) => {
     assertTrustedIpcSender(evt);
