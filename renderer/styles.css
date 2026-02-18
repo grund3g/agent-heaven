@@ -4266,6 +4266,12 @@ body::before {
   gap: 8px;
 }
 
+.helperpanel__sessions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
 .helperpanel__messages {
   border: 1px solid var(--stroke);
   border-radius: 14px;
@@ -4365,111 +4371,6 @@ body::before {
 
   .helperpanel__sessions {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .helperbubble,
-  .helperbubble::before,
-  .helperbubble::after {
-    animation: none !important;
-  }
-
-  .helperthinking,
-  .helperthinking__spinner {
-    animation: none !important;
-  }
-
-  .helperbubble {
-    transition: border-color 120ms ease, box-shadow 120ms ease;
-  }
-
-  .helperthinking {
-    transition: border-color 120ms ease;
-  }
-}
-
-@keyframes helperbubble-float {
-  0%,
-  100% {
-    background-position: 32% 26%, 72% 76%, 0% 0%;
-  }
-
-  50% {
-    background-position: 38% 34%, 64% 68%, 100% 100%;
-  }
-}
-
-@keyframes helperbubble-spin {
-  from {
-    transform: rotate(0deg) scale(0.98);
-  }
-
-  50% {
-    transform: rotate(180deg) scale(1.06);
-  }
-
-  to {
-    transform: rotate(360deg) scale(0.98);
-  }
-}
-
-@keyframes helperbubble-pulse {
-  0%,
-  100% {
-    opacity: 0.26;
-    transform: scale(0.95);
-  }
-
-  50% {
-    opacity: 0.82;
-    transform: scale(1.05);
-  }
-}
-
-@keyframes helperthinking-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes helperthinking-breathe {
-  0%,
-  100% {
-    transform: translateY(0);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
-  }
-
-  50% {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(var(--accent-rgb), 0.22) inset;
-  }
-}
-
-@keyframes helperthinking-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes helperthinking-breathe {
-  0%,
-  100% {
-    transform: translateY(0);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
-  }
-
-  50% {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(var(--accent-rgb), 0.22) inset;
   }
 }
 
