@@ -28,7 +28,7 @@
           </div>
         </div>
 
-        <div class="sidebar__section sidebar__section--projects">
+        <div class="sidebar__section">
           <div class="sidebar__titleRow">
             <div class="sidebar__title">Projects</div>
             <div class="sidebar__titleActions">
@@ -48,7 +48,7 @@
                 title="Add project folder"
                 aria-label="Add project folder"
               >
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                +
               </button>
             </div>
           </div>
@@ -57,18 +57,10 @@
 
         <div class="sidebar__section sidebar__section--bottom sidebar__footer">
           <div class="sidebar__footerActions">
-            <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            </button>
-            <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
-            </button>
-            <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            </button>
-            <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-            </button>
+            <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>
+            <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">⌘</button>
+            <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">⚙</button>
+            <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">◔</button>
           </div>
           <button
             id="toggleSidebarBtn"
@@ -172,7 +164,7 @@
           <div class="searchctl" role="search" aria-label="Search sessions">
             <input id="searchInput" class="searchctl__input" type="search" placeholder="Search sessions…" autocomplete="off" />
             <button id="searchClearBtn" class="iconbtn searchctl__clear" type="button" title="Clear search (Esc)" aria-label="Clear search" hidden>
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              ×
             </button>
           </div>
           <div id="searchMeta" class="searchmeta" aria-live="polite"></div>
@@ -193,7 +185,7 @@
                   title="Move window to display"
                   aria-label="Move window to display"
                 >
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                  ⇆
                 </button>
                 <button
                   class="iconbtn lane__pop"
@@ -202,7 +194,7 @@
                   title="Open Running in new window"
                   aria-label="Open Running in new window"
                 >
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  ↗
                 </button>
               </div>
             </div>
@@ -219,7 +211,7 @@
                   title="Move window to display"
                   aria-label="Move window to display"
                 >
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                  ⇆
                 </button>
                 <button
                   class="iconbtn lane__pop"
@@ -228,7 +220,7 @@
                   title="Open Needs Attention in new window"
                   aria-label="Open Needs Attention in new window"
                 >
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  ↗
                 </button>
               </div>
             </div>
@@ -245,7 +237,7 @@
                   title="Move window to display"
                   aria-label="Move window to display"
                 >
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                  ⇆
                 </button>
                 <button
                   class="iconbtn lane__pop"
@@ -254,7 +246,7 @@
                   title="Open Done in new window"
                   aria-label="Open Done in new window"
                 >
-                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  ↗
                 </button>
               </div>
             </div>
@@ -294,8 +286,8 @@
         <div class="dialog__header">
           <div class="dialog__title" id="jobDialogTitle">Job</div>
           <div class="dialog__headerActions">
-            <button id="jobDialogPopout" class="btn btn--ghost btn--icon" type="button" title="Open in new window">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            <button id="jobDialogPopout" class="btn btn--ghost" type="button" title="Open in new window">
+              ↗
             </button>
             <button id="jobDialogMove" class="btn btn--ghost" type="button" title="Move this window to a display" hidden>
               Move
@@ -310,7 +302,6 @@
               <button class="tab tab--active" data-tab="chat">Chat</button>
               <button class="tab" data-tab="live">Live</button>
               <button class="tab" data-tab="logs">Logs</button>
-              <button class="tab" data-tab="diff">Diff</button>
               <button class="tab" data-tab="term">Terminal</button>
             </div>
             <div class="jobsearchctl" role="search" aria-label="Search in current job tab">
@@ -329,7 +320,7 @@
                 title="Previous match (Shift+Enter)"
                 aria-label="Previous match"
               >
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                ↑
               </button>
               <button
                 id="jobSearchNextBtn"
@@ -338,7 +329,7 @@
                 title="Next match (Enter)"
                 aria-label="Next match"
               >
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                ↓
               </button>
               <button
                 id="jobSearchClearBtn"
@@ -348,15 +339,14 @@
                 aria-label="Clear search"
                 hidden
               >
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                ×
               </button>
             </div>
           </div>
-              <div id="jobDialogChat" class="panel panel--active"></div>
-              <div id="jobDialogLive" class="panel panel--terminal"></div>
-              <div id="jobDialogLogs" class="panel panel--terminal"></div>
-              <div id="jobDialogDiff" class="panel panel--terminal"></div>
-              <div id="jobDialogTerm" class="panel panel--terminal panel--xterm"></div>
+          <div id="jobDialogChat" class="panel panel--active"></div>
+          <div id="jobDialogLive" class="panel panel--terminal"></div>
+          <div id="jobDialogLogs" class="panel panel--terminal"></div>
+          <div id="jobDialogTerm" class="panel panel--terminal panel--xterm"></div>
         </div>
         <div class="dialog__footer dialog__footer--job">
           <div class="followup">
@@ -379,7 +369,7 @@
               aria-haspopup="menu"
               aria-expanded="false"
             >
-              <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>
+              <span aria-hidden="true">⋯</span>
             </button>
             <div id="jobMoreMenu" class="ctxmenu" hidden role="menu" aria-label="More job actions">
               <button type="button" class="ctxmenu__item" data-jobmore-action="actions">Actions…</button>
@@ -618,9 +608,9 @@
 
             <div class="settings__divider"></div>
 
-            <div class="settings__groupTitle">Chat</div>
+            <div class="settings__groupTitle">Helper chat</div>
             <label class="field">
-              <div class="field__label">Default chat runner</div>
+              <div class="field__label">Default helper runner</div>
               <select id="settingsHelperDefaultAgent" class="select">
                 <option value="">Auto (prefer Opus)</option>
                 <option value="claude">Claude</option>
@@ -628,138 +618,16 @@
               </select>
             </label>
             <label class="field">
-              <div class="field__label">Default chat model override</div>
+              <div class="field__label">Default helper model override</div>
               <input id="settingsHelperDefaultModel" class="input" placeholder="e.g. opus, sonnet, gpt-5" />
             </label>
             <label class="field field--row">
               <input id="settingsHelperPersistHistory" type="checkbox" />
-              <div class="field__label field__label--inline">Persist chat history across app restarts</div>
+              <div class="field__label field__label--inline">Persist helper chat history across app restarts</div>
             </label>
             <div class="settings__actions">
-              <button id="settingsHelperClearHistoryBtn" class="btn btn--ghost" type="button">Clear chat history</button>
+              <button id="settingsHelperClearHistoryBtn" class="btn btn--ghost" type="button">Clear helper history</button>
             </div>
-          </div>
-
-          <div class="settings__section">
-            <div class="settings__sectionTitle">Integrations</div>
-            <label class="field field--row">
-              <input id="settingsIntegrationsEnabled" type="checkbox" />
-              <div class="field__label field__label--inline">Enable provider integrations</div>
-            </label>
-            <label class="field field--row">
-              <input id="settingsIntegrationsAutoEnrichPrompt" type="checkbox" />
-              <div class="field__label field__label--inline">Auto-enrich prompts with external context</div>
-            </label>
-            <label class="field field--row">
-              <input id="settingsIntegrationsAutoCommentOnComplete" type="checkbox" />
-              <div class="field__label field__label--inline">Post run updates to linked tickets/pages</div>
-            </label>
-            <label class="field">
-              <div class="field__label">Request timeout (ms)</div>
-              <input id="settingsIntegrationsRequestTimeoutMs" class="input" type="number" min="1000" max="60000" step="500" />
-            </label>
-            <div class="settings__note">Tokens are stored locally in your settings file. Leave token empty to use env var fallback.</div>
-
-            <div class="settings__divider"></div>
-
-            <div class="settings__groupTitle">Linear</div>
-            <label class="field field--row">
-              <input id="settingsIntegrationsLinearEnabled" type="checkbox" />
-              <div class="field__label field__label--inline">Enable Linear connector</div>
-            </label>
-            <label class="field">
-              <div class="field__label">Linear API base URL</div>
-              <input id="settingsIntegrationsLinearApiBaseUrl" class="input" placeholder="https://api.linear.app/graphql" />
-            </label>
-            <label class="field">
-              <div class="field__label">Linear API token</div>
-              <input
-                id="settingsIntegrationsLinearToken"
-                class="input"
-                type="password"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="lin_api_..."
-              />
-            </label>
-            <label class="field">
-              <div class="field__label">Linear token env var (fallback)</div>
-              <input id="settingsIntegrationsLinearTokenEnvVar" class="input" placeholder="LINEAR_API_KEY" spellcheck="false" />
-            </label>
-            <label class="field">
-              <div class="field__label">Linear: max issues per prompt</div>
-              <input id="settingsIntegrationsLinearMaxIssuesPerPrompt" class="input" type="number" min="1" max="10" step="1" />
-            </label>
-            <label class="field field--row">
-              <input id="settingsIntegrationsLinearIncludeDescription" type="checkbox" />
-              <div class="field__label field__label--inline">Include issue description in prompt context</div>
-            </label>
-
-            <div class="settings__divider"></div>
-
-            <div class="settings__groupTitle">GitHub</div>
-            <label class="field field--row">
-              <input id="settingsIntegrationsGithubEnabled" type="checkbox" />
-              <div class="field__label field__label--inline">Enable GitHub connector</div>
-            </label>
-            <label class="field">
-              <div class="field__label">GitHub API base URL</div>
-              <input id="settingsIntegrationsGithubApiBaseUrl" class="input" placeholder="https://api.github.com" />
-            </label>
-            <label class="field">
-              <div class="field__label">GitHub token</div>
-              <input
-                id="settingsIntegrationsGithubToken"
-                class="input"
-                type="password"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="ghp_..."
-              />
-            </label>
-            <label class="field">
-              <div class="field__label">GitHub token env var (fallback)</div>
-              <input id="settingsIntegrationsGithubTokenEnvVar" class="input" placeholder="GITHUB_TOKEN" spellcheck="false" />
-            </label>
-            <label class="field">
-              <div class="field__label">GitHub: max issues per prompt</div>
-              <input id="settingsIntegrationsGithubMaxIssuesPerPrompt" class="input" type="number" min="1" max="10" step="1" />
-            </label>
-
-            <div class="settings__divider"></div>
-
-            <div class="settings__groupTitle">Notion</div>
-            <label class="field field--row">
-              <input id="settingsIntegrationsNotionEnabled" type="checkbox" />
-              <div class="field__label field__label--inline">Enable Notion connector</div>
-            </label>
-            <label class="field">
-              <div class="field__label">Notion API base URL</div>
-              <input id="settingsIntegrationsNotionApiBaseUrl" class="input" placeholder="https://api.notion.com/v1" />
-            </label>
-            <label class="field">
-              <div class="field__label">Notion API token</div>
-              <input
-                id="settingsIntegrationsNotionToken"
-                class="input"
-                type="password"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="secret_..."
-              />
-            </label>
-            <label class="field">
-              <div class="field__label">Notion token env var (fallback)</div>
-              <input id="settingsIntegrationsNotionTokenEnvVar" class="input" placeholder="NOTION_API_KEY" spellcheck="false" />
-            </label>
-            <label class="field">
-              <div class="field__label">Notion API version</div>
-              <input id="settingsIntegrationsNotionVersion" class="input" placeholder="2022-06-28" spellcheck="false" />
-            </label>
-            <label class="field">
-              <div class="field__label">Notion: max pages per prompt</div>
-              <input id="settingsIntegrationsNotionMaxPagesPerPrompt" class="input" type="number" min="1" max="8" step="1" />
-            </label>
           </div>
 
           <div class="settings__section">
@@ -801,11 +669,6 @@
                 <option value="pop">Pop</option>
                 <option value="bell">Bell</option>
                 <option value="arcade">Arcade</option>
-                <option value="cucaracha">La Cucaracha</option>
-                <option value="fun_drum">Fun Comedic Drum</option>
-                <option value="pipe">Pipe</option>
-                <option value="sergei">Sergei Spas</option>
-                <option value="pop_wow">Pop Wow</option>
               </select>
             </label>
             <label class="field">
@@ -962,7 +825,6 @@
         </div>
         <div class="dialog__footer">
           <div class="dialog__actions dialog__actions--left">
-            <button id="projectDialogOpenFinderBtn" class="btn btn--ghost" type="button" hidden>Im Finder öffnen</button>
             <button id="projectDialogCheckoutsBtn" class="btn btn--ghost" type="button">Manage checkouts…</button>
             <button id="projectDialogRemoveBtn" class="btn btn--danger" type="button" title="Remove project from the sidebar list">Remove project</button>
           </div>
@@ -1101,26 +963,26 @@
       </div>
     </dialog>
 
-    <button id="helperBubbleBtn" class="helperbubble" type="button" title="Chat (⌘+K)" aria-label="Chat">
-      <span class="helperbubble__label">Chat</span>
+    <button id="helperBubbleBtn" class="helperbubble" type="button" title="Helper chat (⌘+K)" aria-label="Helper chat">
+      <span class="helperbubble__label">Helper</span>
       <span class="helperbubble__kbd">⌘K</span>
     </button>
 
-    <section id="helperPanel" class="helperpanel" aria-label="Chat" hidden>
+    <section id="helperPanel" class="helperpanel" aria-label="Helper chat" hidden>
       <div class="helperpanel__header">
         <div>
-          <div class="helperpanel__title">Chat</div>
+          <div class="helperpanel__title">Helper Chat</div>
           <div id="helperMeta" class="helperpanel__meta">Quick questions without opening a task.</div>
         </div>
         <button id="helperPanelClose" class="btn btn--ghost" type="button">Close</button>
       </div>
       <div class="helperpanel__runner">
-        <select id="helperAgentSelect" class="select" title="Chat runner">
+        <select id="helperAgentSelect" class="select" title="Helper runner">
           <option value="">Auto (Settings)</option>
           <option value="claude">Claude</option>
           <option value="codex">Codex</option>
         </select>
-        <select id="helperContextScopeSelect" class="select" title="Chat context scope">
+        <select id="helperContextScopeSelect" class="select" title="Helper context scope">
           <option value="project">Context: Project</option>
           <option value="global">Context: Global</option>
         </select>
@@ -1130,6 +992,7 @@
         <textarea id="helperInput" class="textarea textarea--sm" rows="3" placeholder="Ask quickly… (⌘+Enter to send)"></textarea>
         <div class="helperpanel__actions">
           <button id="helperToPromptBtn" class="btn btn--ghost" type="button">Use in prompt</button>
+          <button id="helperCreateTaskBtn" class="btn btn--ghost" type="button">Start ticket</button>
           <button id="helperSendBtn" class="btn btn--primary" type="button">Ask</button>
         </div>
       </div>
