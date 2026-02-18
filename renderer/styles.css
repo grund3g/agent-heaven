@@ -359,7 +359,7 @@ body::before {
   flex-direction: column;
   gap: 16px;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 @keyframes brandIn {
@@ -450,6 +450,11 @@ body::before {
   gap: 10px;
 }
 
+.sidebar__section--projects {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .sidebar__section--bottom {
   margin-top: auto;
 }
@@ -538,6 +543,9 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 
 .project {
