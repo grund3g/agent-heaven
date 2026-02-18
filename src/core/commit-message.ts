@@ -216,6 +216,16 @@ function looksDocsLikeText(s: string): boolean {
   return false;
 }
 
+function looksLowSignalChangeText(s: string): boolean {
+  const low = oneLine(s).toLowerCase();
+  if (!low) return true;
+  if (low === "local changes") return true;
+  if (low === "update local changes") return true;
+  if (low === "update files" || low === "update file") return true;
+  if (/^(update|updates|bump|bumps|change|changes)\b/.test(low)) return true;
+  return false;
+}
+
 function inferConventionalType(paths: string[], typeHint: ConventionalType | "", taskSummary: string): ConventionalType {
   const has = paths.length > 0;
   const docsOnly = has && paths.every(isDocsPath);
@@ -230,11 +240,15 @@ function inferConventionalType(paths: string[], typeHint: ConventionalType | "",
   const depsOnly = has && paths.every(isDepsPath);
   if (depsOnly) return "chore";
 
-  if (typeHint) return typeHint;
+  if (typeHint) {
+    if (typeHint === "feat" && looksLowSignalChangeText(taskSummary)) return "chore";
+    return typeHint;
+  }
 
   if (looksFixLikeText(taskSummary)) return "fix";
   if (looksRefactorLikeText(taskSummary)) return "refactor";
   if (looksDocsLikeText(taskSummary)) return "docs";
+  if (looksLowSignalChangeText(taskSummary)) return "chore";
 
   return "feat";
 }
