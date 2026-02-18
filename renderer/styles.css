@@ -2921,6 +2921,99 @@ body::before {
   animation: caretBlink 1.05s steps(1) infinite;
 }
 
+.diffview {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-mono);
+}
+
+.diffview__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.diffview__status {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+
+.diffview__meta {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--muted2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diffview__refresh {
+  flex: 0 0 auto;
+}
+
+.diffview__hints {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.diffview__hint {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.diffview__body {
+  border: 1px solid var(--stroke-strong);
+  border-radius: 10px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.diffline {
+  white-space: pre;
+  padding: 1px 8px;
+  min-height: 1.35em;
+}
+
+.diffline--section {
+  color: var(--muted2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-top: 7px;
+  padding-bottom: 4px;
+}
+
+.diffline--file {
+  color: var(--ink);
+  background: rgba(var(--accent2-rgb), 0.12);
+}
+
+.diffline--hunk {
+  color: rgba(var(--accent-rgb), 0.96);
+  background: rgba(var(--accent-rgb), 0.10);
+}
+
+.diffline--add {
+  color: var(--ink);
+  background: rgba(var(--accent2-rgb), 0.18);
+}
+
+.diffline--del {
+  color: var(--ink);
+  background: rgba(var(--danger-rgb), 0.20);
+}
+
+.diffline--meta {
+  color: var(--muted);
+}
+
 .dialog__footer {
   padding: 12px 14px;
   border-top: 1px solid var(--stroke);

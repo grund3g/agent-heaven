@@ -49,6 +49,7 @@ const api = window.agentHeaven;
   jobDialogChat: document.getElementById("jobDialogChat"),
   jobDialogLive: document.getElementById("jobDialogLive"),
   jobDialogLogs: document.getElementById("jobDialogLogs"),
+  jobDialogDiff: document.getElementById("jobDialogDiff"),
   jobDialogTerm: document.getElementById("jobDialogTerm"),
   jobSearchInput: document.getElementById("jobSearchInput"),
   jobSearchMeta: document.getElementById("jobSearchMeta"),
@@ -345,6 +346,10 @@ const HELPER_SESSION_MESSAGES_MAX = 80;
 const HELPER_SESSION_TEXT_MAX = 4000;
 const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
 const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
+const JOB_DIFF_CACHE_TTL_MS = 25_000;
+const JOB_DIFF_MAX_CHARS = 180_000;
+const jobDiffCache = new Map(); // jobId -> { sig, fetchedAt, payload }
+let jobDiffReqSeq = 0;
 
 let followupAutosizeRaf = 0;
 
@@ -3823,6 +3828,7 @@ function jobSearchablePanelForActiveTab() {
   if (state.activeTab === "chat") return els.jobDialogChat;
   if (state.activeTab === "live") return els.jobDialogLive;
   if (state.activeTab === "logs") return els.jobDialogLogs;
+  if (state.activeTab === "diff") return els.jobDialogDiff;
   return null;
 }
 
@@ -3847,6 +3853,7 @@ function clearJobSearchMarks() {
   clearJobSearchMarksInPanel(els.jobDialogChat);
   clearJobSearchMarksInPanel(els.jobDialogLive);
   clearJobSearchMarksInPanel(els.jobDialogLogs);
+  clearJobSearchMarksInPanel(els.jobDialogDiff);
 }
 
 function collectJobSearchTextNodes(rootEl) {
@@ -8152,6 +8159,7 @@ async function openJobDialog(jobId) {
     els.jobDialogChat.innerHTML = `<div class="logline">Loading…</div>`;
     els.jobDialogLive.innerHTML = `<div class="logline">Loading…</div>`;
     els.jobDialogLogs.innerHTML = `<div class="logline">Loading…</div>`;
+    if (els.jobDialogDiff) els.jobDialogDiff.innerHTML = `<div class="logline">Open Diff to load git changes.</div>`;
     if (els.jobDialogTerm && !termUi.term) {
       els.jobDialogTerm.innerHTML = `<div class="logline">Open this tab to start a shell in the project folder.</div>`;
     }
@@ -8186,6 +8194,7 @@ async function openJobDialog(jobId) {
         els.jobDialogChat.innerHTML = `<div class="logline">Failed to load job details: ${escapeHtml(msg)}</div>`;
         els.jobDialogLive.innerHTML = `<div class="logline">Failed to load job details.</div>`;
         els.jobDialogLogs.innerHTML = `<div class="logline">Failed to load job details.</div>`;
+        if (els.jobDialogDiff) els.jobDialogDiff.innerHTML = `<div class="logline">Failed to load job details.</div>`;
       }
     }
   }
@@ -8256,16 +8265,20 @@ function renderJobDialogMeta(job) {
 }
 
 function setActiveTab(tab) {
-  state.activeTab = tab;
+  const wanted = String(tab || "").trim();
+  const nextTab = wanted === "chat" || wanted === "live" || wanted === "logs" || wanted === "diff" || wanted === "term" ? wanted : "chat";
+  state.activeTab = nextTab;
   document.querySelectorAll(".tab").forEach((t) => {
-    t.classList.toggle("tab--active", t.getAttribute("data-tab") === tab);
+    t.classList.toggle("tab--active", t.getAttribute("data-tab") === nextTab);
   });
-  els.jobDialogChat.classList.toggle("panel--active", tab === "chat");
-  els.jobDialogLive.classList.toggle("panel--active", tab === "live");
-  els.jobDialogLogs.classList.toggle("panel--active", tab === "logs");
-  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", tab === "term");
+  els.jobDialogChat.classList.toggle("panel--active", nextTab === "chat");
+  els.jobDialogLive.classList.toggle("panel--active", nextTab === "live");
+  els.jobDialogLogs.classList.toggle("panel--active", nextTab === "logs");
+  if (els.jobDialogDiff) els.jobDialogDiff.classList.toggle("panel--active", nextTab === "diff");
+  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", nextTab === "term");
   if (els.jobDialog && els.jobDialog.open) applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
-  if (tab === "term") maybeEnsureTerminalForSelectedJob();
+  if (nextTab === "term") maybeEnsureTerminalForSelectedJob();
+  if (nextTab === "diff") loadSelectedJobDiff({ force: false }).catch(() => {});
 }
 
 function isNearBottom(el) {
@@ -8404,6 +8417,172 @@ function renderJobLogsHtml(logs) {
   }
 
   return out.join("") || `<div class="logline">No logs yet.</div>`;
+}
+
+function jobDiffSignature(job) {
+  if (!job || typeof job !== "object") return "";
+  const status = typeof job.status === "string" ? job.status : "";
+  const finishedAt = typeof job.finishedAt === "string" ? job.finishedAt : "";
+  const projectPath = typeof job.projectPath === "string" ? job.projectPath : "";
+  const integratedAt = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt : "";
+  const exitCode = typeof job.exitCode === "number" ? String(job.exitCode) : "";
+  return [status, finishedAt, projectPath, integratedAt, exitCode].join("|");
+}
+
+function diffLineClass(line) {
+  const s = String(line || "");
+  if (!s) return "diffline";
+  if (s.startsWith("# ")) return "diffline diffline--section";
+  if (s.startsWith("diff --git ")) return "diffline diffline--file";
+  if (s.startsWith("@@")) return "diffline diffline--hunk";
+  if (s.startsWith("+") && !s.startsWith("+++")) return "diffline diffline--add";
+  if (s.startsWith("-") && !s.startsWith("---")) return "diffline diffline--del";
+  if (
+    s.startsWith("index ") ||
+    s.startsWith("new file mode ") ||
+    s.startsWith("deleted file mode ") ||
+    s.startsWith("rename from ") ||
+    s.startsWith("rename to ") ||
+    s.startsWith("similarity index ") ||
+    s.startsWith("Binary files ") ||
+    s.startsWith("--- ") ||
+    s.startsWith("+++ ") ||
+    s.startsWith("?? ") ||
+    s.startsWith("... ") ||
+    s.startsWith("\\ No newline at end of file")
+  ) {
+    return "diffline diffline--meta";
+  }
+  return "diffline";
+}
+
+function renderDiffTextHtml(diffText) {
+  const lines = normalizeNewlines(diffText).split("\n");
+  if (lines.length === 1 && !lines[0]) return `<div class="logline">No diff output.</div>`;
+  const rows = lines
+    .map((line) => {
+      const cls = diffLineClass(line);
+      const inner = line ? escapeHtml(line) : "&nbsp;";
+      return `<div class="${cls}">${inner}</div>`;
+    })
+    .join("");
+  return `<div class="diffview__body">${rows}</div>`;
+}
+
+function renderJobDiffPanel(job, payload, opts = {}) {
+  if (!els.jobDialogDiff) return;
+  const o = opts && typeof opts === "object" ? opts : {};
+  const loading = !!o.loading;
+  const error = !!o.error;
+  const message = typeof o.message === "string" ? o.message.trim() : "";
+  const canRefresh = o.showRefresh !== false;
+  const p = payload && typeof payload === "object" ? payload : null;
+
+  const metaBits = [];
+  if (p && typeof p.baseRef === "string" && p.baseRef.trim()) metaBits.push(`base=${p.baseRef.trim()}`);
+  if (p && typeof p.committedRange === "string" && p.committedRange.trim()) metaBits.push(`range=${p.committedRange.trim()}`);
+  if (p && p.hasCommittedChanges === true) metaBits.push("committed=yes");
+  if (p && p.hasWorkingTreeChanges === true) metaBits.push("working_tree=yes");
+  if (p) {
+    const untrackedListed = Array.isArray(p.untrackedFiles) ? p.untrackedFiles.length : 0;
+    const untrackedOmitted = typeof p.untrackedFilesOmitted === "number" ? Math.max(0, Math.trunc(p.untrackedFilesOmitted)) : 0;
+    const untrackedTotal = untrackedListed + untrackedOmitted;
+    if (untrackedTotal > 0) metaBits.push(`untracked=${untrackedTotal}`);
+  }
+  if (p && p.truncated === true) metaBits.push("truncated=yes");
+  const metaText = metaBits.length > 0 ? metaBits.join("  ") : "git diff";
+
+  const statusText = loading ? "Loading…" : error ? "Load failed" : p && p.hasChanges ? "Changes" : "No changes";
+  const cwdTitle = p && typeof p.cwd === "string" ? p.cwd.trim() : "";
+
+  let body = "";
+  if (message) {
+    body = `<div class="logline${error ? " logline--stderr" : ""}">${escapeHtml(message)}</div>`;
+  } else if (p && p.hasChanges === true) {
+    body = renderDiffTextHtml(typeof p.diff === "string" ? p.diff : "");
+  } else {
+    body = `<div class="logline">No code changes detected for this task.</div>`;
+  }
+
+  const hints = p && Array.isArray(p.hints) ? p.hints.map((x) => String(x || "").trim()).filter(Boolean) : [];
+  const hintsHtml = hints.length
+    ? `<div class="diffview__hints">${hints.map((h) => `<div class="diffview__hint">${escapeHtml(h)}</div>`).join("")}</div>`
+    : "";
+
+  const refreshBtn = canRefresh
+    ? `<button type="button" class="btn btn--ghost diffview__refresh" data-job-diff-refresh ${loading ? "disabled" : ""}>Refresh</button>`
+    : "";
+
+  els.jobDialogDiff.innerHTML = `
+    <div class="diffview">
+      <div class="diffview__head">
+        <div class="diffview__status">${escapeHtml(statusText)}</div>
+        <div class="diffview__meta" title="${escapeHtml(cwdTitle)}">${escapeHtml(metaText)}</div>
+        ${refreshBtn}
+      </div>
+      ${hintsHtml}
+      ${body}
+    </div>
+  `;
+}
+
+async function loadSelectedJobDiff(opts = {}) {
+  if (!els.jobDialogDiff) return;
+  const o = opts && typeof opts === "object" ? opts : {};
+  const force = !!o.force;
+  const jobId = String(state.selectedJobId || "").trim();
+  if (!jobId) return;
+  const job = state.jobs.get(jobId);
+  if (!job) return;
+
+  if (isDemoJob(job)) {
+    renderJobDiffPanel(job, null, { message: "Diff view is not available for demo cards.", showRefresh: false });
+    return;
+  }
+  if (!api || typeof api.checkoutsGetDiff !== "function") {
+    renderJobDiffPanel(job, null, { message: "Diff view is not supported in this build.", showRefresh: false });
+    return;
+  }
+  if (job.status === "running" && !force) {
+    renderJobDiffPanel(job, null, {
+      message: "This task is still running. Open this tab after completion or refresh manually.",
+      showRefresh: true
+    });
+    return;
+  }
+
+  const sig = jobDiffSignature(job);
+  const cached = jobDiffCache.get(jobId);
+  const hasFreshCache = !!(cached && cached.sig === sig && Date.now() - cached.fetchedAt <= JOB_DIFF_CACHE_TTL_MS);
+  if (!force && hasFreshCache && cached.payload) {
+    renderJobDiffPanel(job, cached.payload);
+    return;
+  }
+
+  renderJobDiffPanel(job, cached && cached.payload ? cached.payload : null, { loading: true, showRefresh: true });
+  const reqSeq = ++jobDiffReqSeq;
+
+  try {
+    const res = await api.checkoutsGetDiff(jobId, { maxChars: JOB_DIFF_MAX_CHARS });
+    if (reqSeq !== jobDiffReqSeq) return;
+    if (!(els.jobDialog && els.jobDialog.open)) return;
+    if (String(state.selectedJobId || "") !== jobId) return;
+
+    const liveJob = state.jobs.get(jobId) || job;
+    const payload = res && typeof res === "object" ? res : {};
+    jobDiffCache.set(jobId, { sig: jobDiffSignature(liveJob), fetchedAt: Date.now(), payload });
+    renderJobDiffPanel(liveJob, payload);
+
+    if (state.activeTab === "diff" && normalizeJobSearchQuery(state.jobSearchQuery)) {
+      applyJobSearchToActivePanel({ preserveIndex: false, scroll: false });
+    }
+  } catch (err) {
+    if (reqSeq !== jobDiffReqSeq) return;
+    if (!(els.jobDialog && els.jobDialog.open)) return;
+    if (String(state.selectedJobId || "") !== jobId) return;
+    const msg = String(err && err.message ? err.message : err).trim() || "Failed to load git diff.";
+    renderJobDiffPanel(job, cached && cached.payload ? cached.payload : null, { message: msg, error: true, showRefresh: true });
+  }
 }
 
 function renderJobDialogPanels(job) {
@@ -10790,6 +10969,14 @@ function wireUi() {
     if (!thumb) return;
     openImageDialogForThumbEl(e.target);
   });
+  if (els.jobDialogDiff) {
+    els.jobDialogDiff.addEventListener("click", (e) => {
+      const refreshBtn = e.target && e.target.closest ? e.target.closest("[data-job-diff-refresh]") : null;
+      if (!refreshBtn) return;
+      e.preventDefault();
+      loadSelectedJobDiff({ force: true }).catch(() => {});
+    });
+  }
 
   // In job-popout windows, Esc should not leave you with a blank window.
   els.jobDialog.addEventListener("cancel", (e) => {
@@ -10801,6 +10988,7 @@ function wireUi() {
   els.jobDialog.addEventListener("close", () => {
     hideJobMoreMenu();
     clearJobSearch();
+    jobDiffReqSeq += 1; // cancel in-flight diff requests
 
     const jobId = state.selectedJobId;
     if (!jobId) return;

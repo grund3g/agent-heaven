@@ -7,12 +7,20 @@ function truncate(s: string, max = 12_000): string {
   return `${str.slice(0, max)}\n...[truncated ${str.length - max} chars]`;
 }
 
-type RunOpts = { cwd: string; timeoutMs?: number };
+function normalizeNewlines(s: unknown): string {
+  return String(s || "").replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+}
+
+type RunOpts = { cwd: string; timeoutMs?: number; maxOutputChars?: number };
 type RunResult = { ok: boolean; stdout: string; stderr: string; code: number | null; error: string };
 
 async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResult> {
   const cwd = String(opts && opts.cwd ? opts.cwd : "").trim() || process.cwd();
   const timeoutMs = typeof opts.timeoutMs === "number" && Number.isFinite(opts.timeoutMs) ? Math.max(250, opts.timeoutMs) : 8_000;
+  const maxOutputChars =
+    typeof opts.maxOutputChars === "number" && Number.isFinite(opts.maxOutputChars)
+      ? Math.max(2_000, Math.min(500_000, Math.trunc(opts.maxOutputChars)))
+      : 12_000;
 
   return await new Promise((resolve) => {
     let stdout = "";
@@ -36,8 +44,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       }
       resolve({
         ok: false,
-        stdout: truncate(stdout),
-        stderr: truncate(stderr),
+        stdout: truncate(stdout, maxOutputChars),
+        stderr: truncate(stderr, maxOutputChars),
         code: null,
         error: `Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(" ")}`
       });
@@ -54,8 +62,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       clearTimeout(timer);
       resolve({
         ok: false,
-        stdout: truncate(stdout),
-        stderr: truncate(stderr),
+        stdout: truncate(stdout, maxOutputChars),
+        stderr: truncate(stderr, maxOutputChars),
         code: null,
         error: String(err && err.message ? err.message : err)
       });
@@ -66,8 +74,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       done = true;
       clearTimeout(timer);
       const c = typeof code === "number" ? code : 0;
-      const out = truncate(stdout);
-      const err = truncate(stderr);
+      const out = truncate(stdout, maxOutputChars);
+      const err = truncate(stderr, maxOutputChars);
       if (c === 0) resolve({ ok: true, stdout: out, stderr: err, code: c, error: "" });
       else
         resolve({
@@ -346,6 +354,231 @@ export async function listChangedPaths(cwd: string): Promise<string[]> {
     uniq.push(s);
   }
   return uniq;
+}
+
+export type CheckoutReviewDiff = {
+  cwd: string;
+  baseRef: string;
+  mergeBase: string;
+  committedRange: string;
+  hasCommittedChanges: boolean;
+  hasWorkingTreeChanges: boolean;
+  hasChanges: boolean;
+  untrackedFiles: string[];
+  untrackedFilesOmitted: number;
+  truncated: boolean;
+  hints: string[];
+  diff: string;
+};
+
+function normalizeInt(value: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+async function tryGitStdout(args: string[], opts: RunOpts): Promise<string> {
+  try {
+    return await gitOkStdout(args, opts);
+  } catch {
+    return "";
+  }
+}
+
+async function gitRefResolvable(cwd: string, ref: string): Promise<boolean> {
+  const r = String(ref || "").trim();
+  if (!r) return false;
+  const res = await git(["rev-parse", "--verify", "--quiet", `${r}^{commit}`], {
+    cwd,
+    timeoutMs: 2_500,
+    maxOutputChars: 1_200
+  });
+  return !!res.ok;
+}
+
+function addRefCandidate(out: string[], seen: Set<string>, value: unknown): void {
+  const s = typeof value === "string" ? value.trim() : "";
+  if (!s) return;
+  if (seen.has(s)) return;
+  seen.add(s);
+  out.push(s);
+}
+
+async function resolveDiffBaseRef(cwd: string, preferredBranch: string): Promise<string> {
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const branch = String(preferredBranch || "").trim();
+  if (branch) {
+    addRefCandidate(candidates, seen, branch);
+    addRefCandidate(candidates, seen, `origin/${branch}`);
+    addRefCandidate(candidates, seen, `refs/heads/${branch}`);
+    addRefCandidate(candidates, seen, `refs/remotes/origin/${branch}`);
+  }
+
+  const originHead = await tryGitStdout(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], {
+    cwd,
+    timeoutMs: 2_500,
+    maxOutputChars: 1_200
+  });
+  if (originHead) {
+    addRefCandidate(candidates, seen, originHead);
+    if (originHead.startsWith("origin/")) {
+      addRefCandidate(candidates, seen, originHead.slice("origin/".length));
+    }
+  }
+
+  const upstream = await tryGitStdout(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], {
+    cwd,
+    timeoutMs: 2_500,
+    maxOutputChars: 1_200
+  });
+  if (upstream) {
+    addRefCandidate(candidates, seen, upstream);
+    if (upstream.startsWith("origin/")) addRefCandidate(candidates, seen, upstream.slice("origin/".length));
+  }
+
+  for (const candidate of candidates) {
+    if (await gitRefResolvable(cwd, candidate)) return candidate;
+  }
+  return "";
+}
+
+export async function buildCheckoutReviewDiff(
+  cwd: string,
+  opts?: { defaultBranch?: string; maxChars?: number; maxUntrackedFiles?: number }
+): Promise<CheckoutReviewDiff> {
+  const dir = String(cwd || "").trim() || process.cwd();
+  const maxChars = normalizeInt(opts && opts.maxChars, 160_000, 20_000, 400_000);
+  const maxUntrackedFiles = normalizeInt(opts && opts.maxUntrackedFiles, 40, 0, 400);
+  const preferredBase = String(opts && opts.defaultBranch ? opts.defaultBranch : "").trim();
+
+  const info = await getGitInfo(dir);
+  if (!info.isGitRepo) throw new Error(`Checkout is not a git repo: ${dir}`);
+
+  const hints: string[] = [];
+  const baseRef = await resolveDiffBaseRef(dir, preferredBase);
+  if (!baseRef) hints.push("Base branch could not be resolved; showing working tree changes only.");
+
+  const headSha = await tryGitStdout(["rev-parse", "HEAD"], { cwd: dir, timeoutMs: 2_500, maxOutputChars: 1_200 });
+  let mergeBase = "";
+  if (baseRef) {
+    mergeBase = await tryGitStdout(["merge-base", "HEAD", baseRef], { cwd: dir, timeoutMs: 4_000, maxOutputChars: 1_200 });
+    if (!mergeBase) hints.push(`Could not compute merge-base against ${baseRef}.`);
+  }
+
+  let committedRange = "";
+  let committedDiff = "";
+  if (mergeBase && headSha && mergeBase !== headSha) {
+    committedRange = `${mergeBase.slice(0, 12)}..HEAD`;
+    const committedRes = await git(
+      ["diff", "--no-color", "--patch", "--find-renames", "--submodule=short", `${mergeBase}..HEAD`],
+      { cwd: dir, timeoutMs: 20_000, maxOutputChars: maxChars }
+    );
+    if (!committedRes.ok) throw new Error(committedRes.error);
+    committedDiff = normalizeNewlines(committedRes.stdout || "").trimEnd();
+  }
+
+  let workingTreeDiff = "";
+  if (headSha) {
+    const workingRes = await git(["diff", "--no-color", "--patch", "--find-renames", "--submodule=short", "HEAD"], {
+      cwd: dir,
+      timeoutMs: 20_000,
+      maxOutputChars: maxChars
+    });
+    if (!workingRes.ok) throw new Error(workingRes.error);
+    workingTreeDiff = normalizeNewlines(workingRes.stdout || "").trimEnd();
+  } else {
+    hints.push("Repository has no commits yet; showing staged/unstaged changes.");
+    const stagedRes = await git(["diff", "--no-color", "--patch", "--find-renames", "--submodule=short", "--cached"], {
+      cwd: dir,
+      timeoutMs: 20_000,
+      maxOutputChars: maxChars
+    });
+    if (!stagedRes.ok) throw new Error(stagedRes.error);
+    const unstagedRes = await git(["diff", "--no-color", "--patch", "--find-renames", "--submodule=short"], {
+      cwd: dir,
+      timeoutMs: 20_000,
+      maxOutputChars: maxChars
+    });
+    if (!unstagedRes.ok) throw new Error(unstagedRes.error);
+
+    const stagedDiff = normalizeNewlines(stagedRes.stdout || "").trimEnd();
+    const unstagedDiff = normalizeNewlines(unstagedRes.stdout || "").trimEnd();
+    const sections: string[] = [];
+    if (stagedDiff) {
+      sections.push("# staged changes");
+      sections.push(stagedDiff);
+    }
+    if (unstagedDiff) {
+      sections.push("# unstaged changes");
+      sections.push(unstagedDiff);
+    }
+    workingTreeDiff = sections.join("\n\n").trimEnd();
+  }
+
+  const untrackedRaw = await tryGitStdout(["ls-files", "--others", "--exclude-standard"], {
+    cwd: dir,
+    timeoutMs: 6_000,
+    maxOutputChars: 120_000
+  });
+  const allUntrackedFiles = normalizeNewlines(untrackedRaw)
+    .split("\n")
+    .map((s) => String(s || "").trim())
+    .filter(Boolean);
+  const untrackedFiles = maxUntrackedFiles > 0 ? allUntrackedFiles.slice(0, maxUntrackedFiles) : [];
+  const untrackedFilesOmitted = Math.max(0, allUntrackedFiles.length - untrackedFiles.length);
+
+  const parts: string[] = [];
+  if (committedDiff) {
+    const rangeLabel = committedRange || "merge-base..HEAD";
+    parts.push(`# committed changes (${rangeLabel})`);
+    parts.push(committedDiff);
+  }
+  if (workingTreeDiff) {
+    parts.push("# uncommitted changes (working tree vs HEAD)");
+    parts.push(workingTreeDiff);
+  }
+  if (untrackedFiles.length > 0 || untrackedFilesOmitted > 0) {
+    parts.push("# untracked files");
+    for (const rel of untrackedFiles) parts.push(`?? ${rel}`);
+    if (untrackedFilesOmitted > 0) {
+      parts.push(`... ${untrackedFilesOmitted} more untracked file${untrackedFilesOmitted === 1 ? "" : "s"} omitted`);
+    }
+  }
+
+  let diff = parts.join("\n\n").trimEnd();
+  let truncated = false;
+  if (diff.length > maxChars) {
+    truncated = true;
+    const omitted = diff.length - maxChars;
+    diff = `${diff.slice(0, maxChars).trimEnd()}\n\n...[truncated ${omitted} chars]`;
+  }
+  if (
+    committedDiff.includes("...[truncated ") ||
+    workingTreeDiff.includes("...[truncated ") ||
+    untrackedRaw.includes("...[truncated ")
+  ) {
+    truncated = true;
+  }
+
+  const hasCommittedChanges = !!committedDiff;
+  const hasWorkingTreeChanges = !!workingTreeDiff || allUntrackedFiles.length > 0;
+  const hasChanges = hasCommittedChanges || hasWorkingTreeChanges;
+
+  return {
+    cwd: dir,
+    baseRef,
+    mergeBase,
+    committedRange,
+    hasCommittedChanges,
+    hasWorkingTreeChanges,
+    hasChanges,
+    untrackedFiles,
+    untrackedFilesOmitted,
+    truncated,
+    hints,
+    diff
+  };
 }
 
 export async function addAll(cwd: string): Promise<void> {

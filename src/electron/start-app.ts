@@ -29,6 +29,7 @@ import { normalizeBranchName } from "../core/git-normalize";
 import { spawnPlatform } from "../platform-spawn";
 import {
   addAll,
+  buildCheckoutReviewDiff,
   cherryPick,
   commitWithMessage,
   detectDefaultBranch,
@@ -2161,6 +2162,48 @@ export async function startApp(): Promise<void> {
       forceEnglish
     });
     return { ok: true, suggestion };
+  });
+
+  ipcMain.handle("checkouts:getDiff", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    const jobId = String(p.jobId || "").trim();
+    if (!jobId) return { ok: false, error: "Missing jobId" };
+
+    const got = jobsManager.getJob(jobId);
+    if (!got || typeof got !== "object" || (got as any).ok !== true) return got;
+    const job = (got as any).job || {};
+
+    const sourceDir = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!sourceDir) return { ok: false, error: "Job is missing projectPath" };
+    if (!fs.existsSync(sourceDir)) return { ok: false, error: `Checkout path does not exist: ${sourceDir}` };
+
+    const info = await getGitInfo(sourceDir);
+    if (!info.isGitRepo) return { ok: false, error: `Checkout is not a git repo: ${sourceDir}` };
+
+    const maxCharsRaw = Number(p.maxChars);
+    const maxChars = Number.isFinite(maxCharsRaw) ? Math.max(20_000, Math.min(400_000, Math.trunc(maxCharsRaw))) : 160_000;
+    const maxUntrackedRaw = Number(p.maxUntrackedFiles);
+    const maxUntrackedFiles = Number.isFinite(maxUntrackedRaw) ? Math.max(0, Math.min(400, Math.trunc(maxUntrackedRaw))) : 40;
+
+    const projectId = String(job.projectId || "").trim();
+    const project = projectId ? store.listProjects().find((x: any) => x && String(x.id || "").trim() === projectId) || null : null;
+    const configuredDefaultBranch = normalizeBranchName(project && typeof project.defaultBranch === "string" ? project.defaultBranch : "");
+
+    try {
+      const out = await buildCheckoutReviewDiff(sourceDir, {
+        defaultBranch: configuredDefaultBranch,
+        maxChars,
+        maxUntrackedFiles
+      });
+      return {
+        ok: true,
+        ...out,
+        generatedAt: new Date().toISOString()
+      };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
   });
 
   ipcMain.handle("checkouts:commit", async (evt, payload) => {

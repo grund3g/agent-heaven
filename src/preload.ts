@@ -112,6 +112,15 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     await invokeOk("checkouts:remove", { projectId, kind, jobId });
     return true;
   },
+  checkoutsGetDiff: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:getDiff", {
+      jobId,
+      maxChars: p.maxChars,
+      maxUntrackedFiles: p.maxUntrackedFiles
+    });
+    return res;
+  },
   checkoutsIntegrateToDefault: async (jobId, opts) => {
     const p = opts && typeof opts === "object" ? opts : {};
     const res = await invokeOk("checkouts:integrateToDefault", {
