@@ -10082,7 +10082,6 @@ async function askHelperFromInput() {
   } catch (err) {
     const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
     helperPushMessage("assistant", `Error: ${msg}`);
-    syncActiveHelperSessionFromState({ touch: false });
     helperSetMeta("Chat request failed.");
   } finally {
     state.helperPending = false;
