@@ -1317,6 +1317,11 @@ body::before {
   white-space: nowrap;
 }
 
+/* In board cards this is the last item in the top row; nudge it to align tighter with the right edge. */
+.card__top > .card__context:last-child {
+  margin-right: -3px;
+}
+
 .card__contextStepper {
   position: relative;
   width: 40px;
