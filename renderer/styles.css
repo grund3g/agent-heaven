@@ -1906,7 +1906,7 @@ body::before {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
-  align-items: end;
+  align-items: flex-end;
   min-width: 0;
 }
 
@@ -1916,7 +1916,7 @@ body::before {
 
 .followup__row .btn {
   white-space: nowrap;
-  align-self: end;
+  align-self: flex-end;
 }
 
 @media (max-width: 640px) {
@@ -2872,7 +2872,7 @@ body::before {
     "follow actions"
     "attach attach";
   /* Align controls to the bottom edge of the follow-up textarea. */
-  align-items: end;
+  align-items: flex-end;
 }
 
 .dialog__footer--job .followup {
@@ -2881,7 +2881,7 @@ body::before {
 
 .dialog__footer--job .dialog__actions {
   grid-area: actions;
-  align-self: end;
+  align-self: flex-end;
   flex-wrap: nowrap;
   align-items: flex-end;
 }
