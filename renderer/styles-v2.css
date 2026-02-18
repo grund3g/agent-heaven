@@ -1264,6 +1264,14 @@ body::before {
   background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.5), rgba(var(--accent-rgb), 0.85));
 }
 
+.card__contextFill.card__contextFill--warning {
+  background: linear-gradient(90deg, rgba(255, 214, 102, 0.58), rgba(255, 184, 76, 0.9));
+}
+
+.card__contextFill.card__contextFill--danger {
+  background: linear-gradient(90deg, rgba(var(--danger-rgb), 0.55), rgba(var(--danger-rgb), 0.9));
+}
+
 .card__contextStepper::after {
   content: "";
   position: absolute;

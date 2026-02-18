@@ -5942,7 +5942,14 @@ function updateCardEl(job) {
       ctxEl.hidden = false;
       ctxEl.title = oneLine(ctx.title);
       const fillEl = ctxEl.querySelector("[data-job-context-fill]");
-      if (fillEl && fillEl.style) fillEl.style.width = `${ctx.fillPct.toFixed(2)}%`;
+      if (fillEl) {
+        if (fillEl.style) fillEl.style.width = `${ctx.fillPct.toFixed(2)}%`;
+        if (fillEl.classList) {
+          fillEl.classList.remove("card__contextFill--warning", "card__contextFill--danger");
+          if (ctx.tone === "warning") fillEl.classList.add("card__contextFill--warning");
+          if (ctx.tone === "danger") fillEl.classList.add("card__contextFill--danger");
+        }
+      }
       const pctEl = ctxEl.querySelector("[data-job-context-pct]");
       if (pctEl) pctEl.textContent = ctx.pctText;
     }
@@ -11316,22 +11323,25 @@ function jobContextStepper(job) {
 
   const rawPct = clampNumber(ctx.percent, 0, 100_000, 0);
   const fillPct = clampNumber(rawPct, 0, 100, 0);
+  const tone = rawPct >= 90 ? "danger" : rawPct >= 75 ? "warning" : "normal";
   const pctText = `${Math.round(rawPct)}%`;
   const title = `context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
 
-  return { fillPct, pctText, title };
+  return { fillPct, pctText, title, tone };
 }
 
 function renderCardContextStepper(ctx) {
   if (!ctx || typeof ctx !== "object") return "";
   const fillPct = clampNumber(ctx.fillPct, 0, 100, 0);
+  const tone = String(ctx.tone || "normal");
+  const toneCls = tone === "danger" ? " card__contextFill--danger" : tone === "warning" ? " card__contextFill--warning" : "";
   const pctText = typeof ctx.pctText === "string" ? ctx.pctText : "";
   const title = typeof ctx.title === "string" ? ctx.title : "";
 
   return `
         <div class="card__context" data-job-context title="${escapeHtml(oneLine(title))}">
           <span class="card__contextStepper" aria-hidden="true">
-            <span class="card__contextFill" data-job-context-fill style="width:${fillPct.toFixed(2)}%"></span>
+            <span class="card__contextFill${toneCls}" data-job-context-fill style="width:${fillPct.toFixed(2)}%"></span>
           </span>
           <span class="card__contextPct" data-job-context-pct>${escapeHtml(pctText)}</span>
         </div>
