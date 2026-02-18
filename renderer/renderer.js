@@ -522,9 +522,17 @@ const FIXED_LOGO_VARIANT = "v1";
 const UI_MODEL_CUSTOM = "__custom__";
 
 const SORT_MODES = ["lane_newest", "lane_oldest", "duration_longest", "created_newest", "created_oldest"];
+const TOKEN_TOOLTIP_ATTR = "data-ah-tooltip";
 
 let systemSchemeMql = null;
 let appliedLogoVariant = "";
+const tokenTooltip = {
+  root: null,
+  textEl: null,
+  activeEl: null,
+  raf: 0,
+  observer: null
+};
 
 function normalizeLaneKey(value) {
   const v = String(value || "")
@@ -789,6 +797,236 @@ function clampNumber(n, min, max, fallback) {
   const x = typeof n === "number" ? n : Number(n);
   if (!Number.isFinite(x)) return fallback;
   return Math.max(min, Math.min(max, x));
+}
+
+function tooltipTextFromElement(el) {
+  if (!el || typeof el.getAttribute !== "function") return "";
+  const raw = el.getAttribute(TOKEN_TOOLTIP_ATTR);
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function stashNativeTitle(el) {
+  if (!el || typeof el.hasAttribute !== "function") return;
+  if (!el.hasAttribute("title")) return;
+  const raw = el.getAttribute("title");
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (text) el.setAttribute(TOKEN_TOOLTIP_ATTR, raw);
+  else el.removeAttribute(TOKEN_TOOLTIP_ATTR);
+  el.removeAttribute("title");
+}
+
+function stashTitlesInTree(root) {
+  if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+  const el = root;
+  stashNativeTitle(el);
+  if (!el.querySelectorAll) return;
+  const matches = el.querySelectorAll("[title]");
+  for (const node of matches) stashNativeTitle(node);
+}
+
+function ensureTokenTooltipEl() {
+  if (tokenTooltip.root) return tokenTooltip.root;
+  if (!document || !document.body) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "tokenTooltip";
+  wrap.setAttribute("role", "tooltip");
+  wrap.hidden = true;
+  const text = document.createElement("div");
+  text.className = "tokenTooltip__text";
+  wrap.appendChild(text);
+  document.body.appendChild(wrap);
+  tokenTooltip.root = wrap;
+  tokenTooltip.textEl = text;
+  return wrap;
+}
+
+function hideTokenTooltip() {
+  if (tokenTooltip.raf) {
+    try {
+      window.cancelAnimationFrame(tokenTooltip.raf);
+    } catch {
+      // ignore
+    }
+    tokenTooltip.raf = 0;
+  }
+  tokenTooltip.activeEl = null;
+  if (!tokenTooltip.root) return;
+  tokenTooltip.root.hidden = true;
+  tokenTooltip.root.removeAttribute("data-open");
+}
+
+function positionTokenTooltip() {
+  const root = tokenTooltip.root;
+  const activeEl = tokenTooltip.activeEl;
+  if (!root || !activeEl) return;
+  if (!document.body || !document.body.contains(activeEl)) {
+    hideTokenTooltip();
+    return;
+  }
+
+  const text = tooltipTextFromElement(activeEl);
+  if (!text) {
+    hideTokenTooltip();
+    return;
+  }
+  if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
+
+  root.hidden = false;
+  root.setAttribute("data-open", "true");
+  root.style.left = "0px";
+  root.style.top = "0px";
+
+  const gap = 10;
+  const pad = 8;
+  const targetRect = activeEl.getBoundingClientRect();
+  const tipRect = root.getBoundingClientRect();
+
+  let left = targetRect.left + targetRect.width / 2 - tipRect.width / 2;
+  left = clampNumber(left, pad, window.innerWidth - tipRect.width - pad, pad);
+
+  let top = targetRect.top - tipRect.height - gap;
+  if (!Number.isFinite(top) || top < pad) top = targetRect.bottom + gap;
+  top = clampNumber(top, pad, window.innerHeight - tipRect.height - pad, pad);
+
+  root.style.left = `${Math.round(left)}px`;
+  root.style.top = `${Math.round(top)}px`;
+}
+
+function scheduleTokenTooltipPosition() {
+  if (tokenTooltip.raf) return;
+  tokenTooltip.raf = window.requestAnimationFrame(() => {
+    tokenTooltip.raf = 0;
+    positionTokenTooltip();
+  });
+}
+
+function tooltipTargetFromNode(node) {
+  const start = node && node.nodeType === Node.ELEMENT_NODE ? node : node && node.parentElement ? node.parentElement : null;
+  if (!start || typeof start.closest !== "function") return null;
+  const target = start.closest(`[${TOKEN_TOOLTIP_ATTR}], [title]`);
+  if (!target || target === tokenTooltip.root) return null;
+  stashNativeTitle(target);
+  return tooltipTextFromElement(target) ? target : null;
+}
+
+function showTokenTooltipFor(target) {
+  if (!target) {
+    hideTokenTooltip();
+    return;
+  }
+  stashNativeTitle(target);
+  const text = tooltipTextFromElement(target);
+  if (!text) {
+    hideTokenTooltip();
+    return;
+  }
+  if (!ensureTokenTooltipEl()) return;
+  tokenTooltip.activeEl = target;
+  if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
+  scheduleTokenTooltipPosition();
+}
+
+function removedNodeContains(node, target) {
+  if (!node || !target) return false;
+  if (node === target) return true;
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  return !!(node.contains && node.contains(target));
+}
+
+function setupTokenTooltips() {
+  if (!document || !document.body) return;
+  stashTitlesInTree(document.body);
+
+  document.addEventListener("pointerover", (e) => {
+    const target = tooltipTargetFromNode(e.target);
+    if (target) {
+      showTokenTooltipFor(target);
+      return;
+    }
+    if (!tokenTooltip.activeEl) return;
+    const next = tooltipTargetFromNode(e.relatedTarget);
+    if (!next) hideTokenTooltip();
+  });
+
+  document.addEventListener("pointerout", (e) => {
+    if (!tokenTooltip.activeEl) return;
+    const next = tooltipTargetFromNode(e.relatedTarget);
+    if (next) {
+      showTokenTooltipFor(next);
+      return;
+    }
+    hideTokenTooltip();
+  });
+
+  document.addEventListener("focusin", (e) => {
+    const target = tooltipTargetFromNode(e.target);
+    if (target) showTokenTooltipFor(target);
+  });
+
+  document.addEventListener("focusout", (e) => {
+    if (!tokenTooltip.activeEl) return;
+    const next = tooltipTargetFromNode(e.relatedTarget);
+    if (next) {
+      showTokenTooltipFor(next);
+      return;
+    }
+    hideTokenTooltip();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e && e.key === "Escape") hideTokenTooltip();
+  });
+
+  window.addEventListener("blur", () => hideTokenTooltip());
+  window.addEventListener("resize", () => scheduleTokenTooltipPosition());
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (!tokenTooltip.activeEl) return;
+      scheduleTokenTooltipPosition();
+    },
+    true
+  );
+
+  if (typeof MutationObserver !== "function") return;
+  tokenTooltip.observer = new MutationObserver((mutations) => {
+    let shouldReposition = false;
+    for (const m of mutations) {
+      if (!m) continue;
+      if (m.type === "attributes" && m.target && m.target.nodeType === Node.ELEMENT_NODE) {
+        const el = m.target;
+        if (m.attributeName === "title") stashNativeTitle(el);
+        if (el === tokenTooltip.activeEl && (m.attributeName === TOKEN_TOOLTIP_ATTR || m.attributeName === "title")) {
+          const text = tooltipTextFromElement(el);
+          if (!text) {
+            hideTokenTooltip();
+            continue;
+          }
+          if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
+          shouldReposition = true;
+        }
+        continue;
+      }
+
+      if (m.type !== "childList") continue;
+      for (const node of m.addedNodes || []) stashTitlesInTree(node);
+      if (!tokenTooltip.activeEl) continue;
+      for (const node of m.removedNodes || []) {
+        if (removedNodeContains(node, tokenTooltip.activeEl)) {
+          hideTokenTooltip();
+          break;
+        }
+      }
+    }
+    if (shouldReposition) scheduleTokenTooltipPosition();
+  });
+
+  tokenTooltip.observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["title", TOKEN_TOOLTIP_ATTR]
+  });
 }
 
 function accelKeyFromEvent(e) {
@@ -5637,12 +5875,9 @@ function renderCard(job) {
   const title = jobDisplayTitle(job);
   const projColor = projectColorById(job.projectId) || "transparent";
   const dur = job.integratingToDefault === true ? "Integrating…" : isRunningUi ? jobElapsedText(job) : "";
-  const durHiddenAttr = isRunningUi ? "" : " hidden";
-  const tok = jobTokensCardText(job);
-  const tokHiddenAttr = tok ? "" : " hidden";
-  const tokText = tok ? tok.text : "";
-  const tokTitle = tok ? tok.title : "";
-  const metaHiddenAttr = isRunningUi || tok ? "" : " hidden";
+  const showDuration = job.integratingToDefault === true || isRunningUi;
+  const durHiddenAttr = showDuration ? "" : " hidden";
+  const metaHiddenAttr = showDuration ? "" : " hidden";
   const ctx = jobContextStepper(job);
   // On the Board, the lane already conveys status (Running/Needs Attention/Done).
   // Keep the pill for non-board views (Archive/Trash) where lanes aren't status-based.
@@ -5665,7 +5900,6 @@ function renderCard(job) {
       </div>
       <div class="card__preview${liveCls}">${renderMarkdownInlineSafeHtml(prev.text || "…")}</div>
       <div class="card__meta"${metaHiddenAttr} data-job-meta>
-        <div class="card__tokens"${tokHiddenAttr} data-job-tokens title="${escapeHtml(oneLine(tokTitle))}">${escapeHtml(tokText)}</div>
         <div class="card__duration"${durHiddenAttr} data-job-duration>${escapeHtml(dur)}</div>
       </div>
     </article>
@@ -6013,35 +6247,13 @@ function updateCardEl(job) {
     }
   }
 
-  let tokEl = existing.querySelector("[data-job-tokens]");
-  if (!tokEl) {
-    const metaWrap = ensureMetaWrap();
-    if (metaWrap) {
-      tokEl = document.createElement("div");
-      tokEl.className = "card__tokens";
-      tokEl.setAttribute("data-job-tokens", "");
-      tokEl.hidden = true;
-      metaWrap.appendChild(tokEl);
-    }
-  }
-  if (tokEl) {
-    const tok = jobTokensCardText(job);
-    if (tok) {
-      tokEl.hidden = false;
-      tokEl.textContent = tok.text;
-      tokEl.title = tok.title || "";
-    } else {
-      tokEl.hidden = true;
-      tokEl.textContent = "";
-      tokEl.title = "";
-    }
-  }
+  const staleTokEl = existing.querySelector("[data-job-tokens]");
+  if (staleTokEl) staleTokEl.remove();
 
   const metaWrap = existing.querySelector("[data-job-meta]");
   if (metaWrap) {
-    const hideTokens = !tokEl || tokEl.hidden;
     const hideDuration = !durEl || durEl.hidden;
-    metaWrap.hidden = hideTokens && hideDuration;
+    metaWrap.hidden = hideDuration;
   }
 
   const previewEl = existing.querySelector(".card__preview");
@@ -11355,7 +11567,10 @@ function jobContextStepper(job) {
   const fillPct = clampNumber(rawPct, 0, 100, 0);
   const tone = rawPct >= 90 ? "danger" : rawPct >= 75 ? "warning" : "normal";
   const pctText = `${Math.round(rawPct)}%`;
-  const title = `context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
+  const titleBits = [`context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`];
+  const tok = jobTokensCardText(job);
+  if (tok && tok.title) titleBits.push(tok.title);
+  const title = titleBits.join("  ·  ");
 
   return { fillPct, pctText, title, tone };
 }
@@ -12662,6 +12877,7 @@ async function init() {
   }
 
   wireUi();
+  setupTokenTooltips();
   wireOfflineToast();
   wireSystemColorSchemeListener();
   state.sortMode = normalizeSortMode(getStoredSortMode());
