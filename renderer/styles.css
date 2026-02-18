@@ -3410,6 +3410,12 @@ body::before {
   gap: 8px;
 }
 
+.helperpanel__sessions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
 .helperpanel__messages {
   border: 1px solid var(--stroke);
   border-radius: 14px;
@@ -3498,6 +3504,10 @@ body::before {
   }
 
   .helperpanel__runner {
+    grid-template-columns: 1fr;
+  }
+
+  .helperpanel__sessions {
     grid-template-columns: 1fr;
   }
 }

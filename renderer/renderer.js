@@ -222,6 +222,9 @@ const api = window.agentHeaven;
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
   helperContextScopeSelect: document.getElementById("helperContextScopeSelect"),
+  helperSessionSelect: document.getElementById("helperSessionSelect"),
+  helperNewSessionBtn: document.getElementById("helperNewSessionBtn"),
+  helperClearSessionBtn: document.getElementById("helperClearSessionBtn"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
@@ -282,6 +285,8 @@ const state = {
 
   helperOpen: false,
   helperPending: false,
+  helperSessions: [],
+  helperSessionId: "",
   helperMessages: [],
   helperLastRunner: ""
 };
@@ -302,6 +307,7 @@ const STORAGE = {
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
   onboardingSeen: "agentHeaven.onboarding.seen.v1",
   helperHistory: "agentHeaven.helper.history.v1",
+  helperSessions: "agentHeaven.helper.sessions.v2",
   helperContextScope: "agentHeaven.helper.contextScope.v1"
 };
 
@@ -332,6 +338,9 @@ const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
 const HELPER_CONTEXT_GLOBAL_VALUE = "global";
 const HELPER_CONTEXT_PROJECT_PREFIX = "project:";
+const HELPER_SESSION_MAX = 12;
+const HELPER_SESSION_MESSAGES_MAX = 80;
+const HELPER_SESSION_TEXT_MAX = 4000;
 const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
 const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
 
@@ -1229,43 +1238,128 @@ function helperPersistHistoryFromSettings(settings = state.settings) {
   return s.helperPersistHistory !== false;
 }
 
+function normalizeHelperMessageItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
+  if (!role) return null;
+  const text = String(item.text || "").trim();
+  if (!text) return null;
+  return {
+    id: typeof item.id === "string" ? item.id : safeUuid(),
+    role,
+    text: text.slice(0, HELPER_SESSION_TEXT_MAX),
+    ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
+    agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
+    model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
+  };
+}
+
+function normalizeHelperMessages(messages, limit = HELPER_SESSION_MESSAGES_MAX) {
+  const arr = Array.isArray(messages) ? messages : [];
+  const out = [];
+  for (const item of arr) {
+    const next = normalizeHelperMessageItem(item);
+    if (!next) continue;
+    out.push(next);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function helperRunnerFromMessages(messages) {
+  const arr = Array.isArray(messages) ? messages : [];
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const m = arr[i];
+    if (!m || m.role !== "assistant") continue;
+    const agent = normalizeAgentKey(m.agent || "");
+    if (agent) return agentDisplayName(agent);
+  }
+  return "";
+}
+
+function normalizeHelperSessionRecord(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : safeUuid();
+  const messages = normalizeHelperMessages(item.messages);
+  const fallbackTs = new Date().toISOString();
+  const createdAtRaw = typeof item.createdAt === "string" ? item.createdAt : "";
+  const updatedAtRaw = typeof item.updatedAt === "string" ? item.updatedAt : "";
+  const createdAt = createdAtRaw || (messages.length > 0 && messages[0].ts ? messages[0].ts : fallbackTs);
+  const updatedAt = updatedAtRaw || (messages.length > 0 && messages[messages.length - 1].ts ? messages[messages.length - 1].ts : createdAt);
+  const lastRunnerRaw = typeof item.lastRunner === "string" ? item.lastRunner.trim() : "";
+  const lastRunner = lastRunnerRaw || helperRunnerFromMessages(messages);
+  return { id, createdAt, updatedAt, lastRunner: lastRunner.slice(0, 64), messages };
+}
+
+function normalizeHelperSessions(sessions, activeSessionId = "") {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const next = normalizeHelperSessionRecord(item);
+    if (!next) continue;
+    if (seen.has(next.id)) continue;
+    seen.add(next.id);
+    out.push(next);
+  }
+  out.sort((a, b) => {
+    const ta = Number(new Date(a.updatedAt || a.createdAt || 0).getTime()) || 0;
+    const tb = Number(new Date(b.updatedAt || b.createdAt || 0).getTime()) || 0;
+    return tb - ta;
+  });
+
+  let trimmed = out;
+  if (out.length > HELPER_SESSION_MAX) {
+    if (activeSessionId && out.some((s) => s.id === activeSessionId)) {
+      const keep = out.filter((s) => s.id === activeSessionId).slice(0, 1);
+      const rest = out.filter((s) => s.id !== activeSessionId).slice(0, HELPER_SESSION_MAX - 1);
+      trimmed = [...keep, ...rest];
+      trimmed.sort((a, b) => {
+        const ta = Number(new Date(a.updatedAt || a.createdAt || 0).getTime()) || 0;
+        const tb = Number(new Date(b.updatedAt || b.createdAt || 0).getTime()) || 0;
+        return tb - ta;
+      });
+    } else {
+      trimmed = out.slice(0, HELPER_SESSION_MAX);
+    }
+  }
+
+  let active = String(activeSessionId || "").trim();
+  if (!active || !trimmed.some((s) => s.id === active)) active = trimmed[0] ? trimmed[0].id : "";
+  return { sessions: trimmed, activeSessionId: active };
+}
+
+function createHelperSessionRecord(opts = {}) {
+  const now = new Date().toISOString();
+  const rawMessages = Array.isArray(opts.messages) ? opts.messages : [];
+  const messages = normalizeHelperMessages(rawMessages);
+  const id = typeof opts.id === "string" && opts.id.trim() ? opts.id.trim() : safeUuid();
+  return {
+    id,
+    createdAt: typeof opts.createdAt === "string" && opts.createdAt ? opts.createdAt : now,
+    updatedAt: typeof opts.updatedAt === "string" && opts.updatedAt ? opts.updatedAt : now,
+    lastRunner: typeof opts.lastRunner === "string" ? String(opts.lastRunner).trim().slice(0, 64) : helperRunnerFromMessages(messages),
+    messages
+  };
+}
+
 function clearStoredHelperHistory() {
   try {
     window.localStorage.removeItem(STORAGE.helperHistory);
+    window.localStorage.removeItem(STORAGE.helperSessions);
   } catch {
     // ignore
   }
 }
 
 function storeHelperHistory(messages) {
-  const arr = Array.isArray(messages) ? messages : [];
-  const out = [];
-  for (const item of arr) {
-    if (!item || typeof item !== "object") continue;
-    const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
-    if (!role) continue;
-    const text = String(item.text || "").trim();
-    if (!text) continue;
-    out.push({
-      id: typeof item.id === "string" ? item.id : safeUuid(),
-      role,
-      text: text.slice(0, 12000),
-      ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
-      agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
-      model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
-    });
-    if (out.length >= 80) break;
+  const out = normalizeHelperMessages(messages);
+  if (out.length === 0) {
+    clearStoredHelperHistory();
+    return;
   }
-
-  try {
-    if (out.length === 0) {
-      clearStoredHelperHistory();
-      return;
-    }
-    window.localStorage.setItem(STORAGE.helperHistory, JSON.stringify(out));
-  } catch {
-    // ignore
-  }
+  const seeded = createHelperSessionRecord({ messages: out });
+  storeHelperSessions([seeded], seeded.id);
 }
 
 function getStoredHelperHistory() {
@@ -1274,27 +1368,61 @@ function getStoredHelperHistory() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const arr = Array.isArray(parsed) ? parsed : [];
-    const out = [];
-    for (const item of arr) {
-      if (!item || typeof item !== "object") continue;
-      const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
-      if (!role) continue;
-      const text = String(item.text || "").trim();
-      if (!text) continue;
-      out.push({
-        id: typeof item.id === "string" ? item.id : safeUuid(),
-        role,
-        text: text.slice(0, 12000),
-        ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
-        agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
-        model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
-      });
-      if (out.length >= 80) break;
-    }
-    return out;
+    return normalizeHelperMessages(arr);
   } catch {
     return [];
   }
+}
+
+function storeHelperSessions(sessions, activeSessionId = "") {
+  const normalized = normalizeHelperSessions(sessions, activeSessionId);
+  try {
+    if (!normalized.sessions || normalized.sessions.length === 0) {
+      window.localStorage.removeItem(STORAGE.helperSessions);
+      window.localStorage.removeItem(STORAGE.helperHistory);
+      return;
+    }
+    window.localStorage.setItem(
+      STORAGE.helperSessions,
+      JSON.stringify({
+        sessions: normalized.sessions,
+        activeSessionId: normalized.activeSessionId
+      })
+    );
+    // Keep key cleanup for migrated installs.
+    window.localStorage.removeItem(STORAGE.helperHistory);
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredHelperSessions() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE.helperSessions) || "";
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const sessions = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object" && Array.isArray(parsed.sessions)
+          ? parsed.sessions
+          : [];
+      const activeSessionId = parsed && typeof parsed === "object" ? String(parsed.activeSessionId || "").trim() : "";
+      return normalizeHelperSessions(sessions, activeSessionId);
+    }
+  } catch {
+    // ignore
+  }
+
+  const legacy = getStoredHelperHistory();
+  if (!Array.isArray(legacy) || legacy.length === 0) return { sessions: [], activeSessionId: "" };
+  const seeded = createHelperSessionRecord({
+    messages: legacy,
+    createdAt: legacy[0] && legacy[0].ts ? String(legacy[0].ts) : "",
+    updatedAt: legacy[legacy.length - 1] && legacy[legacy.length - 1].ts ? String(legacy[legacy.length - 1].ts) : ""
+  });
+  const normalized = normalizeHelperSessions([seeded], seeded.id);
+  storeHelperSessions(normalized.sessions, normalized.activeSessionId);
+  return normalized;
 }
 
 function getStoredAgentBinariesToastAtMs() {
@@ -8388,6 +8516,192 @@ function buildHelperContextPayload() {
   };
 }
 
+function helperSessionById(sessionId) {
+  const id = String(sessionId || "").trim();
+  if (!id) return null;
+  return Array.isArray(state.helperSessions) ? state.helperSessions.find((s) => s && s.id === id) || null : null;
+}
+
+function helperSessionPreviewText(session) {
+  const messages = session && Array.isArray(session.messages) ? session.messages : [];
+  const seed = messages.find((m) => m && m.role === "user" && String(m.text || "").trim()) || messages[0];
+  const raw = seed && typeof seed.text === "string" ? oneLine(seed.text) : "";
+  return raw ? truncateText(raw, 56) : "New session";
+}
+
+function helperSessionUpdatedLabel(session) {
+  const raw = session && session.updatedAt ? String(session.updatedAt) : session && session.createdAt ? String(session.createdAt) : "";
+  if (!raw) return "";
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  try {
+    return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return d.toISOString();
+  }
+}
+
+function helperSessionOptionLabel(session, idx) {
+  const title = helperSessionPreviewText(session);
+  const when = helperSessionUpdatedLabel(session);
+  const prefix = `Session ${idx + 1}`;
+  return when ? `${prefix}: ${title} · ${when}` : `${prefix}: ${title}`;
+}
+
+function renderHelperSessionOptions() {
+  if (!els.helperSessionSelect) return;
+  const sessions = Array.isArray(state.helperSessions) ? state.helperSessions : [];
+  if (sessions.length === 0) {
+    els.helperSessionSelect.innerHTML = `<option value="">No sessions</option>`;
+    els.helperSessionSelect.value = "";
+    return;
+  }
+
+  const options = sessions
+    .map((session, idx) => `<option value="${escapeHtml(session.id)}">${escapeHtml(helperSessionOptionLabel(session, idx))}</option>`)
+    .join("");
+  els.helperSessionSelect.innerHTML = options;
+
+  let active = String(state.helperSessionId || "").trim();
+  if (!active || !sessions.some((s) => s && s.id === active)) active = sessions[0].id;
+  state.helperSessionId = active;
+  if (active) els.helperSessionSelect.value = active;
+}
+
+function helperPersistSessionsState() {
+  if (!helperPersistHistoryFromSettings()) {
+    clearStoredHelperHistory();
+    return;
+  }
+  storeHelperSessions(state.helperSessions, state.helperSessionId);
+}
+
+function syncActiveHelperSessionFromState(opts = {}) {
+  const touch = !(opts && opts.touch === false);
+  const persist = !(opts && opts.persist === false);
+
+  state.helperSessions = Array.isArray(state.helperSessions) ? state.helperSessions : [];
+  state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+
+  let activeId = String(state.helperSessionId || "").trim();
+  let active = helperSessionById(activeId);
+  if (!active) {
+    const seeded = createHelperSessionRecord({ messages: state.helperMessages, lastRunner: state.helperLastRunner });
+    state.helperSessions.unshift(seeded);
+    active = seeded;
+    activeId = seeded.id;
+  }
+
+  const normalizedMessages = normalizeHelperMessages(state.helperMessages);
+  const next = {
+    ...active,
+    messages: normalizedMessages,
+    lastRunner: String(state.helperLastRunner || helperRunnerFromMessages(normalizedMessages))
+      .trim()
+      .slice(0, 64)
+  };
+  if (touch) next.updatedAt = new Date().toISOString();
+
+  state.helperSessions = state.helperSessions.map((s) => (s && s.id === activeId ? next : s));
+  const normalized = normalizeHelperSessions(state.helperSessions, activeId);
+  state.helperSessions = normalized.sessions;
+  state.helperSessionId = normalized.activeSessionId;
+
+  if (persist) helperPersistSessionsState();
+}
+
+function loadHelperSessionsFromStorage() {
+  if (!helperPersistHistoryFromSettings()) {
+    clearStoredHelperHistory();
+    const seeded = createHelperSessionRecord({});
+    state.helperSessions = [seeded];
+    state.helperSessionId = seeded.id;
+    state.helperMessages = [];
+    state.helperLastRunner = "";
+    return;
+  }
+
+  const stored = getStoredHelperSessions();
+  if (!Array.isArray(stored.sessions) || stored.sessions.length === 0) {
+    const seeded = createHelperSessionRecord({});
+    state.helperSessions = [seeded];
+    state.helperSessionId = seeded.id;
+    state.helperMessages = [];
+    state.helperLastRunner = "";
+    helperPersistSessionsState();
+    return;
+  }
+
+  state.helperSessions = stored.sessions;
+  state.helperSessionId = stored.activeSessionId || (stored.sessions[0] && stored.sessions[0].id ? stored.sessions[0].id : "");
+  const active = helperSessionById(state.helperSessionId) || stored.sessions[0];
+  state.helperSessionId = active && active.id ? active.id : "";
+  state.helperMessages = active && Array.isArray(active.messages) ? normalizeHelperMessages(active.messages) : [];
+  state.helperLastRunner = String(active && active.lastRunner ? active.lastRunner : helperRunnerFromMessages(state.helperMessages)).trim().slice(0, 64);
+  helperPersistSessionsState();
+}
+
+function helperSelectSession(sessionId, opts = {}) {
+  if (state.helperPending) return false;
+  const id = String(sessionId || "").trim();
+  syncActiveHelperSessionFromState({ touch: false });
+  const next = helperSessionById(id);
+  if (!next) return false;
+  state.helperSessionId = next.id;
+  state.helperMessages = Array.isArray(next.messages) ? normalizeHelperMessages(next.messages) : [];
+  state.helperLastRunner = String(next.lastRunner || helperRunnerFromMessages(state.helperMessages)).trim().slice(0, 64);
+  helperPersistSessionsState();
+  helperSetMeta(helperCurrentMetaStatusText());
+  renderHelperPanel({ forceScroll: true });
+
+  if (opts && opts.focus && els.helperInput) {
+    try {
+      els.helperInput.focus();
+    } catch {
+      // ignore
+    }
+  }
+  return true;
+}
+
+function helperNewSessionNow(opts = {}) {
+  if (state.helperPending) return false;
+  syncActiveHelperSessionFromState({ touch: false });
+
+  const created = createHelperSessionRecord({});
+  const merged = normalizeHelperSessions([created, ...(Array.isArray(state.helperSessions) ? state.helperSessions : [])], created.id);
+  state.helperSessions = merged.sessions;
+  state.helperSessionId = merged.activeSessionId || created.id;
+  state.helperMessages = [];
+  state.helperLastRunner = "";
+  helperPersistSessionsState();
+  helperSetMeta(helperCurrentMetaStatusText());
+  renderHelperPanel({ forceScroll: true });
+
+  if (!(opts && opts.toast === false)) showToast("New chat session started.");
+  if (opts && opts.focus && els.helperInput) {
+    try {
+      els.helperInput.focus();
+    } catch {
+      // ignore
+    }
+  }
+  return true;
+}
+
+function clearHelperCurrentSessionNow(opts = {}) {
+  const showToastMsg = !(opts && opts.toast === false);
+  if (state.helperPending) return false;
+  state.helperMessages = [];
+  state.helperLastRunner = "";
+  syncActiveHelperSessionFromState({ touch: true });
+  helperSetMeta(helperCurrentMetaStatusText());
+  renderHelperPanel({ forceScroll: true });
+  if (showToastMsg) showToast("Current chat session cleared.");
+  return true;
+}
+
 function helperMessagesForApi() {
   const arr = Array.isArray(state.helperMessages) ? state.helperMessages : [];
   return arr
@@ -8414,9 +8728,9 @@ function helperPushMessage(role, text, meta = {}) {
   };
   state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
   state.helperMessages.push(item);
-  const MAX = 80;
+  const MAX = HELPER_SESSION_MESSAGES_MAX;
   if (state.helperMessages.length > MAX) state.helperMessages.splice(0, state.helperMessages.length - MAX);
-  if (helperPersistHistoryFromSettings()) storeHelperHistory(state.helperMessages);
+  syncActiveHelperSessionFromState({ touch: true });
 }
 
 function helperSetMeta(text) {
@@ -8442,6 +8756,7 @@ function renderHelperPanel(opts = {}) {
     els.helperBubbleBtn.setAttribute("aria-pressed", state.helperOpen ? "true" : "false");
   }
   if (els.helperPanel) els.helperPanel.hidden = !state.helperOpen;
+  renderHelperSessionOptions();
   if (!els.helperMessages) return;
 
   const stick = isNearBottom(els.helperMessages);
@@ -8476,6 +8791,9 @@ function renderHelperPanel(opts = {}) {
 
   if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
   if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
+  if (els.helperSessionSelect) els.helperSessionSelect.disabled = !!state.helperPending;
+  if (els.helperNewSessionBtn) els.helperNewSessionBtn.disabled = !!state.helperPending;
+  if (els.helperClearSessionBtn) els.helperClearSessionBtn.disabled = !!state.helperPending || items.length === 0;
   if (els.helperToPromptBtn) {
     els.helperToPromptBtn.hidden = !hasAssistantReply;
     els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
@@ -8541,10 +8859,12 @@ async function askHelperFromInput() {
     const model = String(res && res.model ? res.model : "").trim();
     helperPushMessage("assistant", answer, { agent, model });
     state.helperLastRunner = agent ? agentDisplayName(agent) : "Auto";
+    syncActiveHelperSessionFromState({ touch: false });
     helperSetMeta(`Last reply: ${state.helperLastRunner}`);
   } catch (err) {
     const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
     helperPushMessage("assistant", `Error: ${msg}`);
+    syncActiveHelperSessionFromState({ touch: false });
     helperSetMeta("Chat request failed.");
   } finally {
     state.helperPending = false;
@@ -8609,9 +8929,13 @@ function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
 
 function clearHelperHistoryNow(opts = {}) {
   const showToastMsg = !(opts && opts.toast === false);
+  clearStoredHelperHistory();
+  const seeded = createHelperSessionRecord({});
+  state.helperSessions = [seeded];
+  state.helperSessionId = seeded.id;
   state.helperMessages = [];
   state.helperLastRunner = "";
-  clearStoredHelperHistory();
+  helperPersistSessionsState();
   helperSetMeta("");
   renderHelperPanel({ forceScroll: true });
   if (showToastMsg) showToast("Chat history cleared.");
@@ -8631,8 +8955,7 @@ function initHelperUi() {
   }
   state.helperOpen = false;
   state.helperPending = false;
-  state.helperMessages = helperPersistHistoryFromSettings() ? getStoredHelperHistory() : [];
-  state.helperLastRunner = "";
+  loadHelperSessionsFromStorage();
   helperSetMeta("");
   renderHelperPanel();
 }
@@ -9882,6 +10205,18 @@ function wireUi() {
       renderHelperPanel();
     });
   }
+  if (els.helperSessionSelect) {
+    els.helperSessionSelect.addEventListener("change", () => {
+      const next = String(els.helperSessionSelect.value || "").trim();
+      if (!helperSelectSession(next, { focus: true })) renderHelperPanel();
+    });
+  }
+  if (els.helperNewSessionBtn) {
+    els.helperNewSessionBtn.addEventListener("click", () => helperNewSessionNow({ focus: true }));
+  }
+  if (els.helperClearSessionBtn) {
+    els.helperClearSessionBtn.addEventListener("click", () => clearHelperCurrentSessionNow());
+  }
   if (els.helperInput) {
     els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
     els.helperInput.addEventListener("keydown", (e) => {
@@ -10630,14 +10965,14 @@ function wireUi() {
 		        }
 		      }
 		    };
-		    state.settings = await api.settingsUpdate(patch);
-		    applyThemeFromSettings(state.settings);
+        state.settings = await api.settingsUpdate(patch);
+        applyThemeFromSettings(state.settings);
         applyHelperDefaultsToPanel(state.settings, { force: true });
         if (!helperPersistHistoryFromSettings(state.settings)) clearHelperHistoryNow({ toast: false });
-        else if (Array.isArray(state.helperMessages) && state.helperMessages.length > 0) storeHelperHistory(state.helperMessages);
-		    renderBoard();
-			    els.settingsDialog.close();
-			  });
+        else syncActiveHelperSessionFromState({ touch: false });
+        renderBoard();
+		    els.settingsDialog.close();
+		  });
 
 	  if (els.saveActionsBtn) {
 	    els.saveActionsBtn.addEventListener("click", async () => {
@@ -12252,10 +12587,7 @@ async function init() {
       applyXtermTheme();
       if (!state.helperOpen && !state.helperPending) applyHelperDefaultsToPanel(next, { force: true });
       if (!helperPersistHistoryFromSettings(next)) clearHelperHistoryNow({ toast: false });
-      else if ((!Array.isArray(state.helperMessages) || state.helperMessages.length === 0) && !state.helperPending) {
-        state.helperMessages = getStoredHelperHistory();
-        renderHelperPanel();
-      }
+      else syncActiveHelperSessionFromState({ touch: false });
       renderBoard();
 	      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
 	        const job = state.jobs.get(state.selectedJobId);
