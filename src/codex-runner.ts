@@ -186,14 +186,59 @@ class ChildSupervisor extends EventEmitter {
   }
 }
 
+function mapAppServerTurnCompletionToClose(data: any): { code: number | null; signal: NodeJS.Signals | null } {
+  const status = typeof (data && data.status) === "string" ? String(data.status).trim().toLowerCase() : "";
+
+  if (status === "cancelled" || status === "canceled" || status === "aborted" || status === "interrupted") {
+    return { code: null, signal: "SIGTERM" };
+  }
+  if (status === "failed" || status === "error") {
+    return { code: 1, signal: null };
+  }
+  if (data && data.error) {
+    return { code: 1, signal: null };
+  }
+  return { code: 0, signal: null };
+}
+
 function runWithAppServerFallback(opts: any, runAppServer: (nextOpts: any) => ChildProcess, runExecJson: (nextOpts: any) => ChildProcess) {
   const supervisor = new ChildSupervisor();
 
   let startedTurn = false;
   let finished = false;
   let fallbackActive = false;
+  let primary: ChildProcess | null = null;
 
   const onEventFallback = typeof opts.onEvent === "function" ? opts.onEvent : () => {};
+
+  function stopPrimaryAfterCompletion() {
+    const child = primary;
+    if (!child) return;
+
+    // app-server is long-lived; each run should end after one turn in Agent Heaven.
+    setTimeout(() => {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      setTimeout(() => {
+        try {
+          if (!child.killed) child.kill("SIGKILL");
+        } catch {
+          // ignore
+        }
+      }, 1500);
+    }, 0);
+  }
+
+  function finishFromTurnCompleted(data: any) {
+    if (finished || fallbackActive) return;
+    finished = true;
+    const close = mapAppServerTurnCompletionToClose(data);
+    supervisor.emit("close", close.code, close.signal);
+    stopPrimaryAfterCompletion();
+  }
 
   function startFallback(reason: string) {
     if (finished || fallbackActive) return;
@@ -246,9 +291,13 @@ function runWithAppServerFallback(opts: any, runAppServer: (nextOpts: any) => Ch
     }
 
     onEventFallback(ev);
+
+    if (ev.kind === "codex" && ev.data && typeof ev.data === "object") {
+      const data = ev.data as any;
+      if (data.type === "turn.completed") finishFromTurnCompleted(data);
+    }
   };
 
-  let primary: ChildProcess;
   try {
     primary = runAppServer({ ...opts, onEvent: onPrimaryEvent });
   } catch (err: any) {

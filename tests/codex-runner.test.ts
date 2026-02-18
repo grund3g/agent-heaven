@@ -213,4 +213,71 @@ describe("codex-runner", () => {
     const completed = events.find((e) => e.kind === "codex" && e.data && e.data.type === "turn.completed");
     expect(completed && completed.data && completed.data.usage && completed.data.usage.input_tokens).toBe(11);
   });
+
+  it("finishes app-server runs on turn.completed even if app-server stays alive", async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-codex-"));
+
+    const script = [
+      "#!/usr/bin/env node",
+      "const args = process.argv.slice(2);",
+      "function send(obj){ process.stdout.write(JSON.stringify(obj) + '\\n'); }",
+      "if (!args.includes('app-server')) { process.exit(1); }",
+      "process.on('SIGTERM', () => process.exit(0));",
+      "let keepalive = null;",
+      "let buf = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => {",
+      "  buf += chunk;",
+      "  while (true) {",
+      "    const idx = buf.indexOf('\\n');",
+      "    if (idx < 0) break;",
+      "    const line = buf.slice(0, idx);",
+      "    buf = buf.slice(idx + 1);",
+      "    if (!line.trim()) continue;",
+      "    let msg = null;",
+      "    try { msg = JSON.parse(line); } catch { continue; }",
+      "    if (!msg || typeof msg !== 'object') continue;",
+      "    if (msg.method === 'initialize') { send({ id: msg.id, result: {} }); continue; }",
+      "    if (msg.method === 'thread/start') { send({ id: msg.id, result: { thread: { id: 't-app-sticky' } } }); continue; }",
+      "    if (msg.method === 'turn/start') {",
+      "      send({ id: msg.id, result: { turn: { id: 'turn-sticky', items: [], status: 'inProgress', error: null } } });",
+      "      send({ method: 'turn/started', params: { threadId: 't-app-sticky', turn: { id: 'turn-sticky', items: [], status: 'inProgress', error: null } } });",
+      "      send({ method: 'item/completed', params: { threadId: 't-app-sticky', turnId: 'turn-sticky', item: { type: 'agentMessage', id: 'msg-sticky', text: 'done' } } });",
+      "      send({ method: 'turn/completed', params: { threadId: 't-app-sticky', turn: { id: 'turn-sticky', items: [], status: 'completed', error: null } } });",
+      "      if (!keepalive) keepalive = setInterval(() => {}, 1000);",
+      "      continue;",
+      "    }",
+      "  }",
+      "});"
+    ].join("\n");
+
+    const binPath = writeFakeCodex(script);
+    const events: any[] = [];
+
+    const child = runCodexExec({
+      codexPath: binPath,
+      settings: { sandboxMode: "workspace-write", transport: "app_server" },
+      projectPath: tmpDir,
+      model: "",
+      prompt: "hello",
+      images: [],
+      onEvent: (ev: any) => events.push(ev)
+    });
+
+    const t0 = Date.now();
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("timed out waiting for synthetic close")), 1500);
+      child.once("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.once("close", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+
+    expect(Date.now() - t0).toBeLessThan(1400);
+    expect(events.some((e) => e.kind === "codex" && e.data && e.data.type === "turn.completed")).toBe(true);
+  });
 });
