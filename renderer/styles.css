@@ -1114,19 +1114,6 @@ body::before {
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
-.card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 4px;
-  border-radius: 6px;
-  background: var(--proj-color, transparent);
-  opacity: 0.86;
-  pointer-events: none;
-}
-
 .card--running {
   border-color: rgba(var(--accent-rgb), 0.22);
   box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.08) inset;
