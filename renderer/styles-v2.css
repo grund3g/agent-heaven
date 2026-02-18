@@ -1228,6 +1228,60 @@ body::before {
   background: var(--proj-swatch-fallback);
 }
 
+.card__context {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 2px 6px 2px 5px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--stroke2);
+  background: var(--surface2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.card__contextStepper {
+  position: relative;
+  width: 40px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--surface4);
+  box-shadow: 0 0 0 0.5px var(--stroke-soft) inset;
+}
+
+.card__contextFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.5), rgba(var(--accent-rgb), 0.85));
+}
+
+.card__contextStepper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(0, 0, 0, 0.22) 6px 7px);
+  pointer-events: none;
+}
+
+:root[data-scheme="light"] .card__contextStepper::after {
+  background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(255, 255, 255, 0.55) 6px 7px);
+}
+
+.card__contextPct {
+  min-width: 4ch;
+  text-align: right;
+  color: var(--ink-subtle);
+}
+
 .card__status {
   flex: 0 0 auto;
 }

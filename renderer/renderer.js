@@ -5643,6 +5643,7 @@ function renderCard(job) {
   const tokText = tok ? tok.text : "";
   const tokTitle = tok ? tok.title : "";
   const metaHiddenAttr = isRunningUi || tok ? "" : " hidden";
+  const ctx = jobContextStepper(job);
   // On the Board, the lane already conveys status (Running/Needs Attention/Done).
   // Keep the pill for non-board views (Archive/Trash) where lanes aren't status-based.
   const showStatusPill = state.view !== "board";
@@ -5659,6 +5660,7 @@ function renderCard(job) {
             )}</span>
           </div>
         </div>
+        ${ctx ? renderCardContextStepper(ctx) : ""}
         ${showStatusPill ? `<div class="card__status">${fmtStatusPill(job)}</div>` : ""}
       </div>
       <div class="card__preview${liveCls}">${renderMarkdownInlineSafeHtml(prev.text || "…")}</div>
@@ -5923,6 +5925,29 @@ function updateCardEl(job) {
     integratedEl.hidden = !integrated;
     integratedEl.textContent = integrated ? integrated.text : "Merged";
     integratedEl.title = integrated ? oneLine(integrated.title) : "";
+  }
+
+  const ctx = jobContextStepper(job);
+  const topEl = existing.querySelector(".card__top");
+  let ctxEl = existing.querySelector("[data-job-context]");
+  if (ctx) {
+    if (!ctxEl && topEl) {
+      const statusEl = topEl.querySelector(".card__status");
+      const tpl = document.createElement("template");
+      tpl.innerHTML = renderCardContextStepper(ctx).trim();
+      ctxEl = tpl.content.firstElementChild;
+      if (ctxEl) topEl.insertBefore(ctxEl, statusEl || null);
+    }
+    if (ctxEl) {
+      ctxEl.hidden = false;
+      ctxEl.title = oneLine(ctx.title);
+      const fillEl = ctxEl.querySelector("[data-job-context-fill]");
+      if (fillEl && fillEl.style) fillEl.style.width = `${ctx.fillPct.toFixed(2)}%`;
+      const pctEl = ctxEl.querySelector("[data-job-context-pct]");
+      if (pctEl) pctEl.textContent = ctx.pctText;
+    }
+  } else if (ctxEl) {
+    ctxEl.remove();
   }
 
   const pillEl = existing.querySelector(".pill");
@@ -11283,6 +11308,34 @@ function jobContextUsage(job) {
     limit_tokens: limitTokens,
     percent: (inputTokens / limitTokens) * 100
   };
+}
+
+function jobContextStepper(job) {
+  const ctx = jobContextUsage(job);
+  if (!ctx) return null;
+
+  const rawPct = clampNumber(ctx.percent, 0, 100_000, 0);
+  const fillPct = clampNumber(rawPct, 0, 100, 0);
+  const pctText = `${Math.round(rawPct)}%`;
+  const title = `context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
+
+  return { fillPct, pctText, title };
+}
+
+function renderCardContextStepper(ctx) {
+  if (!ctx || typeof ctx !== "object") return "";
+  const fillPct = clampNumber(ctx.fillPct, 0, 100, 0);
+  const pctText = typeof ctx.pctText === "string" ? ctx.pctText : "";
+  const title = typeof ctx.title === "string" ? ctx.title : "";
+
+  return `
+        <div class="card__context" data-job-context title="${escapeHtml(oneLine(title))}">
+          <span class="card__contextStepper" aria-hidden="true">
+            <span class="card__contextFill" data-job-context-fill style="width:${fillPct.toFixed(2)}%"></span>
+          </span>
+          <span class="card__contextPct" data-job-context-pct>${escapeHtml(pctText)}</span>
+        </div>
+  `;
 }
 
 function historyModelStrings(agentKey) {
