@@ -282,7 +282,6 @@ const state = {
 
   helperOpen: false,
   helperPending: false,
-  helperReopenOnReply: false,
   helperSessions: [],
   helperSessionId: "",
   helperMessages: [],
@@ -345,6 +344,9 @@ const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
 const HELPER_CONTEXT_GLOBAL_VALUE = "global";
 const HELPER_CONTEXT_PROJECT_PREFIX = "project:";
+const HELPER_SESSION_MAX = 12;
+const HELPER_SESSION_MESSAGES_MAX = 80;
+const HELPER_SESSION_TEXT_MAX = 4000;
 const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
 const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
 
@@ -10082,6 +10084,7 @@ async function askHelperFromInput() {
   } catch (err) {
     const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
     helperPushMessage("assistant", `Error: ${msg}`);
+    syncActiveHelperSessionFromState({ touch: false });
     helperSetMeta("Chat request failed.");
   } finally {
     state.helperPending = false;
@@ -10176,7 +10179,6 @@ function initHelperUi() {
   }
   state.helperOpen = false;
   state.helperPending = false;
-  state.helperReopenOnReply = false;
   loadHelperSessionsFromStorage();
   helperSetMeta("");
   renderHelperPanel();
@@ -12284,8 +12286,7 @@ function wireUi() {
         if (!helperPersistHistoryFromSettings(state.settings)) clearHelperHistoryNow({ toast: false });
         else syncActiveHelperSessionFromState({ touch: false });
         renderBoard();
-		    if (els.settingsDialog && els.settingsDialog.open) els.settingsDialog.close();
-		    setHint("Settings saved", "info");
+		    els.settingsDialog.close();
 		  });
 
 	  if (els.saveActionsBtn) {

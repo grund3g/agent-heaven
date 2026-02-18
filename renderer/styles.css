@@ -4331,22 +4331,10 @@ body::before {
   gap: 8px;
 }
 
-.helperpanel__runner > * {
-  min-width: 0;
-}
-
 .helperpanel__sessions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
-}
-
-.helperpanel__sessions > * {
-  min-width: 0;
-}
-
-.helperpanel__sessions .btn {
-  white-space: nowrap;
 }
 
 .helperpanel__messages {
