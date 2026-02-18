@@ -343,6 +343,10 @@ const promptPathSuggestState = {
 };
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
+const HELPER_CONTEXT_GLOBAL_VALUE = "global";
+const HELPER_CONTEXT_PROJECT_PREFIX = "project:";
+const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
+const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
 
 let followupAutosizeRaf = 0;
 
