@@ -92,6 +92,40 @@ describe("store", () => {
     expect(updated.integrateToDefaultMode).toBe("cli");
   });
 
+  it("defaults helper settings and normalizes helper values", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify(
+        {
+          settings: {
+            helperDefaultAgent: "anthropic",
+            helperDefaultModel: "  opus  ",
+            helperPersistHistory: "yes"
+          },
+          projects: []
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+    expect((s.getSettings() as any).helperDefaultAgent).toBe("claude");
+    expect((s.getSettings() as any).helperDefaultModel).toBe("opus");
+    expect((s.getSettings() as any).helperPersistHistory).toBe(true);
+
+    const updated = s.updateSettings({ helperDefaultAgent: "codex", helperDefaultModel: "sonnet", helperPersistHistory: false });
+    expect((updated as any).helperDefaultAgent).toBe("codex");
+    // Claude-only defaults are cleared when Codex is pinned.
+    expect((updated as any).helperDefaultModel).toBe("");
+    expect((updated as any).helperPersistHistory).toBe(false);
+  });
+
   it("seeds built-in commit actions when upgrading action defaults", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
     const storePath = path.join(tmpDir, "agent-heaven.store.json");

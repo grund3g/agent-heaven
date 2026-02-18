@@ -50,6 +50,9 @@ export const DEFAULT_STATE = {
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
     integrateAutoArchive: true, // auto-archive ticket after "Integrate to default branch"
     integrateToDefaultMode: "agent", // agent | cli
+    helperDefaultAgent: "", // "" | claude | codex
+    helperDefaultModel: "opus",
+    helperPersistHistory: true,
 
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
     // Versioned seeding for built-in actions (so existing installs can pick up new defaults once).
@@ -181,6 +184,19 @@ function normalizeIntegrateToDefaultMode(value) {
   if (raw === "agent" || raw === "llm" || raw === "ai") return "agent";
   if (raw === "cli" || raw === "git" || raw === "shell" || raw === "local") return "cli";
   return "";
+}
+
+function normalizeHelperDefaultAgent(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "claude" || raw === "anthropic") return "claude";
+  if (raw === "codex" || raw === "openai") return "codex";
+  return "";
+}
+
+function normalizeHelperDefaultModel(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  return raw.slice(0, 160);
 }
 
 function pickNextProjectColor(usedLower) {
@@ -593,6 +609,65 @@ function ensureActionsSettings(settings) {
   return { settings: next, changed };
 }
 
+function ensureHelperSettings(settings) {
+  const s = isPlainObject(settings) ? settings : {};
+  const next: any = { ...s };
+  let changed = false;
+
+  {
+    const raw = (next as any).helperDefaultAgent;
+    const norm = normalizeHelperDefaultAgent(raw);
+    if (raw !== norm) {
+      (next as any).helperDefaultAgent = norm;
+      changed = true;
+    }
+  }
+
+  {
+    const raw = (next as any).helperDefaultModel;
+    if (typeof raw !== "string") {
+      (next as any).helperDefaultModel = "opus";
+      changed = true;
+    } else {
+      const norm = normalizeHelperDefaultModel(raw);
+      if (raw !== norm) {
+        (next as any).helperDefaultModel = norm;
+        changed = true;
+      }
+    }
+  }
+
+  if (typeof (next as any).helperDefaultModel !== "string") {
+    (next as any).helperDefaultModel = "opus";
+    changed = true;
+  }
+
+  if (typeof (next as any).helperDefaultModel === "string" && (next as any).helperDefaultModel.length > 160) {
+    (next as any).helperDefaultModel = String((next as any).helperDefaultModel).slice(0, 160);
+    changed = true;
+  }
+
+  if (typeof (next as any).helperDefaultAgent !== "string") {
+    (next as any).helperDefaultAgent = "";
+    changed = true;
+  }
+
+  if ((next as any).helperDefaultAgent === "codex") {
+    const low = String((next as any).helperDefaultModel || "").trim().toLowerCase();
+    if (low === "opus" || low === "sonnet" || low === "haiku") {
+      (next as any).helperDefaultModel = "";
+      changed = true;
+    }
+  }
+
+  if (typeof (next as any).helperPersistHistory !== "boolean") {
+    (next as any).helperPersistHistory = true;
+    changed = true;
+  }
+
+  return { settings: next, changed };
+}
+
 function ensureSettings(settings) {
   let next = isPlainObject(settings) ? { ...settings } : {};
   let changed = !isPlainObject(settings);
@@ -643,6 +718,10 @@ function ensureSettings(settings) {
   const actRes = ensureActionsSettings(next);
   next = actRes.settings;
   if (actRes.changed) changed = true;
+
+  const helperRes = ensureHelperSettings(next);
+  next = helperRes.settings;
+  if (helperRes.changed) changed = true;
 
   return { settings: next, changed };
 }

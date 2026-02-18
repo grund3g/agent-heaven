@@ -154,6 +154,10 @@ const api = window.agentHeaven;
 	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
 	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
 	  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
+  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
+  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
+  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
+  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -210,7 +214,19 @@ const api = window.agentHeaven;
   imageDialog: document.getElementById("imageDialog"),
   imageDialogTitle: document.getElementById("imageDialogTitle"),
   imageDialogClose: document.getElementById("imageDialogClose"),
-  imageDialogImg: document.getElementById("imageDialogImg")
+  imageDialogImg: document.getElementById("imageDialogImg"),
+
+  helperBubbleBtn: document.getElementById("helperBubbleBtn"),
+  helperPanel: document.getElementById("helperPanel"),
+  helperPanelClose: document.getElementById("helperPanelClose"),
+  helperMeta: document.getElementById("helperMeta"),
+  helperAgentSelect: document.getElementById("helperAgentSelect"),
+  helperModelInput: document.getElementById("helperModelInput"),
+  helperMessages: document.getElementById("helperMessages"),
+  helperInput: document.getElementById("helperInput"),
+  helperSendBtn: document.getElementById("helperSendBtn"),
+  helperToPromptBtn: document.getElementById("helperToPromptBtn"),
+  helperCreateTaskBtn: document.getElementById("helperCreateTaskBtn")
 };
 
 const state = {
@@ -263,7 +279,12 @@ const state = {
   composerImages: [],
   composerFiles: [],
   followupImages: [],
-  followupFiles: []
+  followupFiles: [],
+
+  helperOpen: false,
+  helperPending: false,
+  helperMessages: [],
+  helperLastRunner: ""
 };
 
 const audio = {
@@ -280,7 +301,8 @@ const STORAGE = {
   sidebarCollapsed: "agentHeaven.sidebarCollapsed",
   composerDraft: "agentHeaven.draft.composer",
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
-  onboardingSeen: "agentHeaven.onboarding.seen.v1"
+  onboardingSeen: "agentHeaven.onboarding.seen.v1",
+  helperHistory: "agentHeaven.helper.history.v1"
 };
 
 const DEMO = {
@@ -1092,6 +1114,107 @@ function storeAgent(agent) {
     window.localStorage.setItem(STORAGE.lastAgent, agent);
   } catch {
     // ignore
+  }
+}
+
+function normalizeHelperAgentSelection(value) {
+  const s = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (s === "claude") return "claude";
+  if (s === "codex") return "codex";
+  return "";
+}
+
+function normalizeHelperModelValue(value) {
+  return String(value || "")
+    .trim()
+    .slice(0, 160);
+}
+
+function helperDefaultAgentFromSettings(settings = state.settings) {
+  const s = settings && typeof settings === "object" ? settings : {};
+  return normalizeHelperAgentSelection(s.helperDefaultAgent);
+}
+
+function helperDefaultModelFromSettings(settings = state.settings) {
+  const s = settings && typeof settings === "object" ? settings : {};
+  const raw = normalizeHelperModelValue(s.helperDefaultModel);
+  if (raw) return raw;
+  const agent = helperDefaultAgentFromSettings(s);
+  return agent === "codex" ? "" : "opus";
+}
+
+function helperPersistHistoryFromSettings(settings = state.settings) {
+  const s = settings && typeof settings === "object" ? settings : {};
+  return s.helperPersistHistory !== false;
+}
+
+function clearStoredHelperHistory() {
+  try {
+    window.localStorage.removeItem(STORAGE.helperHistory);
+  } catch {
+    // ignore
+  }
+}
+
+function storeHelperHistory(messages) {
+  const arr = Array.isArray(messages) ? messages : [];
+  const out = [];
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
+    if (!role) continue;
+    const text = String(item.text || "").trim();
+    if (!text) continue;
+    out.push({
+      id: typeof item.id === "string" ? item.id : safeUuid(),
+      role,
+      text: text.slice(0, 12000),
+      ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
+      agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
+      model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
+    });
+    if (out.length >= 80) break;
+  }
+
+  try {
+    if (out.length === 0) {
+      clearStoredHelperHistory();
+      return;
+    }
+    window.localStorage.setItem(STORAGE.helperHistory, JSON.stringify(out));
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredHelperHistory() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE.helperHistory) || "";
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const arr = Array.isArray(parsed) ? parsed : [];
+    const out = [];
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
+      if (!role) continue;
+      const text = String(item.text || "").trim();
+      if (!text) continue;
+      out.push({
+        id: typeof item.id === "string" ? item.id : safeUuid(),
+        role,
+        text: text.slice(0, 12000),
+        ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
+        agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
+        model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
+      });
+      if (out.length >= 80) break;
+    }
+    return out;
+  } catch {
+    return [];
   }
 }
 
@@ -8066,6 +8189,332 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverrid
   return false; // cancel
 }
 
+function helperCurrentAgentPref() {
+  return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
+}
+
+function helperCurrentModelPref() {
+  return normalizeHelperModelValue(els.helperModelInput && els.helperModelInput.value ? els.helperModelInput.value : "");
+}
+
+function helperRunnerText(agent, model) {
+  const a = normalizeAgentKey(agent || "");
+  const aLabel = a ? agentDisplayName(a) : "";
+  const m = String(model || "").trim();
+  return `${aLabel || "auto"}${m ? ` · ${m}` : ""}`;
+}
+
+function helperSelectedProjectForContext() {
+  const selected = String(els.projectSelect && els.projectSelect.value ? els.projectSelect.value : "").trim();
+  if (selected && selected !== "auto" && selected !== TEMP_PROJECT_OPTION_VALUE) {
+    const hit = state.projects.find((p) => p && p.id === selected) || null;
+    if (hit) return hit;
+  }
+
+  const stored = getStoredProjectId();
+  if (stored) {
+    const hit = state.projects.find((p) => p && p.id === stored) || null;
+    if (hit) return hit;
+  }
+
+  if (state.projects.length === 1) return state.projects[0];
+  return null;
+}
+
+function helperSelectedJobForContext() {
+  const selected = String(state.selectedJobId || "").trim();
+  if (selected) {
+    const hit = state.jobs.get(selected);
+    if (hit && !isDemoJob(hit)) return hit;
+  }
+  return null;
+}
+
+function buildHelperContextPayload() {
+  const project = helperSelectedProjectForContext();
+  const job = helperSelectedJobForContext();
+  const composerAgent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
+  const composerModel = String(els.modelInput && els.modelInput.value ? els.modelInput.value : "").trim();
+  const promptPreview = job && typeof job.promptPreview === "string" ? job.promptPreview.trim() : "";
+  const preview =
+    promptPreview ||
+    (job && Array.isArray(job.prompts) && job.prompts.length > 0 && typeof job.prompts[job.prompts.length - 1].text === "string"
+      ? String(job.prompts[job.prompts.length - 1].text || "").trim()
+      : "");
+
+  return {
+    projectName: project && project.name ? String(project.name) : "",
+    projectPath: project && project.path ? String(project.path) : "",
+    activeView: normalizeView(state.view),
+    composerAgent,
+    composerModel,
+    selectedJobTitle: job ? jobDisplayTitle(job) : "",
+    selectedJobStatus: job ? jobStatusForUi(job) : "",
+    selectedJobAgent: job && job.agent ? normalizeAgentKey(job.agent) : "",
+    selectedJobModel: job && job.model ? String(job.model) : "",
+    selectedJobPrompt: preview
+  };
+}
+
+function helperMessagesForApi() {
+  const arr = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+  return arr
+    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+    .map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      text: String(m.text || "").trim()
+    }))
+    .filter((m) => m.text)
+    .slice(-18);
+}
+
+function helperPushMessage(role, text, meta = {}) {
+  const r = role === "assistant" ? "assistant" : "user";
+  const t = String(text || "").trim();
+  if (!t) return;
+  const item = {
+    id: safeUuid(),
+    role: r,
+    text: t,
+    ts: new Date().toISOString(),
+    agent: r === "assistant" ? normalizeHelperAgentSelection(meta.agent) : "",
+    model: r === "assistant" ? normalizeHelperModelValue(meta.model) : ""
+  };
+  state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+  state.helperMessages.push(item);
+  const MAX = 80;
+  if (state.helperMessages.length > MAX) state.helperMessages.splice(0, state.helperMessages.length - MAX);
+  if (helperPersistHistoryFromSettings()) storeHelperHistory(state.helperMessages);
+}
+
+function helperSetMeta(text) {
+  if (!els.helperMeta) return;
+  const fallback = "Quick questions without opening a task.";
+  const msg = String(text || "").trim();
+  els.helperMeta.textContent = msg || fallback;
+}
+
+function renderHelperPanel(opts = {}) {
+  const forceScroll = !!(opts && opts.forceScroll);
+  if (els.helperBubbleBtn) {
+    els.helperBubbleBtn.classList.toggle("helperbubble--open", !!state.helperOpen);
+    els.helperBubbleBtn.setAttribute("aria-pressed", state.helperOpen ? "true" : "false");
+  }
+  if (els.helperPanel) els.helperPanel.hidden = !state.helperOpen;
+  if (!els.helperMessages) return;
+
+  const stick = isNearBottom(els.helperMessages);
+  const items = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+
+  if (items.length === 0 && !state.helperPending) {
+    els.helperMessages.innerHTML = `<div class="helperpanel__empty">Try quick questions, architecture checks, or ask for a clean task seed. You can move the result into the main prompt.</div>`;
+  } else {
+    const rows = [];
+    for (const m of items) {
+      const isAssistant = m.role === "assistant";
+      const roleLabel = isAssistant ? "Helper" : "You";
+      const runner = isAssistant ? helperRunnerText(m.agent, m.model) : "";
+      rows.push(`
+        <article class="helpermsg ${isAssistant ? "helpermsg--assistant" : "helpermsg--user"}">
+          <div class="helpermsg__head">${escapeHtml(roleLabel)}${runner ? `<span class="helpermsg__meta">${escapeHtml(runner)}</span>` : ""}</div>
+          <div class="msg__text">${renderMarkdownInlineSafeHtml(String(m.text || ""))}</div>
+        </article>
+      `);
+    }
+    if (state.helperPending) {
+      rows.push(`
+        <article class="helpermsg helpermsg--assistant">
+          <div class="helpermsg__head">Helper</div>
+          <div class="msg__text">Thinking…</div>
+        </article>
+      `);
+    }
+    els.helperMessages.innerHTML = rows.join("");
+  }
+
+  if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
+  if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
+  if (els.helperToPromptBtn) els.helperToPromptBtn.disabled = state.helperPending || state.helperMessages.length === 0;
+  if (els.helperCreateTaskBtn) els.helperCreateTaskBtn.disabled = state.helperPending || state.helperMessages.length === 0;
+
+  if (forceScroll || stick || state.helperPending) {
+    els.helperMessages.scrollTop = els.helperMessages.scrollHeight;
+  }
+}
+
+function setHelperOpen(open, opts = {}) {
+  state.helperOpen = !!open;
+  renderHelperPanel();
+  if (state.helperOpen && opts && opts.focus && els.helperInput) {
+    try {
+      els.helperInput.focus();
+      els.helperInput.selectionStart = els.helperInput.selectionEnd = els.helperInput.value.length;
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function toggleHelperPanel(opts = {}) {
+  const force = opts && Object.prototype.hasOwnProperty.call(opts, "open") ? !!opts.open : null;
+  const next = force == null ? !state.helperOpen : force;
+  setHelperOpen(next, { focus: next && opts && opts.focus !== false });
+}
+
+async function askHelperFromInput() {
+  if (state.helperPending) return;
+  if (!api || typeof api.helperAsk !== "function") {
+    showToast("Helper chat is not supported in this build.");
+    return;
+  }
+  const text = String(els.helperInput && els.helperInput.value ? els.helperInput.value : "").trim();
+  if (!text) return;
+
+  helperPushMessage("user", text);
+  if (els.helperInput) {
+    els.helperInput.value = "";
+    autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+  }
+  state.helperPending = true;
+  helperSetMeta("Thinking…");
+  renderHelperPanel({ forceScroll: true });
+
+  const preferAgent = helperCurrentAgentPref();
+  const preferModel = helperCurrentModelPref();
+  const context = buildHelperContextPayload();
+  const history = helperMessagesForApi();
+
+  try {
+    const res = await api.helperAsk({
+      question: text,
+      history,
+      context,
+      preferAgent,
+      preferModel
+    });
+    const answer = String(res && res.answer ? res.answer : "").trim() || "No answer generated.";
+    const agent = normalizeAgentKey(res && res.agent ? res.agent : "");
+    const model = String(res && res.model ? res.model : "").trim();
+    helperPushMessage("assistant", answer, { agent, model });
+    state.helperLastRunner = helperRunnerText(agent, model);
+    helperSetMeta(`Last reply: ${state.helperLastRunner}`);
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err).trim() || "Helper request failed.";
+    helperPushMessage("assistant", `Error: ${msg}`);
+    helperSetMeta("Helper request failed.");
+  } finally {
+    state.helperPending = false;
+    renderHelperPanel({ forceScroll: true });
+    if (state.helperOpen && els.helperInput) {
+      try {
+        els.helperInput.focus();
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+function helperContextSnippetForComposer() {
+  const arr = helperMessagesForApi();
+  if (arr.length === 0) return "";
+  const picked = arr.slice(-8);
+  const out = ["[Helper context]"];
+  for (const m of picked) {
+    out.push(m.role === "assistant" ? "Assistant:" : "User:");
+    out.push(m.text);
+    out.push("");
+  }
+  const body = out.join("\n").trim();
+  return body.length > 20_000 ? `${body.slice(0, 20_000).trimEnd()}…` : body;
+}
+
+function appendHelperContextToComposer() {
+  const snippet = helperContextSnippetForComposer();
+  if (!snippet) {
+    showToast("No helper context yet.");
+    return false;
+  }
+  if (!els.promptInput) return false;
+
+  const existing = String(els.promptInput.value || "").trimEnd();
+  const next = existing ? `${existing}\n\n${snippet}` : snippet;
+  els.promptInput.value = next;
+  storeComposerDraft(next);
+  setView("board");
+  try {
+    els.promptInput.focus();
+    els.promptInput.selectionStart = els.promptInput.selectionEnd = els.promptInput.value.length;
+  } catch {
+    // ignore
+  }
+  showToast("Helper context added to prompt.");
+  return true;
+}
+
+async function startTicketFromHelperContext() {
+  const ok = appendHelperContextToComposer();
+  if (!ok) return;
+  await startJobFromComposer();
+}
+
+function syncHelperAgentUi() {
+  const agent = helperCurrentAgentPref();
+  if (!els.helperModelInput) return;
+  if (agent === "claude") els.helperModelInput.placeholder = "Model override (optional, e.g. opus)";
+  else if (agent === "codex") els.helperModelInput.placeholder = "Model override (optional, e.g. gpt-5)";
+  else els.helperModelInput.placeholder = "Model override (optional)";
+}
+
+function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
+  const force = !!(opts && opts.force);
+  const defAgent = helperDefaultAgentFromSettings(settings);
+  const defModel = helperDefaultModelFromSettings(settings);
+
+  if (els.helperAgentSelect) {
+    const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
+    if (force || !cur) els.helperAgentSelect.value = defAgent;
+  }
+  if (els.helperModelInput) {
+    const curModel = normalizeHelperModelValue(els.helperModelInput.value);
+    if (force || !curModel) {
+      els.helperModelInput.value = defModel;
+      if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+    }
+  }
+  syncHelperAgentUi();
+}
+
+function clearHelperHistoryNow(opts = {}) {
+  const showToastMsg = !(opts && opts.toast === false);
+  state.helperMessages = [];
+  state.helperLastRunner = "";
+  clearStoredHelperHistory();
+  helperSetMeta("");
+  renderHelperPanel({ forceScroll: true });
+  if (showToastMsg) showToast("Helper history cleared.");
+}
+
+function initHelperUi() {
+  const mod = isMacPlatform() ? "⌘" : "Ctrl";
+  applyHelperDefaultsToPanel(state.settings, { force: true });
+  if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+  if (els.helperBubbleBtn) {
+    els.helperBubbleBtn.title = `Helper chat (${mod}+K)`;
+    const kbd = els.helperBubbleBtn.querySelector(".helperbubble__kbd");
+    if (kbd) kbd.textContent = `${mod}K`;
+  }
+  if (els.helperInput) {
+    els.helperInput.placeholder = `Ask quickly… (${mod}+Enter to send)`;
+  }
+  state.helperOpen = false;
+  state.helperPending = false;
+  state.helperMessages = helperPersistHistoryFromSettings() ? getStoredHelperHistory() : [];
+  state.helperLastRunner = "";
+  helperSetMeta("");
+  renderHelperPanel();
+}
+
 async function startJobFromComposer() {
   const promptText = (els.promptInput.value || "").trim();
   if (!promptText) return;
@@ -8130,6 +8579,7 @@ async function startJobFromComposer() {
 }
 
 function quickPromptTargetTextarea() {
+  if (state.helperOpen && els.helperInput && !els.helperInput.disabled) return els.helperInput;
   if (els.jobDialog && els.jobDialog.open && els.followupInput) return els.followupInput;
   return els.promptInput;
 }
@@ -8148,6 +8598,7 @@ function appendQuickPromptText(text) {
 
   if (el === els.promptInput) storeComposerDraft(el.value || "");
   if (el === els.followupInput) scheduleAutosizeFollowupInput();
+  if (el === els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
 
   try {
     el.focus();
@@ -8803,6 +9254,14 @@ function wireUi() {
 	    }
 	  });
 
+	  // Cmd+K (or Ctrl+K): toggle helper chat.
+	  document.addEventListener("keydown", (e) => {
+	    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+	    if (e.key !== "k" && e.key !== "K") return;
+	    e.preventDefault();
+	    toggleHelperPanel({ focus: true });
+	  });
+
   // Toast interactions.
   if (els.toast) {
     els.toast.addEventListener("click", (e) => {
@@ -9270,6 +9729,63 @@ function wireUi() {
     els.shortcutsDialog.addEventListener("click", (e) => {
       if (e.target === els.shortcutsDialog) els.shortcutsDialog.close();
     });
+  }
+
+  if (els.helperBubbleBtn) {
+    els.helperBubbleBtn.addEventListener("click", () => toggleHelperPanel({ focus: true }));
+  }
+  if (els.helperPanelClose) {
+    els.helperPanelClose.addEventListener("click", () => toggleHelperPanel({ open: false }));
+  }
+  if (els.helperAgentSelect) {
+    els.helperAgentSelect.addEventListener("change", () => {
+      const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
+      els.helperAgentSelect.value = next;
+      if (els.helperModelInput) {
+        const currentModel = String(els.helperModelInput.value || "").trim();
+        const low = currentModel.toLowerCase();
+        const looksClaudeModel = low === "opus" || low === "sonnet" || low === "haiku";
+        if (next === "claude" && !currentModel) {
+          els.helperModelInput.value = "opus";
+        } else if (next === "codex" && looksClaudeModel) {
+          els.helperModelInput.value = "";
+        }
+      }
+      syncHelperAgentUi();
+    });
+  }
+  if (els.helperModelInput) {
+    els.helperModelInput.addEventListener("change", () => {
+      els.helperModelInput.value = normalizeHelperModelValue(els.helperModelInput.value || "");
+    });
+  }
+  if (els.helperInput) {
+    els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
+    els.helperInput.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        askHelperFromInput();
+        return;
+      }
+      if (e.key === "Escape" && state.helperOpen) {
+        e.preventDefault();
+        toggleHelperPanel({ open: false });
+      }
+    });
+  }
+  if (els.helperSendBtn) {
+    els.helperSendBtn.addEventListener("click", () => askHelperFromInput());
+  }
+  if (els.helperToPromptBtn) {
+    els.helperToPromptBtn.addEventListener("click", () => appendHelperContextToComposer());
+  }
+  if (els.helperCreateTaskBtn) {
+    els.helperCreateTaskBtn.addEventListener("click", () => {
+      startTicketFromHelperContext();
+    });
+  }
+  if (els.settingsHelperClearHistoryBtn) {
+    els.settingsHelperClearHistoryBtn.addEventListener("click", () => clearHelperHistoryNow());
   }
 
   els.projectSelect.addEventListener("change", async () => {
@@ -9970,6 +10486,13 @@ function wireUi() {
 					      integrateToDefaultMode: normalizeIntegrateToDefaultMode(
 					        els.settingsIntegrateToDefaultMode ? els.settingsIntegrateToDefaultMode.value : ""
 					      ),
+                helperDefaultAgent: normalizeHelperAgentSelection(
+                  els.settingsHelperDefaultAgent ? els.settingsHelperDefaultAgent.value : ""
+                ),
+                helperDefaultModel: normalizeHelperModelValue(
+                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
+                ),
+                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
 					      agents: {
 				        codex: {
 				          path: els.settingsCodexPath.value.trim(),
@@ -9990,6 +10513,9 @@ function wireUi() {
 		    };
 		    state.settings = await api.settingsUpdate(patch);
 		    applyThemeFromSettings(state.settings);
+        applyHelperDefaultsToPanel(state.settings, { force: true });
+        if (!helperPersistHistoryFromSettings(state.settings)) clearHelperHistoryNow({ toast: false });
+        else if (Array.isArray(state.helperMessages) && state.helperMessages.length > 0) storeHelperHistory(state.helperMessages);
 		    renderBoard();
 			    els.settingsDialog.close();
 			  });
@@ -10912,6 +11438,15 @@ function maybeShowMissingAgentBinariesToast(res) {
 					  if (els.settingsIntegrateToDefaultMode) {
 					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
 					  }
+            if (els.settingsHelperDefaultAgent) {
+              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
+            }
+            if (els.settingsHelperDefaultModel) {
+              els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
+            }
+            if (els.settingsHelperPersistHistory) {
+              els.settingsHelperPersistHistory.checked = helperPersistHistoryFromSettings(s);
+            }
 
 		  refreshCodexModelsDatalist({ showErrors: true });
 
@@ -11482,6 +12017,16 @@ function renderShortcutsDialog() {
 
   body.push(`
     <div class="shortcutsection">
+      <div class="shortcutsection__title">Helper</div>
+      <div class="shortcutlist">
+        ${row(`${mod}+K`, "Toggle helper chat")}
+        ${row(`${mod}+Enter`, "Send question (when helper input is focused)")}
+      </div>
+    </div>
+  `);
+
+  body.push(`
+    <div class="shortcutsection">
       <div class="shortcutsection__title">Search</div>
       <div class="shortcutlist">
         ${row(`${mod}+F`, "Focus search (board) or find-in-tab (open job)")}
@@ -11580,11 +12125,18 @@ async function init() {
   state.settings = await api.settingsGet();
   applyThemeFromSettings(state.settings);
   applyXtermTheme();
+  initHelperUi();
   if (typeof api.onSettingsChanged === "function") {
     api.onSettingsChanged((next) => {
       state.settings = next;
       applyThemeFromSettings(next);
       applyXtermTheme();
+      if (!state.helperOpen && !state.helperPending) applyHelperDefaultsToPanel(next, { force: true });
+      if (!helperPersistHistoryFromSettings(next)) clearHelperHistoryNow({ toast: false });
+      else if ((!Array.isArray(state.helperMessages) || state.helperMessages.length === 0) && !state.helperPending) {
+        state.helperMessages = getStoredHelperHistory();
+        renderHelperPanel();
+      }
       renderBoard();
 	      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
 	        const job = state.jobs.get(state.selectedJobId);

@@ -25,6 +25,16 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     const res = await invokeOk("actions:generate", { prompt });
     return res && typeof res === "object" ? (res as any).action : null;
   },
+  helperAsk: async (payload) => {
+    const p = payload && typeof payload === "object" ? payload : {};
+    const res = await invokeOk("helper:ask", p);
+    return {
+      answer: typeof (res as any).answer === "string" ? (res as any).answer : "",
+      agent: typeof (res as any).agent === "string" ? (res as any).agent : "",
+      model: typeof (res as any).model === "string" ? (res as any).model : "",
+      timedOut: !!((res as any).timedOut === true)
+    };
+  },
 
   shellOpenExternal: async (url) => {
     await invokeOk("shell:openExternal", url);
