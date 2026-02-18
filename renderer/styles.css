@@ -3263,11 +3263,11 @@ body::before {
 
 .helperbubble {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  right: 16px;
+  bottom: 16px;
   z-index: 10020;
-  width: 90px;
-  height: 90px;
+  width: 76px;
+  height: 76px;
   border: 1px solid var(--stroke-strong);
   background:
     radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.34), transparent 45%),
@@ -3279,9 +3279,9 @@ body::before {
   backdrop-filter: blur(10px);
   display: grid;
   place-items: center;
-  gap: 2px;
-  padding: 10px 8px;
-  font-size: 13px;
+  gap: 1px;
+  padding: 8px 6px;
+  font-size: 12px;
   cursor: pointer;
   overflow: hidden;
   isolation: isolate;
@@ -3325,6 +3325,7 @@ body::before {
 }
 
 .helperbubble__label {
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.38);
@@ -3332,12 +3333,12 @@ body::before {
 
 .helperbubble__kbd {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1;
   color: var(--muted2);
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
-  padding: 2px 5px;
+  padding: 2px 4px;
   background: rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(4px);
 }
@@ -3362,7 +3363,7 @@ body::before {
 .helperpanel {
   position: fixed;
   right: 18px;
-  bottom: 116px;
+  bottom: 98px;
   width: min(460px, calc(100vw - 24px));
   height: min(640px, calc(100vh - 154px));
   z-index: 10020;
@@ -3399,7 +3400,7 @@ body::before {
 
 .helperpanel__runner {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -3473,9 +3474,9 @@ body::before {
   .helperbubble {
     right: 10px;
     bottom: 10px;
-    width: 80px;
-    height: 80px;
-    padding: 8px;
+    width: 68px;
+    height: 68px;
+    padding: 6px;
   }
 
   .helperbubble__kbd {
@@ -3486,7 +3487,7 @@ body::before {
     right: 10px;
     left: 10px;
     width: auto;
-    bottom: 90px;
+    bottom: 78px;
     height: min(620px, calc(100vh - 118px));
   }
 

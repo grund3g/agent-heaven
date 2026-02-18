@@ -221,6 +221,7 @@ const api = window.agentHeaven;
   helperPanelClose: document.getElementById("helperPanelClose"),
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
+  helperContextScopeSelect: document.getElementById("helperContextScopeSelect"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
@@ -301,7 +302,8 @@ const STORAGE = {
   composerDraft: "agentHeaven.draft.composer",
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
   onboardingSeen: "agentHeaven.onboarding.seen.v1",
-  helperHistory: "agentHeaven.helper.history.v1"
+  helperHistory: "agentHeaven.helper.history.v1",
+  helperContextScope: "agentHeaven.helper.contextScope.v1"
 };
 
 const DEMO = {
@@ -1129,6 +1131,32 @@ function normalizeHelperModelValue(value) {
   return String(value || "")
     .trim()
     .slice(0, 160);
+}
+
+function normalizeHelperContextScope(value) {
+  const s = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (s === "global") return "global";
+  return "project";
+}
+
+function getStoredHelperContextScope() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE.helperContextScope) || "";
+    return normalizeHelperContextScope(raw);
+  } catch {
+    return "project";
+  }
+}
+
+function storeHelperContextScope(scope) {
+  try {
+    const v = normalizeHelperContextScope(scope);
+    window.localStorage.setItem(STORAGE.helperContextScope, v);
+  } catch {
+    // ignore
+  }
 }
 
 function helperDefaultAgentFromSettings(settings = state.settings) {
@@ -8192,6 +8220,11 @@ function helperCurrentAgentPref() {
   return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
 }
 
+function helperCurrentContextScope() {
+  const raw = els.helperContextScopeSelect ? String(els.helperContextScopeSelect.value || "") : "";
+  return normalizeHelperContextScope(raw || getStoredHelperContextScope());
+}
+
 function isHelperClaudeFamilyModel(value) {
   const low = String(value || "")
     .trim()
@@ -8243,8 +8276,10 @@ function helperSelectedJobForContext() {
 }
 
 function buildHelperContextPayload() {
-  const project = helperSelectedProjectForContext();
-  const job = helperSelectedJobForContext();
+  const scope = helperCurrentContextScope();
+  const useProjectContext = scope !== "global";
+  const project = useProjectContext ? helperSelectedProjectForContext() : null;
+  const job = useProjectContext ? helperSelectedJobForContext() : null;
   const composerAgent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
   const composerModel = String(els.modelInput && els.modelInput.value ? els.modelInput.value : "").trim();
   const promptPreview = job && typeof job.promptPreview === "string" ? job.promptPreview.trim() : "";
@@ -8301,9 +8336,18 @@ function helperPushMessage(role, text, meta = {}) {
 
 function helperSetMeta(text) {
   if (!els.helperMeta) return;
-  const fallback = "Quick questions without opening a task.";
+  const scope = helperCurrentContextScope();
+  const project = scope === "project" ? helperSelectedProjectForContext() : null;
+  const projectName = project && project.name ? String(project.name).trim() : "";
+  const contextText = scope === "global" ? "Context: Global" : projectName ? `Context: Project · ${projectName}` : "Context: Project";
   const msg = String(text || "").trim();
-  els.helperMeta.textContent = msg || fallback;
+  els.helperMeta.textContent = msg ? `${msg} · ${contextText}` : contextText;
+}
+
+function helperCurrentMetaStatusText() {
+  if (state.helperPending) return "Thinking…";
+  if (state.helperLastRunner) return `Last reply: ${state.helperLastRunner}`;
+  return "";
 }
 
 function renderHelperPanel(opts = {}) {
@@ -8415,7 +8459,7 @@ async function askHelperFromInput() {
     const agent = normalizeAgentKey(res && res.agent ? res.agent : "");
     const model = String(res && res.model ? res.model : "").trim();
     helperPushMessage("assistant", answer, { agent, model });
-    state.helperLastRunner = helperRunnerText(agent, model);
+    state.helperLastRunner = agent ? agentDisplayName(agent) : "Auto";
     helperSetMeta(`Last reply: ${state.helperLastRunner}`);
   } catch (err) {
     const msg = String(err && err.message ? err.message : err).trim() || "Helper request failed.";
@@ -8480,10 +8524,15 @@ async function startTicketFromHelperContext() {
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
   const force = !!(opts && opts.force);
   const defAgent = helperDefaultAgentFromSettings(settings);
+  const defScope = getStoredHelperContextScope();
 
   if (els.helperAgentSelect) {
     const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
     if (force || !cur) els.helperAgentSelect.value = defAgent;
+  }
+  if (els.helperContextScopeSelect) {
+    const curRaw = String(els.helperContextScopeSelect.value || "").trim();
+    if (force || !curRaw) els.helperContextScopeSelect.value = defScope;
   }
 }
 
@@ -9746,6 +9795,15 @@ function wireUi() {
       renderHelperPanel();
     });
   }
+  if (els.helperContextScopeSelect) {
+    els.helperContextScopeSelect.addEventListener("change", () => {
+      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value);
+      els.helperContextScopeSelect.value = next;
+      storeHelperContextScope(next);
+      helperSetMeta(helperCurrentMetaStatusText());
+      renderHelperPanel();
+    });
+  }
   if (els.helperInput) {
     els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
     els.helperInput.addEventListener("keydown", (e) => {
@@ -9791,6 +9849,7 @@ function wireUi() {
     if (v && v !== "auto") storeProjectId(v);
     syncComposerCheckoutModeUi();
     schedulePromptPathSuggestRefresh({ immediate: true });
+    helperSetMeta(helperCurrentMetaStatusText());
   });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
