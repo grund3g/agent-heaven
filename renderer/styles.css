@@ -4116,8 +4116,8 @@ body::before {
   right: 16px;
   bottom: 16px;
   z-index: 10020;
-  width: 90px;
-  height: 90px;
+  width: 76px;
+  height: 76px;
   border: 1px solid var(--stroke-strong);
   background:
     radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.34), transparent 45%),
@@ -4127,12 +4127,10 @@ body::before {
   border-radius: 50%;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
   backdrop-filter: blur(10px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  padding: 9px 7px 8px;
+  display: grid;
+  place-items: center;
+  gap: 1px;
+  padding: 8px 6px;
   font-size: 12px;
   cursor: pointer;
   overflow: hidden;
@@ -4177,9 +4175,7 @@ body::before {
 }
 
 .helperbubble__label {
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 1.05;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.38);
@@ -4188,14 +4184,13 @@ body::before {
 .helperbubble__kbd {
   margin-top: auto;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 8px;
   line-height: 1;
   color: var(--ink);
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 999px;
-  padding: 3px 6px;
-  letter-spacing: 0.02em;
-  background: rgba(0, 0, 0, 0.34);
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(4px);
 }
 
@@ -4219,7 +4214,7 @@ body::before {
 .helperpanel {
   position: fixed;
   right: 18px;
-  bottom: 116px;
+  bottom: 98px;
   width: min(460px, calc(100vw - 24px));
   height: min(640px, calc(100vh - 154px));
   z-index: 10020;
@@ -4262,7 +4257,7 @@ body::before {
 
 .helperpanel__runner {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -4343,9 +4338,9 @@ body::before {
   .helperbubble {
     right: 10px;
     bottom: 10px;
-    width: 80px;
-    height: 80px;
-    padding: 8px;
+    width: 68px;
+    height: 68px;
+    padding: 6px;
   }
 
   .helperbubble__kbd {
@@ -4361,7 +4356,7 @@ body::before {
     right: 10px;
     left: 10px;
     width: auto;
-    bottom: 90px;
+    bottom: 78px;
     height: min(620px, calc(100vh - 118px));
   }
 

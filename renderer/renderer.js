@@ -217,9 +217,6 @@ const api = window.agentHeaven;
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
   helperContextScopeSelect: document.getElementById("helperContextScopeSelect"),
-  helperSessionSelect: document.getElementById("helperSessionSelect"),
-  helperNewSessionBtn: document.getElementById("helperNewSessionBtn"),
-  helperClearSessionBtn: document.getElementById("helperClearSessionBtn"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
@@ -311,7 +308,6 @@ const STORAGE = {
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
   onboardingSeen: "agentHeaven.onboarding.seen.v1",
   helperHistory: "agentHeaven.helper.history.v1",
-  helperSessions: "agentHeaven.helper.sessions.v2",
   helperContextScope: "agentHeaven.helper.contextScope.v1"
 };
 
@@ -1385,77 +1381,26 @@ function normalizeHelperModelValue(value) {
     .slice(0, 160);
 }
 
-function helperContextValueForProjectId(projectId) {
-  const id = String(projectId || "").trim();
-  return id ? `${HELPER_CONTEXT_PROJECT_PREFIX}${id}` : HELPER_CONTEXT_GLOBAL_VALUE;
-}
-
-function helperProjectIdFromContextValue(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const low = raw.toLowerCase();
-  if (low === HELPER_CONTEXT_GLOBAL_VALUE || low === "project") return "";
-  if (!raw.startsWith(HELPER_CONTEXT_PROJECT_PREFIX)) return raw;
-  return String(raw.slice(HELPER_CONTEXT_PROJECT_PREFIX.length) || "").trim();
-}
-
-function helperProjectById(projectId) {
-  const id = String(projectId || "").trim();
-  if (!id) return null;
-  return state.projects.find((p) => p && String(p.id || "").trim() === id) || null;
-}
-
-function helperDefaultProjectIdForContext() {
-  const selected = String(els.projectSelect && els.projectSelect.value ? els.projectSelect.value : "").trim();
-  if (selected && selected !== "auto" && selected !== TEMP_PROJECT_OPTION_VALUE) {
-    const hit = helperProjectById(selected);
-    if (hit) return String(hit.id || "").trim();
-    if (state.projects.length === 0) return selected;
-  }
-
-  const stored = String(getStoredProjectId() || "").trim();
-  if (stored) {
-    const hit = helperProjectById(stored);
-    if (hit) return String(hit.id || "").trim();
-    if (state.projects.length === 0) return stored;
-  }
-
-  if (state.projects.length === 1) {
-    const only = state.projects[0];
-    return only && only.id ? String(only.id).trim() : "";
-  }
-  return "";
-}
-
-function normalizeHelperContextScope(value, opts = {}) {
-  const raw = String(value || "").trim();
-  const fallbackProjectId = String(opts && opts.defaultProjectId ? opts.defaultProjectId : "").trim();
-  const fallback = fallbackProjectId ? helperContextValueForProjectId(fallbackProjectId) : HELPER_CONTEXT_GLOBAL_VALUE;
-  if (!raw) return HELPER_CONTEXT_GLOBAL_VALUE;
-
-  const low = raw.toLowerCase();
-  if (low === HELPER_CONTEXT_GLOBAL_VALUE) return HELPER_CONTEXT_GLOBAL_VALUE;
-  if (low === "project") return fallback;
-
-  const explicitProjectId = helperProjectIdFromContextValue(raw);
-  if (explicitProjectId) return helperContextValueForProjectId(explicitProjectId);
-  return HELPER_CONTEXT_GLOBAL_VALUE;
+function normalizeHelperContextScope(value) {
+  const s = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (s === "global") return "global";
+  return "project";
 }
 
 function getStoredHelperContextScope() {
-  const fallbackProjectId = helperDefaultProjectIdForContext();
   try {
     const raw = window.localStorage.getItem(STORAGE.helperContextScope) || "";
-    return normalizeHelperContextScope(raw, { defaultProjectId: fallbackProjectId });
+    return normalizeHelperContextScope(raw);
   } catch {
-    return fallbackProjectId ? helperContextValueForProjectId(fallbackProjectId) : HELPER_CONTEXT_GLOBAL_VALUE;
+    return "project";
   }
 }
 
 function storeHelperContextScope(scope) {
   try {
-    const fallbackProjectId = helperDefaultProjectIdForContext();
-    const v = normalizeHelperContextScope(scope, { defaultProjectId: fallbackProjectId });
+    const v = normalizeHelperContextScope(scope);
     window.localStorage.setItem(STORAGE.helperContextScope, v);
   } catch {
     // ignore
@@ -9100,8 +9045,7 @@ function helperCurrentAgentPref() {
 
 function helperCurrentContextScope() {
   const raw = els.helperContextScopeSelect ? String(els.helperContextScopeSelect.value || "") : "";
-  const fallbackProjectId = helperDefaultProjectIdForContext();
-  return normalizeHelperContextScope(raw || getStoredHelperContextScope(), { defaultProjectId: fallbackProjectId });
+  return normalizeHelperContextScope(raw || getStoredHelperContextScope());
 }
 
 function isHelperClaudeFamilyModel(value) {
@@ -9150,9 +9094,9 @@ function helperSelectedJobForContext(projectId = "") {
 
 function buildHelperContextPayload() {
   const scope = helperCurrentContextScope();
-  const project = helperSelectedProjectForContext(scope);
-  const projectId = project && project.id ? String(project.id).trim() : "";
-  const job = project ? helperSelectedJobForContext(projectId) : null;
+  const useProjectContext = scope !== "global";
+  const project = useProjectContext ? helperSelectedProjectForContext() : null;
+  const job = useProjectContext ? helperSelectedJobForContext() : null;
   const composerAgent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
   const composerModel = String(els.modelInput && els.modelInput.value ? els.modelInput.value : "").trim();
   const promptPreview = job && typeof job.promptPreview === "string" ? job.promptPreview.trim() : "";
@@ -9396,9 +9340,9 @@ function helperPushMessage(role, text, meta = {}) {
 function helperSetMeta(text) {
   if (!els.helperMeta) return;
   const scope = helperCurrentContextScope();
-  const project = helperSelectedProjectForContext(scope);
+  const project = scope === "project" ? helperSelectedProjectForContext() : null;
   const projectName = project && project.name ? String(project.name).trim() : "";
-  const contextText = projectName ? `Context: Project · ${projectName}` : "Context: Global";
+  const contextText = scope === "global" ? "Context: Global" : projectName ? `Context: Project · ${projectName}` : "Context: Project";
   const msg = String(text || "").trim();
   els.helperMeta.textContent = msg ? `${msg} · ${contextText}` : contextText;
 }
@@ -9525,7 +9469,6 @@ async function askHelperFromInput() {
     const model = String(res && res.model ? res.model : "").trim();
     helperPushMessage("assistant", answer, { agent, model });
     state.helperLastRunner = agent ? agentDisplayName(agent) : "Auto";
-    syncActiveHelperSessionFromState({ touch: false });
     helperSetMeta(`Last reply: ${state.helperLastRunner}`);
   } catch (err) {
     const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
@@ -9589,12 +9532,16 @@ function appendHelperContextToComposer() {
 function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
   const force = !!(opts && opts.force);
   const defAgent = helperDefaultAgentFromSettings(settings);
+  const defScope = getStoredHelperContextScope();
 
   if (els.helperAgentSelect) {
     const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
     if (force || !cur) els.helperAgentSelect.value = defAgent;
   }
-  renderHelperContextScopeOptions({ forceStored: force, skipStore: true });
+  if (els.helperContextScopeSelect) {
+    const curRaw = String(els.helperContextScopeSelect.value || "").trim();
+    if (force || !curRaw) els.helperContextScopeSelect.value = defScope;
+  }
 }
 
 function clearHelperHistoryNow(opts = {}) {
@@ -10913,31 +10860,12 @@ function wireUi() {
   }
   if (els.helperContextScopeSelect) {
     els.helperContextScopeSelect.addEventListener("change", () => {
-      const fallbackProjectId = helperDefaultProjectIdForContext();
-      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value, { defaultProjectId: fallbackProjectId });
-      if (!selectHasOptionValue(els.helperContextScopeSelect, next)) {
-        renderHelperContextScopeOptions({ skipStore: true });
-        helperSetMeta(helperCurrentMetaStatusText());
-        renderHelperPanel();
-        return;
-      }
+      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value);
       els.helperContextScopeSelect.value = next;
       storeHelperContextScope(next);
       helperSetMeta(helperCurrentMetaStatusText());
       renderHelperPanel();
     });
-  }
-  if (els.helperSessionSelect) {
-    els.helperSessionSelect.addEventListener("change", () => {
-      const next = String(els.helperSessionSelect.value || "").trim();
-      if (!helperSelectSession(next, { focus: true })) renderHelperPanel();
-    });
-  }
-  if (els.helperNewSessionBtn) {
-    els.helperNewSessionBtn.addEventListener("click", () => helperNewSessionNow({ focus: true }));
-  }
-  if (els.helperClearSessionBtn) {
-    els.helperClearSessionBtn.addEventListener("click", () => clearHelperCurrentSessionNow());
   }
   if (els.helperInput) {
     els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
@@ -10978,6 +10906,8 @@ function wireUi() {
     }
     if (v && v !== "auto") storeProjectId(v);
     syncComposerCheckoutModeUi();
+    schedulePromptPathSuggestRefresh({ immediate: true });
+    helperSetMeta(helperCurrentMetaStatusText());
   });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
