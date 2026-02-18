@@ -131,6 +131,264 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("falls back to project path when a job checkout path no longer exists", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    // Simulate that an isolated checkout got removed during archive/trash cleanup.
+    (jm as any).jobs.get("job1").projectPath = path.join(os.tmpdir(), "missing-checkout-path-does-not-exist");
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [] })).toEqual({ ok: true });
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(projectPath);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.projectPath).toBe(projectPath);
+  });
+
+  it("asks for a decision when a managed worktree checkout is missing", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ah-checkouts-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    const missingPath = path.join(checkoutsDir, "worktrees", "p1", "job1");
+    (jm as any).jobs.get("job1").projectPath = missingPath;
+    expect(fs.existsSync(missingPath)).toBe(false);
+
+    const askRes = await jm.send({ jobId: "job1", prompt: "follow up", images: [] });
+    expect(askRes).toMatchObject({
+      ok: true,
+      needsCheckoutDecision: { kind: "recreate_worktree", missingPath, projectPath }
+    });
+    expect(resumeOpts).toBeNull();
+
+    const snapAfterAsk = jm.getJob("job1") as any;
+    expect(Array.isArray(snapAfterAsk.job.queuedPrompts)).toBe(true);
+    expect(snapAfterAsk.job.queuedPrompts.length).toBe(0);
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [], missingCheckoutAction: "fallback_to_project" })).toEqual({ ok: true });
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(projectPath);
+
+    const snapAfterFallback = jm.getJob("job1") as any;
+    expect(snapAfterFallback.job.projectPath).toBe(projectPath);
+  });
+
+  it("can recreate a missing managed worktree checkout before resuming", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ah-checkouts-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const addWorktreeSpy = vi.spyOn(git, "addWorktree").mockImplementation(async (opts: any) => {
+      const wt = String(opts && opts.worktreeDir ? opts.worktreeDir : "").trim();
+      if (wt) fs.mkdirSync(wt, { recursive: true });
+    });
+
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    const missingPath = path.join(checkoutsDir, "worktrees", "p1", "job1");
+    (jm as any).jobs.get("job1").projectPath = missingPath;
+    expect(fs.existsSync(missingPath)).toBe(false);
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [], missingCheckoutAction: "recreate_worktree" })).toEqual({
+      ok: true
+    });
+    expect(addWorktreeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoDir: projectPath,
+        worktreeDir: missingPath,
+        branchName: "ah/job/job1"
+      })
+    );
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(missingPath);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.projectPath).toBe(missingPath);
+  });
+
+  it("tracks integrate-to-default progress as ephemeral metadata", async () => {
+    const events: any[] = [];
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: (p: any) => events.push(p),
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+
+    expect(jm.isIntegratingToDefault("job1")).toBe(false);
+    expect(jm.setIntegratingToDefault("job1", true)).toEqual({ ok: true });
+    expect(jm.isIntegratingToDefault("job1")).toBe(true);
+    expect((jm.getJob("job1") as any).job.integratingToDefault).toBe(true);
+    expect(jm.listJobMetas()[0].integratingToDefault).toBe(true);
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.integratingToDefault === true)).toBe(true);
+
+    expect(jm.setIntegratingToDefault("job1", false)).toEqual({ ok: true });
+    expect(jm.isIntegratingToDefault("job1")).toBe(false);
+    expect((jm.getJob("job1") as any).job.integratingToDefault).toBe(false);
+    expect(jm.listJobMetas()[0].integratingToDefault).toBe(false);
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.integratingToDefault === false)).toBe(true);
+  });
+
+  it("records integrate requests as chat prompts", async () => {
+    const events: any[] = [];
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: (p: any) => events.push(p),
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(jm.appendActionPrompt("job1", 'Integrate this checkout into the default branch "main".')).toEqual({ ok: true });
+
+    const snap = jm.getJob("job1") as any;
+    expect(Array.isArray(snap.job.prompts)).toBe(true);
+    expect(snap.job.prompts.length).toBe(2);
+    expect(snap.job.prompts[1].text).toBe('Integrate this checkout into the default branch "main".');
+
+    expect(
+      events.some(
+        (e) =>
+          e.kind === "meta" &&
+          e.patch &&
+          Array.isArray(e.patch.prompts) &&
+          String(e.patch.promptPreview || "").includes("Integrate this checkout into the default branch")
+      )
+    ).toBe(true);
+  });
+
   it("supports per-run checkoutMode overrides", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
@@ -587,7 +845,7 @@ describe("electron/jobs-manager", () => {
     snap = jm.getJob("job1") as any;
     expect(snap.job.status).toBe("done");
 
-    expect(jm.send({ jobId: "job1", prompt: "Now focus on deployment rollback for prod", images: [] })).toEqual({ ok: true });
+    expect(await jm.send({ jobId: "job1", prompt: "Now focus on deployment rollback for prod", images: [] })).toEqual({ ok: true });
     expect(resumeOpts.threadId).toBe("t123");
     expect(titleRuns.length).toBe(2);
     expect(titleRuns[1].prompt).toContain("Now focus on deployment rollback for prod");
