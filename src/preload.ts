@@ -123,6 +123,15 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     });
     return res;
   },
+  checkoutsIntegrateToDefault: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:getDiff", {
+      jobId,
+      maxChars: p.maxChars,
+      maxUntrackedFiles: p.maxUntrackedFiles
+    });
+    return res;
+  },
   checkoutsCommit: async (jobId, opts) => {
     const p = opts && typeof opts === "object" ? opts : {};
     const res = await invokeOk("checkouts:commit", {

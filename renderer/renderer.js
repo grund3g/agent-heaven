@@ -342,6 +342,10 @@ const HELPER_SESSION_MESSAGES_MAX = 80;
 const HELPER_SESSION_TEXT_MAX = 4000;
 const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
 const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
+const JOB_DIFF_CACHE_TTL_MS = 25_000;
+const JOB_DIFF_MAX_CHARS = 180_000;
+const jobDiffCache = new Map(); // jobId -> { sig, fetchedAt, payload }
+let jobDiffReqSeq = 0;
 
 let followupAutosizeRaf = 0;
 
@@ -3766,6 +3770,7 @@ function jobSearchablePanelForActiveTab() {
   if (state.activeTab === "chat") return els.jobDialogChat;
   if (state.activeTab === "live") return els.jobDialogLive;
   if (state.activeTab === "logs") return els.jobDialogLogs;
+  if (state.activeTab === "diff") return els.jobDialogDiff;
   return null;
 }
 
@@ -3790,6 +3795,7 @@ function clearJobSearchMarks() {
   clearJobSearchMarksInPanel(els.jobDialogChat);
   clearJobSearchMarksInPanel(els.jobDialogLive);
   clearJobSearchMarksInPanel(els.jobDialogLogs);
+  clearJobSearchMarksInPanel(els.jobDialogDiff);
 }
 
 function collectJobSearchTextNodes(rootEl) {
@@ -7921,12 +7927,14 @@ function setActiveTab(tab) {
   document.querySelectorAll(".tab").forEach((t) => {
     t.classList.toggle("tab--active", t.getAttribute("data-tab") === nextTab);
   });
-  els.jobDialogChat.classList.toggle("panel--active", tab === "chat");
-  els.jobDialogLive.classList.toggle("panel--active", tab === "live");
-  els.jobDialogLogs.classList.toggle("panel--active", tab === "logs");
-  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", tab === "term");
+  els.jobDialogChat.classList.toggle("panel--active", nextTab === "chat");
+  els.jobDialogLive.classList.toggle("panel--active", nextTab === "live");
+  els.jobDialogLogs.classList.toggle("panel--active", nextTab === "logs");
+  if (els.jobDialogDiff) els.jobDialogDiff.classList.toggle("panel--active", nextTab === "diff");
+  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", nextTab === "term");
   if (els.jobDialog && els.jobDialog.open) applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
-  if (tab === "term") maybeEnsureTerminalForSelectedJob();
+  if (nextTab === "term") maybeEnsureTerminalForSelectedJob();
+  if (nextTab === "diff") loadSelectedJobDiff({ force: false }).catch(() => {});
 }
 
 function isNearBottom(el) {
@@ -8077,299 +8085,7 @@ function jobDiffSignature(job) {
   return [status, finishedAt, projectPath, integratedAt, exitCode].join("|");
 }
 
-function getJobDiffUi(jobId) {
-  const id = String(jobId || "").trim();
-  if (!id) return { filterText: "", selectedFileId: "" };
-  let entry = jobDiffUiState.get(id);
-  if (!entry) {
-    entry = { filterText: "", selectedFileId: "" };
-    jobDiffUiState.set(id, entry);
-  }
-  return entry;
-}
-
-function normalizeDiffPathToken(value) {
-  let s = typeof value === "string" ? value.trim() : "";
-  if (!s) return "";
-  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) s = s.slice(1, -1);
-  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2) s = s.slice(1, -1);
-  if (s === "/dev/null") return "";
-  if (s.startsWith("a/") || s.startsWith("b/")) s = s.slice(2);
-  return s;
-}
-
-function parseDiffGitHeaderPaths(line) {
-  const m = /^diff --git a\/(.+) b\/(.+)$/.exec(String(line || ""));
-  if (!m) return { oldPath: "", newPath: "" };
-  return {
-    oldPath: normalizeDiffPathToken(m[1]),
-    newPath: normalizeDiffPathToken(m[2])
-  };
-}
-
-function parseDiffHunk(header, bodyLines) {
-  const m = /^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@/.exec(String(header || ""));
-  let leftLine = m ? Number(m[1]) : 0;
-  let rightLine = m ? Number(m[3]) : 0;
-  const rows = [];
-  let additions = 0;
-  let deletions = 0;
-
-  const lines = Array.isArray(bodyLines) ? bodyLines : [];
-  let i = 0;
-  while (i < lines.length) {
-    const line = String(lines[i] || "");
-
-    if (line.startsWith(" ")) {
-      const text = line.slice(1);
-      rows.push({
-        kind: "context",
-        leftNo: leftLine > 0 ? leftLine : null,
-        rightNo: rightLine > 0 ? rightLine : null,
-        leftText: text,
-        rightText: text
-      });
-      leftLine += 1;
-      rightLine += 1;
-      i += 1;
-      continue;
-    }
-
-    if (line.startsWith("-") || line.startsWith("+")) {
-      const dels = [];
-      const adds = [];
-      while (i < lines.length) {
-        const blockLine = String(lines[i] || "");
-        if (blockLine.startsWith("-")) {
-          dels.push(blockLine.slice(1));
-          i += 1;
-          continue;
-        }
-        if (blockLine.startsWith("+")) {
-          adds.push(blockLine.slice(1));
-          i += 1;
-          continue;
-        }
-        break;
-      }
-
-      const span = Math.max(dels.length, adds.length);
-      for (let j = 0; j < span; j += 1) {
-        const leftText = j < dels.length ? dels[j] : null;
-        const rightText = j < adds.length ? adds[j] : null;
-        const hasLeft = leftText != null;
-        const hasRight = rightText != null;
-
-        const row = {
-          kind: hasLeft && hasRight ? "mod" : hasLeft ? "del" : "add",
-          leftNo: hasLeft ? (leftLine > 0 ? leftLine : null) : null,
-          rightNo: hasRight ? (rightLine > 0 ? rightLine : null) : null,
-          leftText,
-          rightText
-        };
-        rows.push(row);
-        if (hasLeft) {
-          leftLine += 1;
-          deletions += 1;
-        }
-        if (hasRight) {
-          rightLine += 1;
-          additions += 1;
-        }
-      }
-      continue;
-    }
-
-    rows.push({
-      kind: "meta",
-      leftNo: null,
-      rightNo: null,
-      leftText: line,
-      rightText: line
-    });
-    i += 1;
-  }
-
-  return {
-    header: String(header || ""),
-    rows,
-    additions,
-    deletions
-  };
-}
-
-function parseUnifiedDiffModel(diffText) {
-  const lines = normalizeNewlines(diffText).split("\n");
-  const files = [];
-  const notes = [];
-  let section = "";
-  let fileCounter = 0;
-  let current = null;
-
-  function pushCurrent() {
-    if (!current) return;
-    current.status = String(current.status || "modified").trim().toLowerCase();
-    if (
-      current.status !== "modified" &&
-      current.status !== "added" &&
-      current.status !== "deleted" &&
-      current.status !== "renamed" &&
-      current.status !== "copied" &&
-      current.status !== "untracked"
-    ) {
-      current.status = "modified";
-    }
-
-    current.oldPath = normalizeDiffPathToken(current.oldPath);
-    current.newPath = normalizeDiffPathToken(current.newPath);
-
-    if (current.status === "deleted") current.path = current.oldPath || current.newPath || "";
-    else current.path = current.newPath || current.oldPath || "";
-    if (!current.path) current.path = current.headerPath || "";
-    if (!current.path) current.path = `file-${current.id}`;
-
-    files.push(current);
-    current = null;
-  }
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = String(lines[i] || "");
-
-    if (line.startsWith("# ")) {
-      pushCurrent();
-      section = line.slice(2).trim();
-      continue;
-    }
-
-    if (line.startsWith("diff --git ")) {
-      pushCurrent();
-      fileCounter += 1;
-      const paths = parseDiffGitHeaderPaths(line);
-      const headerPath = paths.newPath || paths.oldPath || "";
-      current = {
-        id: `f${fileCounter}`,
-        section,
-        status: "modified",
-        headerPath,
-        path: headerPath,
-        oldPath: paths.oldPath,
-        newPath: paths.newPath,
-        metaLines: [],
-        hunks: [],
-        additions: 0,
-        deletions: 0,
-        binary: false,
-        untracked: false
-      };
-      continue;
-    }
-
-    if (line.startsWith("?? ")) {
-      pushCurrent();
-      const untrackedPath = normalizeDiffPathToken(line.slice(3));
-      if (!untrackedPath) continue;
-      fileCounter += 1;
-      files.push({
-        id: `f${fileCounter}`,
-        section,
-        status: "untracked",
-        headerPath: untrackedPath,
-        path: untrackedPath,
-        oldPath: "",
-        newPath: untrackedPath,
-        metaLines: [],
-        hunks: [],
-        additions: 0,
-        deletions: 0,
-        binary: false,
-        untracked: true
-      });
-      continue;
-    }
-
-    if (line.startsWith("... ")) {
-      notes.push(line);
-      continue;
-    }
-
-    if (!current) {
-      if (line.trim()) notes.push(line);
-      continue;
-    }
-
-    if (line.startsWith("@@")) {
-      const body = [];
-      let j = i + 1;
-      while (j < lines.length) {
-        const next = String(lines[j] || "");
-        if (next.startsWith("@@") || next.startsWith("diff --git ") || next.startsWith("# ") || next.startsWith("?? ")) break;
-        body.push(next);
-        j += 1;
-      }
-      const hunk = parseDiffHunk(line, body);
-      current.hunks.push(hunk);
-      current.additions += hunk.additions;
-      current.deletions += hunk.deletions;
-      i = j - 1;
-      continue;
-    }
-
-    if (line.startsWith("new file mode ")) current.status = "added";
-    else if (line.startsWith("deleted file mode ")) current.status = "deleted";
-    else if (line.startsWith("rename from ")) {
-      current.status = "renamed";
-      current.oldPath = normalizeDiffPathToken(line.slice("rename from ".length));
-    } else if (line.startsWith("rename to ")) {
-      current.status = "renamed";
-      current.newPath = normalizeDiffPathToken(line.slice("rename to ".length));
-    } else if (line.startsWith("copy from ")) {
-      current.status = "copied";
-      current.oldPath = normalizeDiffPathToken(line.slice("copy from ".length));
-    } else if (line.startsWith("copy to ")) {
-      current.status = "copied";
-      current.newPath = normalizeDiffPathToken(line.slice("copy to ".length));
-    } else if (line.startsWith("Binary files ")) current.binary = true;
-    else if (line.startsWith("--- ")) {
-      const oldPath = normalizeDiffPathToken(line.slice(4));
-      if (oldPath) current.oldPath = oldPath;
-    } else if (line.startsWith("+++ ")) {
-      const newPath = normalizeDiffPathToken(line.slice(4));
-      if (newPath) current.newPath = newPath;
-    }
-    current.metaLines.push(line);
-  }
-
-  pushCurrent();
-  return { files, notes };
-}
-
-function diffStatusText(status) {
-  const s = String(status || "").trim().toLowerCase();
-  if (s === "added") return "Added";
-  if (s === "deleted") return "Deleted";
-  if (s === "renamed") return "Renamed";
-  if (s === "copied") return "Copied";
-  if (s === "untracked") return "Untracked";
-  return "Modified";
-}
-
-function diffStatusShort(status) {
-  const s = String(status || "").trim().toLowerCase();
-  if (s === "added") return "A";
-  if (s === "deleted") return "D";
-  if (s === "renamed") return "R";
-  if (s === "copied") return "C";
-  if (s === "untracked") return "?";
-  return "M";
-}
-
-function diffStatusClass(status) {
-  const s = String(status || "").trim().toLowerCase();
-  if (s === "added" || s === "deleted" || s === "renamed" || s === "copied" || s === "untracked") return s;
-  return "modified";
-}
-
-function diffRawLineClass(line) {
+function diffLineClass(line) {
   const s = String(line || "");
   if (!s) return "diffline";
   if (s.startsWith("# ")) return "diffline diffline--section";
@@ -8396,255 +8112,17 @@ function diffRawLineClass(line) {
   return "diffline";
 }
 
-function renderDiffRawTextHtml(diffText) {
+function renderDiffTextHtml(diffText) {
   const lines = normalizeNewlines(diffText).split("\n");
   if (lines.length === 1 && !lines[0]) return `<div class="logline">No diff output.</div>`;
   const rows = lines
     .map((line) => {
-      const cls = diffRawLineClass(line);
+      const cls = diffLineClass(line);
       const inner = line ? escapeHtml(line) : "&nbsp;";
       return `<div class="${cls}">${inner}</div>`;
     })
     .join("");
-  return `<div class="diffview__body diffview__body--raw">${rows}</div>`;
-}
-
-function diffFileMatchesQuery(file, query) {
-  const q = String(query || "").trim().toLowerCase();
-  if (!q) return true;
-  const f = file && typeof file === "object" ? file : {};
-  const hay = [f.path, f.oldPath, f.newPath, f.section, diffStatusText(f.status)].map((x) => String(x || "").toLowerCase()).join(" ");
-  return hay.includes(q);
-}
-
-function renderDiffLineNumberHtml(value) {
-  if (!Number.isFinite(value)) return "&nbsp;";
-  const n = Math.max(0, Math.trunc(value));
-  return n > 0 ? String(n) : "&nbsp;";
-}
-
-function renderDiffCodeHtml(value) {
-  if (value == null) return "&nbsp;";
-  const safe = escapeHtml(String(value));
-  return safe || "&nbsp;";
-}
-
-function renderDiffHunkHtml(hunk) {
-  const h = hunk && typeof hunk === "object" ? hunk : {};
-  const rows = Array.isArray(h.rows) ? h.rows : [];
-  const rowsHtml = rows
-    .map((row) => {
-      const r = row && typeof row === "object" ? row : {};
-      const kind = String(r.kind || "context");
-      const rowClass =
-        kind === "add"
-          ? "difftable__row difftable__row--add"
-          : kind === "del"
-            ? "difftable__row difftable__row--del"
-            : kind === "mod"
-              ? "difftable__row difftable__row--mod"
-              : kind === "meta"
-                ? "difftable__row difftable__row--meta"
-                : "difftable__row difftable__row--context";
-
-      return `
-        <tr class="${rowClass}">
-          <td class="difftable__ln difftable__ln--left">${renderDiffLineNumberHtml(Number(r.leftNo))}</td>
-          <td class="difftable__code difftable__code--left">${renderDiffCodeHtml(r.leftText)}</td>
-          <td class="difftable__ln difftable__ln--right">${renderDiffLineNumberHtml(Number(r.rightNo))}</td>
-          <td class="difftable__code difftable__code--right">${renderDiffCodeHtml(r.rightText)}</td>
-        </tr>
-      `;
-    })
-    .join("");
-
-  return `
-    <section class="diffchunk">
-      <div class="diffchunk__header">${escapeHtml(String(h.header || ""))}</div>
-      <div class="diffchunk__tableWrap">
-        <table class="difftable" role="table" aria-label="Side-by-side diff hunk">
-          <tbody>${rowsHtml}</tbody>
-        </table>
-      </div>
-    </section>
-  `;
-}
-
-function renderDiffSelectedFileHtml(file, notes) {
-  const f = file && typeof file === "object" ? file : null;
-  if (!f) return `<div class="diffcontent__empty">No files match the current filter.</div>`;
-
-  const statusClass = diffStatusClass(f.status);
-  const statusText = diffStatusText(f.status);
-  const statusShort = diffStatusShort(f.status);
-  const additions = Number.isFinite(f.additions) ? Math.max(0, Math.trunc(f.additions)) : 0;
-  const deletions = Number.isFinite(f.deletions) ? Math.max(0, Math.trunc(f.deletions)) : 0;
-  const mainPath = String(f.path || f.newPath || f.oldPath || "(unknown file)");
-  const renamed = !!(f.oldPath && f.newPath && f.oldPath !== f.newPath);
-  const metaLines = Array.isArray(f.metaLines)
-    ? f.metaLines.filter((line) => {
-        const s = String(line || "");
-        if (!s) return false;
-        if (s.startsWith("--- ") || s.startsWith("+++ ")) return false;
-        return true;
-      })
-    : [];
-
-  const metaHtml = metaLines.length
-    ? `<div class="diffcontent__meta">${metaLines.map((line) => `<div class="diffcontent__metaLine">${escapeHtml(String(line || ""))}</div>`).join("")}</div>`
-    : "";
-
-  const noteList = Array.isArray(notes) ? notes.filter((line) => String(line || "").trim()) : [];
-  const notesHtml = noteList.length
-    ? `<div class="diffcontent__notes">${noteList.map((line) => `<div class="diffcontent__note">${escapeHtml(String(line || ""))}</div>`).join("")}</div>`
-    : "";
-
-  let bodyHtml = "";
-  if (Array.isArray(f.hunks) && f.hunks.length > 0) {
-    bodyHtml = f.hunks.map((h) => renderDiffHunkHtml(h)).join("");
-  } else if (f.untracked) {
-    bodyHtml = `<div class="diffcontent__empty">Untracked file. Content preview is not included in patch output.</div>`;
-  } else if (f.binary) {
-    bodyHtml = `<div class="diffcontent__empty">Binary file changed.</div>`;
-  } else {
-    bodyHtml = `<div class="diffcontent__empty">No line-level hunks available.</div>`;
-  }
-
-  return `
-    <div class="diffcontent__head">
-      <div class="diffcontent__titleWrap">
-        <div class="diffcontent__title">${escapeHtml(mainPath)}</div>
-        ${renamed ? `<div class="diffcontent__subtitle">renamed from ${escapeHtml(String(f.oldPath || ""))}</div>` : ""}
-      </div>
-      <div class="diffcontent__badges">
-        <span class="diffstatus diffstatus--${statusClass}">${escapeHtml(statusShort)} ${escapeHtml(statusText)}</span>
-        ${additions > 0 ? `<span class="diffdelta diffdelta--add">+${additions}</span>` : ""}
-        ${deletions > 0 ? `<span class="diffdelta diffdelta--del">-${deletions}</span>` : ""}
-      </div>
-    </div>
-    ${notesHtml}
-    <div class="diffcontent__scroll">
-      ${metaHtml}
-      ${bodyHtml}
-    </div>
-  `;
-}
-
-function getJobDiffModel(job, payload) {
-  const p = payload && typeof payload === "object" ? payload : null;
-  if (!p) return { files: [], notes: [] };
-  const diffText = typeof p.diff === "string" ? p.diff : "";
-  const jobId = String((job && job.id) || state.selectedJobId || "").trim();
-  const cached = jobId ? jobDiffCache.get(jobId) : null;
-  if (cached && cached.payload === p && cached.model && typeof cached.model === "object") {
-    return cached.model;
-  }
-  const model = parseUnifiedDiffModel(diffText);
-  if (cached && cached.payload === p) cached.model = model;
-  return model;
-}
-
-function renderDiffWorkbenchHtml(job, payload) {
-  const model = getJobDiffModel(job, payload);
-  const files = Array.isArray(model.files) ? model.files : [];
-  if (files.length === 0) {
-    return renderDiffRawTextHtml(typeof payload.diff === "string" ? payload.diff : "");
-  }
-
-  const jobId = String((job && job.id) || state.selectedJobId || "").trim();
-  const ui = getJobDiffUi(jobId);
-  const queryRaw = typeof ui.filterText === "string" ? ui.filterText : "";
-  const query = queryRaw.trim().toLowerCase();
-  const visible = query ? files.filter((f) => diffFileMatchesQuery(f, query)) : files;
-
-  let selectedFileId = String(ui.selectedFileId || "").trim();
-  if (!visible.some((f) => String(f.id || "") === selectedFileId)) {
-    selectedFileId = visible[0] ? String(visible[0].id || "") : "";
-  }
-  ui.selectedFileId = selectedFileId;
-  const selectedFile = visible.find((f) => String(f.id || "") === selectedFileId) || null;
-
-  const totalAdditions = files.reduce((sum, f) => sum + Math.max(0, Number.isFinite(f.additions) ? Math.trunc(f.additions) : 0), 0);
-  const totalDeletions = files.reduce((sum, f) => sum + Math.max(0, Number.isFinite(f.deletions) ? Math.trunc(f.deletions) : 0), 0);
-
-  let listHtml = "";
-  let lastSection = "";
-  for (const file of visible) {
-    const section = String(file && file.section ? file.section : "");
-    if (section !== lastSection) {
-      listHtml += `<div class="difffiles__section">${escapeHtml(section || "changes")}</div>`;
-      lastSection = section;
-    }
-
-    const f = file && typeof file === "object" ? file : {};
-    const statusClass = diffStatusClass(f.status);
-    const statusShort = diffStatusShort(f.status);
-    const additions = Math.max(0, Number.isFinite(f.additions) ? Math.trunc(f.additions) : 0);
-    const deletions = Math.max(0, Number.isFinite(f.deletions) ? Math.trunc(f.deletions) : 0);
-    const mainPath = String(f.path || f.newPath || f.oldPath || "(unknown file)");
-    const subPath = f.oldPath && f.newPath && f.oldPath !== f.newPath ? String(f.oldPath) : "";
-    const active = String(f.id || "") === selectedFileId;
-
-    listHtml += `
-      <button type="button" class="difffile${active ? " difffile--active" : ""}" data-job-diff-file-id="${escapeHtml(String(f.id || ""))}">
-        <span class="difffile__text">
-          <span class="difffile__path">${escapeHtml(mainPath)}</span>
-          ${subPath ? `<span class="difffile__sub">${escapeHtml(subPath)}</span>` : ""}
-        </span>
-        <span class="difffile__meta">
-          <span class="difffile__status difffile__status--${statusClass}">${escapeHtml(statusShort)}</span>
-          ${additions > 0 ? `<span class="difffile__delta difffile__delta--add">+${additions}</span>` : ""}
-          ${deletions > 0 ? `<span class="difffile__delta difffile__delta--del">-${deletions}</span>` : ""}
-        </span>
-      </button>
-    `;
-  }
-
-  if (!listHtml) {
-    listHtml = `<div class="difffiles__empty">No files match the current filter.</div>`;
-  }
-
-  const fileCountText = query ? `${visible.length}/${files.length} files` : `${files.length} files`;
-
-  return `
-    <div class="diffview__shell">
-      <aside class="difffiles">
-        <div class="difffiles__toolbar">
-          <input
-            class="difffiles__filter"
-            type="search"
-            placeholder="Filter files…"
-            autocomplete="off"
-            value="${escapeHtml(queryRaw)}"
-            data-job-diff-filter
-          />
-          <div class="difffiles__summary">
-            <span>${escapeHtml(fileCountText)}</span>
-            <span class="difffiles__totals">
-              ${totalAdditions > 0 ? `<span class="difffile__delta difffile__delta--add">+${totalAdditions}</span>` : ""}
-              ${totalDeletions > 0 ? `<span class="difffile__delta difffile__delta--del">-${totalDeletions}</span>` : ""}
-            </span>
-          </div>
-        </div>
-        <div class="difffiles__list">${listHtml}</div>
-      </aside>
-      <section class="diffcontent">${renderDiffSelectedFileHtml(selectedFile, model.notes)}</section>
-    </div>
-  `;
-}
-
-function rerenderSelectedJobDiffFromCache() {
-  const jobId = String(state.selectedJobId || "").trim();
-  if (!jobId) return;
-  const job = state.jobs.get(jobId);
-  if (!job) return;
-  const cached = jobDiffCache.get(jobId);
-  if (!(cached && cached.payload)) return;
-
-  renderJobDiffPanel(job, cached.payload, { showRefresh: true });
-  if (state.activeTab === "diff" && normalizeJobSearchQuery(state.jobSearchQuery)) {
-    applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
-  }
+  return `<div class="diffview__body">${rows}</div>`;
 }
 
 function renderJobDiffPanel(job, payload, opts = {}) {
@@ -8677,7 +8155,7 @@ function renderJobDiffPanel(job, payload, opts = {}) {
   if (message) {
     body = `<div class="logline${error ? " logline--stderr" : ""}">${escapeHtml(message)}</div>`;
   } else if (p && p.hasChanges === true) {
-    body = renderDiffWorkbenchHtml(job, p);
+    body = renderDiffTextHtml(typeof p.diff === "string" ? p.diff : "");
   } else {
     body = `<div class="logline">No code changes detected for this task.</div>`;
   }
@@ -8748,8 +8226,7 @@ async function loadSelectedJobDiff(opts = {}) {
 
     const liveJob = state.jobs.get(jobId) || job;
     const payload = res && typeof res === "object" ? res : {};
-    const model = payload && payload.hasChanges === true ? parseUnifiedDiffModel(typeof payload.diff === "string" ? payload.diff : "") : null;
-    jobDiffCache.set(jobId, { sig: jobDiffSignature(liveJob), fetchedAt: Date.now(), payload, model });
+    jobDiffCache.set(jobId, { sig: jobDiffSignature(liveJob), fetchedAt: Date.now(), payload });
     renderJobDiffPanel(liveJob, payload);
 
     if (state.activeTab === "diff" && normalizeJobSearchQuery(state.jobSearchQuery)) {
@@ -11154,45 +10631,9 @@ function wireUi() {
   if (els.jobDialogDiff) {
     els.jobDialogDiff.addEventListener("click", (e) => {
       const refreshBtn = e.target && e.target.closest ? e.target.closest("[data-job-diff-refresh]") : null;
-      if (refreshBtn) {
-        e.preventDefault();
-        loadSelectedJobDiff({ force: true }).catch(() => {});
-        return;
-      }
-
-      const fileBtn = e.target && e.target.closest ? e.target.closest("[data-job-diff-file-id]") : null;
-      if (!fileBtn) return;
+      if (!refreshBtn) return;
       e.preventDefault();
-
-      const jobId = String(state.selectedJobId || "").trim();
-      if (!jobId) return;
-      const fileId = String(fileBtn.getAttribute("data-job-diff-file-id") || "").trim();
-      const ui = getJobDiffUi(jobId);
-      ui.selectedFileId = fileId;
-      rerenderSelectedJobDiffFromCache();
-    });
-
-    els.jobDialogDiff.addEventListener("input", (e) => {
-      const filterInput = e.target && e.target.closest ? e.target.closest("[data-job-diff-filter]") : null;
-      if (!filterInput) return;
-
-      const jobId = String(state.selectedJobId || "").trim();
-      if (!jobId) return;
-      const ui = getJobDiffUi(jobId);
-      ui.filterText = String(filterInput.value || "");
-      const caret = Number.isFinite(filterInput.selectionStart) ? filterInput.selectionStart : null;
-      rerenderSelectedJobDiffFromCache();
-      const nextInput = els.jobDialogDiff.querySelector("[data-job-diff-filter]");
-      if (nextInput && typeof nextInput.focus === "function") {
-        nextInput.focus();
-        if (caret != null && typeof nextInput.setSelectionRange === "function") {
-          try {
-            nextInput.setSelectionRange(caret, caret);
-          } catch {
-            // ignore
-          }
-        }
-      }
+      loadSelectedJobDiff({ force: true }).catch(() => {});
     });
   }
 
@@ -11206,6 +10647,7 @@ function wireUi() {
   els.jobDialog.addEventListener("close", () => {
     hideJobMoreMenu();
     clearJobSearch();
+    jobDiffReqSeq += 1; // cancel in-flight diff requests
 
     const jobId = state.selectedJobId;
     if (!jobId) return;

@@ -7,14 +7,6 @@ function truncate(s: string, max = 12_000): string {
   return `${str.slice(0, max)}\n...[truncated ${str.length - max} chars]`;
 }
 
-function appendLimited(cur: string, chunk: unknown, max: number): { next: string; truncated: boolean } {
-  const add = typeof chunk === "string" ? chunk : chunk == null ? "" : String(chunk);
-  if (!add) return { next: cur, truncated: false };
-  const next = cur + add;
-  if (next.length <= max) return { next, truncated: false };
-  return { next: next.slice(next.length - max), truncated: true };
-}
-
 function normalizeNewlines(s: unknown): string {
   return String(s || "").replaceAll("\r\n", "\n").replaceAll("\r", "\n");
 }
@@ -54,8 +46,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       }
       resolve({
         ok: false,
-        stdout: stdoutTruncated ? `...[truncated earlier output]\n${truncate(stdout, maxOutputChars)}` : truncate(stdout, maxOutputChars),
-        stderr: stderrTruncated ? `...[truncated earlier output]\n${truncate(stderr, maxOutputChars)}` : truncate(stderr, maxOutputChars),
+        stdout: truncate(stdout, maxOutputChars),
+        stderr: truncate(stderr, maxOutputChars),
         code: null,
         error: `Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(" ")}`
       });
@@ -80,8 +72,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       clearTimeout(timer);
       resolve({
         ok: false,
-        stdout: stdoutTruncated ? `...[truncated earlier output]\n${truncate(stdout, maxOutputChars)}` : truncate(stdout, maxOutputChars),
-        stderr: stderrTruncated ? `...[truncated earlier output]\n${truncate(stderr, maxOutputChars)}` : truncate(stderr, maxOutputChars),
+        stdout: truncate(stdout, maxOutputChars),
+        stderr: truncate(stderr, maxOutputChars),
         code: null,
         error: String(err && err.message ? err.message : err)
       });
@@ -91,11 +83,10 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       if (done) return;
       done = true;
       clearTimeout(timer);
-      const c = typeof code === "number" ? code : null;
-      const sig = typeof signal === "string" ? String(signal) : "";
-      const out = stdoutTruncated ? `...[truncated earlier output]\n${truncate(stdout, maxOutputChars)}` : truncate(stdout, maxOutputChars);
-      const err = stderrTruncated ? `...[truncated earlier output]\n${truncate(stderr, maxOutputChars)}` : truncate(stderr, maxOutputChars);
-      if (c === 0 && !sig) resolve({ ok: true, stdout: out, stderr: err, code: c, error: "" });
+      const c = typeof code === "number" ? code : 0;
+      const out = truncate(stdout, maxOutputChars);
+      const err = truncate(stderr, maxOutputChars);
+      if (c === 0) resolve({ ok: true, stdout: out, stderr: err, code: c, error: "" });
       else
         resolve({
           ok: false,

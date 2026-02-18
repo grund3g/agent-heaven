@@ -2997,14 +2997,9 @@ body::before {
 }
 
 .diffview {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  height: 100%;
   font-family: var(--mono);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--ink-mono);
 }
 
@@ -3012,8 +3007,8 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
 }
 
 .diffview__status {
@@ -3040,7 +3035,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .diffview__hint {
@@ -3049,413 +3044,7 @@ body::before {
   white-space: pre-wrap;
 }
 
-.diffview__shell {
-  display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 12px;
-  min-height: 0;
-  flex: 1 1 auto;
-}
-
-.difffiles {
-  border: 1px solid var(--stroke-strong);
-  border-radius: 10px;
-  background: var(--surface0);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.difffiles__toolbar {
-  padding: 8px;
-  border-bottom: 1px solid var(--stroke-faint);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.difffiles__filter {
-  width: 100%;
-  height: 30px;
-  border-radius: 6px;
-  border: 1px solid var(--stroke-faint);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--ink);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 0 10px;
-  outline: none;
-}
-
-.difffiles__filter:focus {
-  border-color: rgba(var(--accent-rgb), 0.62);
-  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.32);
-}
-
-.difffiles__summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted2);
-}
-
-.difffiles__totals {
-  display: inline-flex;
-  gap: 6px;
-}
-
-.difffiles__list {
-  min-height: 0;
-  overflow: auto;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.difffiles__section {
-  margin: 6px 4px 2px;
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted2);
-}
-
-.difffiles__empty {
-  padding: 12px 10px;
-  font-size: 12px;
-  color: var(--muted2);
-}
-
-.difffile {
-  width: 100%;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  padding: 7px 8px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.difffile:hover {
-  background: var(--hover-bg);
-}
-
-.difffile--active {
-  background: rgba(var(--accent-rgb), 0.16);
-  border-color: rgba(var(--accent-rgb), 0.34);
-}
-
-.difffile__text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.difffile__path {
-  display: block;
-  font-size: 12px;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.difffile__sub {
-  display: block;
-  font-size: 10px;
-  color: var(--muted2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.difffile__meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-}
-
-.difffile__status {
-  min-width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  padding: 0 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.difffile__status--modified {
-  color: rgba(var(--accent-rgb), 0.96);
-  background: rgba(var(--accent-rgb), 0.16);
-}
-
-.difffile__status--added {
-  color: rgba(var(--accent2-rgb), 0.96);
-  background: rgba(var(--accent2-rgb), 0.16);
-}
-
-.difffile__status--deleted {
-  color: rgba(var(--danger-rgb), 0.96);
-  background: rgba(var(--danger-rgb), 0.16);
-}
-
-.difffile__status--renamed,
-.difffile__status--copied,
-.difffile__status--untracked {
-  color: var(--ink-mid);
-  background: var(--surface3);
-}
-
-.difffile__delta {
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.difffile__delta--add {
-  color: rgba(var(--accent2-rgb), 0.96);
-}
-
-.difffile__delta--del {
-  color: rgba(var(--danger-rgb), 0.96);
-}
-
-.diffcontent {
-  border: 1px solid var(--stroke-strong);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.diffcontent__head {
-  border-bottom: 1px solid var(--stroke-faint);
-  padding: 10px 12px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.diffcontent__titleWrap {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.diffcontent__title {
-  font-size: 12px;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.diffcontent__subtitle {
-  font-size: 10px;
-  color: var(--muted2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.diffcontent__badges {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-  flex: 0 0 auto;
-}
-
-.diffstatus {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  border-radius: 999px;
-  padding: 2px 8px;
-}
-
-.diffstatus--modified {
-  color: rgba(var(--accent-rgb), 0.96);
-  background: rgba(var(--accent-rgb), 0.16);
-}
-
-.diffstatus--added {
-  color: rgba(var(--accent2-rgb), 0.96);
-  background: rgba(var(--accent2-rgb), 0.16);
-}
-
-.diffstatus--deleted {
-  color: rgba(var(--danger-rgb), 0.96);
-  background: rgba(var(--danger-rgb), 0.16);
-}
-
-.diffstatus--renamed,
-.diffstatus--copied,
-.diffstatus--untracked {
-  color: var(--ink-mid);
-  background: var(--surface3);
-}
-
-.diffdelta {
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.diffdelta--add {
-  color: rgba(var(--accent2-rgb), 0.96);
-}
-
-.diffdelta--del {
-  color: rgba(var(--danger-rgb), 0.96);
-}
-
-.diffcontent__notes,
-.diffcontent__meta {
-  margin: 10px 10px 0;
-  border: 1px solid var(--stroke-faint);
-  border-radius: 7px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.diffcontent__note,
-.diffcontent__metaLine {
-  padding: 4px 9px;
-  border-top: 1px solid var(--stroke-faint);
-  font-size: 11px;
-  color: var(--muted2);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.diffcontent__note:first-child,
-.diffcontent__metaLine:first-child {
-  border-top: 0;
-}
-
-.diffcontent__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.diffcontent__empty {
-  border: 1px dashed var(--stroke-faint);
-  border-radius: 8px;
-  padding: 18px 14px;
-  color: var(--muted2);
-  text-align: center;
-}
-
-.diffchunk {
-  border: 1px solid var(--stroke-faint);
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.diffchunk__header {
-  font-size: 11px;
-  color: rgba(var(--accent-rgb), 0.96);
-  padding: 6px 10px;
-  border-bottom: 1px solid rgba(var(--accent-rgb), 0.28);
-  background: rgba(var(--accent-rgb), 0.10);
-}
-
-.diffchunk__tableWrap {
-  overflow: auto;
-}
-
-.difftable {
-  border-collapse: collapse;
-  min-width: 100%;
-  width: max-content;
-}
-
-.difftable__row td {
-  border-top: 1px solid var(--stroke-faint);
-}
-
-.difftable__row:first-child td {
-  border-top: 0;
-}
-
-.difftable__ln {
-  width: 54px;
-  min-width: 54px;
-  max-width: 54px;
-  text-align: right;
-  padding: 0 8px;
-  color: var(--muted2);
-  background: rgba(255, 255, 255, 0.02);
-  user-select: none;
-}
-
-.difftable__ln--left,
-.difftable__code--left {
-  border-right: 1px solid var(--stroke-faint);
-}
-
-.difftable__code {
-  padding: 1px 8px;
-  white-space: pre;
-  color: var(--ink-mono);
-}
-
-.difftable__row--add .difftable__ln--right,
-.difftable__row--add .difftable__code--right {
-  background: rgba(var(--accent2-rgb), 0.18);
-  color: var(--ink);
-}
-
-.difftable__row--del .difftable__ln--left,
-.difftable__row--del .difftable__code--left {
-  background: rgba(var(--danger-rgb), 0.18);
-  color: var(--ink);
-}
-
-.difftable__row--mod .difftable__ln--left,
-.difftable__row--mod .difftable__code--left {
-  background: rgba(var(--danger-rgb), 0.14);
-  color: var(--ink);
-}
-
-.difftable__row--mod .difftable__ln--right,
-.difftable__row--mod .difftable__code--right {
-  background: rgba(var(--accent2-rgb), 0.14);
-  color: var(--ink);
-}
-
-.difftable__row--meta td {
-  background: rgba(var(--accent-rgb), 0.10);
-  color: var(--muted2);
-  font-style: italic;
-}
-
-.diffview__body--raw {
+.diffview__body {
   border: 1px solid var(--stroke-strong);
   border-radius: 10px;
   overflow: auto;
@@ -3465,15 +3054,15 @@ body::before {
 .diffline {
   white-space: pre;
   padding: 1px 8px;
-  min-height: 1.45em;
+  min-height: 1.35em;
 }
 
 .diffline--section {
   color: var(--muted2);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding-top: 6px;
-  padding-bottom: 3px;
+  padding-top: 7px;
+  padding-bottom: 4px;
 }
 
 .diffline--file {
@@ -3482,39 +3071,22 @@ body::before {
 }
 
 .diffline--hunk {
-  color: rgba(var(--accent-rgb), 1);
-  background: rgba(var(--accent-rgb), 0.12);
+  color: rgba(var(--accent-rgb), 0.96);
+  background: rgba(var(--accent-rgb), 0.10);
 }
 
 .diffline--add {
   color: var(--ink);
-  background: rgba(var(--accent2-rgb), 0.17);
+  background: rgba(var(--accent2-rgb), 0.18);
 }
 
 .diffline--del {
   color: var(--ink);
-  background: rgba(var(--danger-rgb), 0.17);
+  background: rgba(var(--danger-rgb), 0.20);
 }
 
 .diffline--meta {
-  color: var(--muted2);
-}
-
-@media (max-width: 1120px) {
-  .diffview__shell {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .difffiles {
-    max-height: 230px;
-  }
-
-  .difftable__ln {
-    width: 48px;
-    min-width: 48px;
-    max-width: 48px;
-  }
+  color: var(--muted);
 }
 
 .dialog__footer {
