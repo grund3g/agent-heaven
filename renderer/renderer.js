@@ -5586,6 +5586,7 @@ function renderProjects() {
   if (current) els.projectSelect.value = current;
   applyDefaultProjectSelection();
   syncComposerCheckoutModeUi();
+  renderHelperContextScopeOptions({ skipStore: true });
 
   // project filter select (Board)
   if (els.projectFilterSelect) {
@@ -9810,6 +9811,12 @@ function helperCurrentAgentPref() {
   return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
 }
 
+function helperCurrentContextScope() {
+  const raw = els.helperContextScopeSelect ? String(els.helperContextScopeSelect.value || "") : "";
+  const fallbackProjectId = helperDefaultProjectIdForContext();
+  return normalizeHelperContextScope(raw || getStoredHelperContextScope(), { defaultProjectId: fallbackProjectId });
+}
+
 function isHelperClaudeFamilyModel(value) {
   const low = String(value || "")
     .trim()
@@ -10307,6 +10314,7 @@ function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
     const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
     if (force || !cur) els.helperAgentSelect.value = defAgent;
   }
+  renderHelperContextScopeOptions({ forceStored: force, skipStore: true });
 }
 
 function clearHelperHistoryNow(opts = {}) {
@@ -11623,10 +11631,20 @@ function wireUi() {
       renderHelperPanel();
     });
   }
-  if (els.helperSessionSelect) {
-    els.helperSessionSelect.addEventListener("change", () => {
-      const next = String(els.helperSessionSelect.value || "").trim();
-      if (!helperSelectSession(next, { focus: true })) renderHelperPanel();
+  if (els.helperContextScopeSelect) {
+    els.helperContextScopeSelect.addEventListener("change", () => {
+      const fallbackProjectId = helperDefaultProjectIdForContext();
+      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value, { defaultProjectId: fallbackProjectId });
+      if (!selectHasOptionValue(els.helperContextScopeSelect, next)) {
+        renderHelperContextScopeOptions({ skipStore: true });
+        helperSetMeta(helperCurrentMetaStatusText());
+        renderHelperPanel();
+        return;
+      }
+      els.helperContextScopeSelect.value = next;
+      storeHelperContextScope(next);
+      helperSetMeta(helperCurrentMetaStatusText());
+      renderHelperPanel();
     });
   }
   if (els.helperNewSessionBtn) {
