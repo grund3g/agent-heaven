@@ -45,7 +45,7 @@ export const DEFAULT_STATE = {
     // UI notifications (renderer)
     soundOnNeedsAttention: false,
     soundOnDone: false,
-    soundPreset: "classic", // classic | chime | pop | bell | arcade | goat (easter egg)
+    soundPreset: "classic", // classic | chime | pop | bell | arcade | cucaracha | fun_drum | pipe | sergei | pop_wow | goat (easter egg)
     soundVolume: 35, // 0..100
     boardDoneLimit: 250, // 0 = unlimited (limits Done lane rendering on Board)
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success

@@ -295,7 +295,16 @@ const state = {
 };
 
 const audio = {
-  ctx: null
+  ctx: null,
+  activeHtmlPlayers: new Set()
+};
+
+const SOUND_SAMPLE_URLS = {
+  cucaracha: "sounds/la-cucaracha-car-horn.mp3",
+  fun_drum: "sounds/fun-comedic-drum.mp3",
+  pipe: "sounds/pipe.mp3",
+  sergei: "sounds/sergei-spas.mp3",
+  pop_wow: "sounds/pop-wow.mp3"
 };
 
 const STORAGE = {
@@ -482,7 +491,7 @@ applySidebarCollapsed(getStoredSidebarCollapsed());
 
 const THEMES = ["heaven", "nord", "gruvbox", "solarized", "dracula", "ocean"];
 const COLOR_SCHEMES = ["system", "dark", "light"];
-const SOUND_PRESETS = ["classic", "chime", "pop", "bell", "arcade", "goat"];
+const SOUND_PRESETS = ["classic", "chime", "pop", "bell", "arcade", "cucaracha", "fun_drum", "pipe", "sergei", "pop_wow", "goat"];
 const GRID_SVG = `
   <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
     <rect x="4" y="4" width="9" height="9" rx="2" stroke-width="2.0" />
@@ -4166,7 +4175,7 @@ function ensureDemoJobs() {
 
   if (changed) {
     renderBoard();
-    ensureDurationTicker();
+    syncDurationTicker();
     scheduleStatusDialogRender();
   }
 
@@ -4619,6 +4628,195 @@ function scheduleNoiseBurst(ctx, when, durationSec, amp, opts) {
   src.stop(when + d + 0.05);
 }
 
+function scheduleHornBlast(ctx, when, freqHz, durationSec, amp, opts) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const f = typeof freqHz === "number" && Number.isFinite(freqHz) ? Math.max(40, freqHz) : 440;
+  const d = clampNumber(durationSec, 0.04, 1.2, 0.14);
+  const a = Math.max(0.0001, amp);
+  const attack = clampNumber(o.attack, 0.001, 0.08, 0.008);
+  const wobbleHz = clampNumber(o.wobbleHz, 0.1, 20, 4.8);
+  const wobbleCents = clampNumber(o.wobbleCents, 0, 80, 10);
+  const endHz =
+    typeof o.endFreqHz === "number" && Number.isFinite(o.endFreqHz) ? Math.max(20, o.endFreqHz) : Math.max(20, f * 0.93);
+
+  const oscMain = ctx.createOscillator();
+  const oscBody = ctx.createOscillator();
+  const oscEdge = ctx.createOscillator();
+  const gainMain = ctx.createGain();
+  const gainBody = ctx.createGain();
+  const gainEdge = ctx.createGain();
+  const mix = ctx.createGain();
+  const band = ctx.createBiquadFilter();
+  const low = ctx.createBiquadFilter();
+  const out = ctx.createGain();
+
+  oscMain.type = "sawtooth";
+  oscBody.type = "square";
+  oscEdge.type = "triangle";
+
+  oscMain.frequency.setValueAtTime(f * 1.02, when);
+  oscMain.frequency.exponentialRampToValueAtTime(Math.max(20, endHz), when + d);
+  oscBody.frequency.setValueAtTime(Math.max(20, f * 0.5), when);
+  oscBody.frequency.exponentialRampToValueAtTime(Math.max(20, endHz * 0.5), when + d);
+  oscEdge.frequency.setValueAtTime(f * 2.01, when);
+  oscEdge.frequency.exponentialRampToValueAtTime(Math.max(20, endHz * 1.95), when + d);
+
+  const detuneMain = clampNumber(o.detuneCents, -80, 80, 0);
+  if (detuneMain) oscMain.detune.setValueAtTime(detuneMain, when);
+
+  gainMain.gain.setValueAtTime(0.8, when);
+  gainBody.gain.setValueAtTime(0.32, when);
+  gainEdge.gain.setValueAtTime(0.2, when);
+  mix.gain.setValueAtTime(1, when);
+
+  band.type = "bandpass";
+  band.frequency.setValueAtTime(clampNumber(o.formantHz, 500, 2800, 1120), when);
+  band.Q.setValueAtTime(clampNumber(o.formantQ, 0.1, 20, 1.35), when);
+
+  low.type = "lowpass";
+  low.frequency.setValueAtTime(clampNumber(o.lowpassHz, 800, 6000, 2800), when);
+  low.Q.setValueAtTime(0.55, when);
+
+  out.gain.setValueAtTime(0.0001, when);
+  out.gain.exponentialRampToValueAtTime(a, when + Math.min(attack, d));
+  out.gain.exponentialRampToValueAtTime(Math.max(0.0001, a * 0.78), when + d * 0.52);
+  out.gain.exponentialRampToValueAtTime(0.0001, when + d);
+
+  const lfo = ctx.createOscillator();
+  const lfoMain = ctx.createGain();
+  const lfoBody = ctx.createGain();
+  lfo.type = "sine";
+  lfo.frequency.setValueAtTime(wobbleHz, when);
+  lfoMain.gain.setValueAtTime(wobbleCents, when);
+  lfoBody.gain.setValueAtTime(wobbleCents * 0.6, when);
+  lfo.connect(lfoMain);
+  lfo.connect(lfoBody);
+  lfoMain.connect(oscMain.detune);
+  lfoBody.connect(oscBody.detune);
+
+  // Small attack burst to imitate air/compressor onset of a horn.
+  scheduleNoiseBurst(ctx, when, Math.min(0.045, d * 0.45), a * 0.08, { freqHz: 1900, q: 1.2 });
+
+  oscMain.connect(gainMain);
+  oscBody.connect(gainBody);
+  oscEdge.connect(gainEdge);
+  gainMain.connect(mix);
+  gainBody.connect(mix);
+  gainEdge.connect(mix);
+  mix.connect(band);
+  band.connect(low);
+  low.connect(out);
+  out.connect(ctx.destination);
+
+  oscMain.start(when);
+  oscBody.start(when);
+  oscEdge.start(when);
+  lfo.start(when);
+  oscMain.stop(when + d + 0.06);
+  oscBody.stop(when + d + 0.06);
+  oscEdge.stop(when + d + 0.06);
+  lfo.stop(when + d + 0.06);
+}
+
+function sampleUrlForPreset(preset) {
+  if (!preset) return "";
+  const rel = Object.prototype.hasOwnProperty.call(SOUND_SAMPLE_URLS, preset) ? SOUND_SAMPLE_URLS[preset] : "";
+  if (!rel) return "";
+  try {
+    return new URL(rel, window.location.href).toString();
+  } catch {
+    return "";
+  }
+}
+
+function playPresetSample(preset, volume01, opts) {
+  const url = sampleUrlForPreset(preset);
+  if (!url) return false;
+
+  const o = opts && typeof opts === "object" ? opts : {};
+  const onError = typeof o.onError === "function" ? o.onError : null;
+
+  let player = null;
+  try {
+    player = new Audio(url);
+    player.preload = "auto";
+    player.volume = clampNumber(volume01, 0, 1, 0.6);
+    player.currentTime = 0;
+  } catch {
+    if (onError) onError();
+    return false;
+  }
+
+  const release = () => {
+    try {
+      audio.activeHtmlPlayers.delete(player);
+    } catch {
+      // ignore
+    }
+  };
+
+  audio.activeHtmlPlayers.add(player);
+  player.addEventListener("ended", release, { once: true });
+  player.addEventListener("error", () => {
+    release();
+    if (onError) onError();
+  }, { once: true });
+
+  try {
+    const playRes = player.play();
+    if (playRes && typeof playRes.catch === "function") {
+      playRes.catch(() => {
+        release();
+        if (onError) onError();
+      });
+    }
+  } catch {
+    release();
+    if (onError) onError();
+    return false;
+  }
+
+  return true;
+}
+
+function scheduleCucarachaHornPattern(ctx, kind, t0, amp) {
+  if (!ctx) return;
+  if (kind === "attention") {
+    scheduleHornBlast(ctx, t0 + 0.00, 659.25, 0.12, amp, { wobbleHz: 4.4, wobbleCents: 9.5, attack: 0.006 });
+    scheduleHornBlast(ctx, t0 + 0.14, 659.25, 0.12, amp, { wobbleHz: 4.4, wobbleCents: 9.5, attack: 0.006 });
+    scheduleHornBlast(ctx, t0 + 0.28, 659.25, 0.12, amp, { wobbleHz: 4.4, wobbleCents: 9.5, attack: 0.006 });
+    scheduleHornBlast(ctx, t0 + 0.46, 523.25, 0.14, amp * 0.96, {
+      wobbleHz: 4.2,
+      wobbleCents: 8.8,
+      attack: 0.006
+    });
+    scheduleHornBlast(ctx, t0 + 0.64, 698.46, 0.14, amp, { wobbleHz: 4.7, wobbleCents: 9.8, attack: 0.006 });
+    scheduleHornBlast(ctx, t0 + 0.82, 659.25, 0.18, amp, { wobbleHz: 4.4, wobbleCents: 9.5, attack: 0.006 });
+    return;
+  }
+
+  scheduleHornBlast(ctx, t0 + 0.00, 523.25, 0.11, amp * 0.95, { wobbleHz: 4.1, wobbleCents: 8.2, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.14, 523.25, 0.11, amp * 0.95, { wobbleHz: 4.1, wobbleCents: 8.2, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.29, 587.33, 0.11, amp * 0.96, { wobbleHz: 4.3, wobbleCents: 8.6, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.43, 659.25, 0.11, amp, { wobbleHz: 4.5, wobbleCents: 9.2, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.57, 698.46, 0.11, amp, { wobbleHz: 4.8, wobbleCents: 10, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.71, 659.25, 0.11, amp * 0.98, { wobbleHz: 4.5, wobbleCents: 9.2, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.85, 587.33, 0.11, amp * 0.96, { wobbleHz: 4.3, wobbleCents: 8.6, attack: 0.006 });
+  scheduleHornBlast(ctx, t0 + 0.99, 523.25, 0.18, amp, { wobbleHz: 4.1, wobbleCents: 8.2, attack: 0.006 });
+}
+
+function scheduleClassicPattern(ctx, kind, t0, amp) {
+  if (!ctx) return;
+  if (kind === "attention") {
+    scheduleBeep(ctx, t0 + 0.00, 880, 0.09, amp);
+    scheduleBeep(ctx, t0 + 0.14, 880, 0.09, amp);
+    scheduleBeep(ctx, t0 + 0.30, 660, 0.14, amp);
+    return;
+  }
+  scheduleBeep(ctx, t0 + 0.00, 523.25, 0.09, amp);
+  scheduleBeep(ctx, t0 + 0.12, 659.25, 0.12, amp);
+}
+
 function scheduleGoatBleat(ctx, when, amp, opts) {
   const o = opts && typeof opts === "object" ? opts : {};
   const a = Math.max(0.0001, amp);
@@ -4703,8 +4901,19 @@ function playSound(kind, opts) {
     else if (preset === "bell") amp *= 0.75;
     else if (preset === "pop") amp *= 0.55;
     else if (preset === "arcade") amp *= 0.55;
+    else if (preset === "cucaracha") amp *= 0.62;
     else if (preset === "goat") amp *= 0.6;
     const t0 = ctx.currentTime + 0.01;
+    if (sampleUrlForPreset(preset)) {
+      const sampleVolume01 = clampNumber(volume01 * (preset === "cucaracha" ? 1.05 : 1), 0, 1, volume01);
+      const fallback = () => {
+        if (preset === "cucaracha") scheduleCucarachaHornPattern(ctx, kind, t0, amp);
+        else scheduleClassicPattern(ctx, kind, t0, amp);
+      };
+      const played = playPresetSample(preset, sampleVolume01, { onError: fallback });
+      if (!played) fallback();
+      return;
+    }
 
     if (kind === "attention") {
       if (preset === "classic") {
@@ -6351,10 +6560,34 @@ function tickRunningJobDialogCounters(job, nowMs = Date.now()) {
   }
 }
 
+function hasRunningJobs() {
+  for (const job of state.jobs.values()) {
+    if (job && job.status === "running") return true;
+  }
+  return false;
+}
+
+function stopDurationTicker() {
+  if (!state.durationTimer) return;
+  window.clearInterval(state.durationTimer);
+  state.durationTimer = null;
+}
+
 function ensureDurationTicker() {
   if (state.durationTimer) return;
-  state.durationTimer = window.setInterval(() => tickRunningDurations(), 1000);
+  state.durationTimer = window.setInterval(() => {
+    if (!hasRunningJobs()) {
+      stopDurationTicker();
+      return;
+    }
+    tickRunningDurations();
+  }, 1000);
   tickRunningDurations();
+}
+
+function syncDurationTicker() {
+  if (hasRunningJobs()) ensureDurationTicker();
+  else stopDurationTicker();
 }
 
 function setHint(msg, kind = "info") {
@@ -9253,6 +9486,7 @@ function upsertJob(job) {
     renderJobDialogPanels(job);
     updateJobDialogActions(job);
   }
+  syncDurationTicker();
   scheduleStatusDialogRender();
   // Keep search results accurate while a query is active (jobs can start matching as new text arrives).
   if (isSearchActive()) scheduleSearch(900, { replace: false });
@@ -9276,6 +9510,7 @@ function removeJob(jobId) {
     if (els.jobDialog && els.jobDialog.open) els.jobDialog.close();
     state.selectedJobId = null;
   }
+  syncDurationTicker();
   scheduleStatusDialogRender();
 }
 
@@ -13695,7 +13930,7 @@ async function init() {
   const jobs = await api.jobsList();
   for (const j of jobs) state.jobs.set(j.id, j);
   renderBoard();
-  ensureDurationTicker();
+  syncDurationTicker();
   refreshCodexModelsDatalist({ showErrors: false });
   refreshAgentBinaries({ showToastOnMissing: true });
 

@@ -117,32 +117,49 @@ export type GitInfo = {
 
 export async function getGitInfo(cwd: string): Promise<GitInfo> {
   const dir = String(cwd || "").trim() || process.cwd();
-
-  // Is this a git work tree?
-  {
-    const inside = await git(["rev-parse", "--is-inside-work-tree"], { cwd: dir, timeoutMs: 2_500 });
-    const ok = inside.ok && String(inside.stdout || "").trim() === "true";
-    if (!ok) {
-      return {
-        isGitRepo: false,
-        branch: "",
-        sha: "",
-        detached: false,
-        dirty: false,
-        error: inside.ok ? "" : inside.error
-      };
-    }
+  // Parse branch + dirtiness from one call (faster than multiple git invocations).
+  const status = await git(["status", "--porcelain=v1", "-b"], {
+    cwd: dir,
+    timeoutMs: 4_000,
+    maxOutputChars: 120_000
+  });
+  if (!status.ok) {
+    return {
+      isGitRepo: false,
+      branch: "",
+      sha: "",
+      detached: false,
+      dirty: false,
+      error: status.error
+    };
   }
+
+  const lines = String(status.stdout || "")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n")
+    .split("\n");
+  const head = String(lines[0] || "").trim();
+  const body = lines.slice(1);
 
   let detached = false;
   let branch = "";
-  let sha = "";
-  try {
-    branch = await gitOkStdout(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: dir, timeoutMs: 2_500 });
-  } catch {
-    detached = true;
+
+  if (head.startsWith("## ")) {
+    const summary = head.slice(3).trim();
+    if (summary.startsWith("HEAD")) {
+      detached = true;
+    } else if (summary) {
+      // Formats:
+      // - main
+      // - main...origin/main [ahead 1]
+      const dots = summary.indexOf("...");
+      branch = (dots >= 0 ? summary.slice(0, dots) : summary).trim();
+    }
   }
 
+  const dirty = body.some((line) => String(line || "").trim() !== "");
+
+  let sha = "";
   try {
     sha = await gitOkStdout(["rev-parse", "--short", "HEAD"], { cwd: dir, timeoutMs: 2_500 });
   } catch {
@@ -150,14 +167,6 @@ export async function getGitInfo(cwd: string): Promise<GitInfo> {
   }
 
   if (!branch && detached && sha) branch = `detached@${sha}`;
-
-  let dirty = false;
-  try {
-    const porcelain = await gitOkStdout(["status", "--porcelain=v1"], { cwd: dir, timeoutMs: 4_000 });
-    dirty = !!porcelain;
-  } catch {
-    dirty = false;
-  }
 
   return { isGitRepo: true, branch, sha, detached, dirty };
 }
