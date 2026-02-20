@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsUpdate: (patch) => ipcRenderer.invoke("settings:update", patch),
 
+  mcpStatus: () => ipcRenderer.invoke("mcp:status"),
+
   actionsGenerate: async (prompt) => {
     const res = await invokeOk("actions:generate", { prompt });
     return res && typeof res === "object" ? (res as any).action : null;

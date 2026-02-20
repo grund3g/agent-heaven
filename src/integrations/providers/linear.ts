@@ -20,7 +20,7 @@ function collectIssueIdentifiers(prompt: string, maxCount: number): string[] {
   return out;
 }
 
-function linearAuthToken(token: string, envVar: string): string {
+export function linearAuthToken(token: string, envVar: string): string {
   const direct = String(token || "").trim();
   if (direct) return direct;
   const name = String(envVar || "").trim();
@@ -34,7 +34,7 @@ function linearMissingTokenHint(envVar: string): string {
   return "no token configured.";
 }
 
-async function linearGraphql(url: string, token: string, query: string, variables: Record<string, any>): Promise<any> {
+export async function linearGraphql(url: string, token: string, query: string, variables: Record<string, any>): Promise<any> {
   const payload = await fetchJson(
     url,
     {

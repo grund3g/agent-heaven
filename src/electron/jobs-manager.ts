@@ -14,6 +14,8 @@ import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
 import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
 import type { IntegrationRuntime } from "../integrations";
+import type { McpServerManager } from "../mcp-server";
+import { writeMcpConfig, cleanupMcpConfig } from "../mcp-server";
 import {
   addWorktree,
   cloneRepo,
@@ -101,6 +103,8 @@ export class JobsManager {
   private needsAttentionHeuristic: NeedsAttentionHeuristic;
   private createId: () => string;
   private integrationRuntime: IntegrationRuntime | null;
+  private mcpServerManager: McpServerManager | null;
+  private mcpConfigFilesByJob = new Map<string, string[]>();
 
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
@@ -134,6 +138,7 @@ export class JobsManager {
     runClaudeResume?: RunClaudeResume;
     needsAttentionHeuristic: NeedsAttentionHeuristic;
     integrationRuntime?: IntegrationRuntime | null;
+    mcpServerManager?: McpServerManager | null;
     createId?: () => string;
   }) {
     this.store = opts.store;
@@ -146,6 +151,7 @@ export class JobsManager {
     this.runClaudeResume = typeof opts.runClaudeResume === "function" ? opts.runClaudeResume : null;
     this.needsAttentionHeuristic = opts.needsAttentionHeuristic;
     this.integrationRuntime = opts.integrationRuntime || null;
+    this.mcpServerManager = opts.mcpServerManager || null;
     this.createId = typeof opts.createId === "function" ? opts.createId : newId;
 
     this.loadPersistedJobs();
@@ -1273,6 +1279,8 @@ export class JobsManager {
     if (this.finishedRunKeyByJobId.get(jobId) === runKey) return;
     this.finishedRunKeyByJobId.set(jobId, runKey);
 
+    this.cleanupMcpConfigForJob(jobId);
+
     const settings = this.store.getSettings();
     const assistantSummary = this.lastAssistantMessage(job);
     const bindings = Array.isArray(job.processBindings) ? job.processBindings : [];
@@ -1961,6 +1969,14 @@ export class JobsManager {
     this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
   }
 
+  private cleanupMcpConfigForJob(jobId: string) {
+    const mcpFiles = this.mcpConfigFilesByJob.get(jobId);
+    if (mcpFiles) {
+      try { cleanupMcpConfig(mcpFiles); } catch { /* ignore */ }
+      this.mcpConfigFilesByJob.delete(jobId);
+    }
+  }
+
   private handleChildClose(jobId: string, code: any, signal: any) {
     this.procs.delete(jobId);
     const finishedAt = new Date().toISOString();
@@ -2081,6 +2097,26 @@ export class JobsManager {
     if (enrichedPrompt.length > 220_000) {
       return { ok: false, error: "Prompt + integration context is too large" };
     }
+
+    // Write MCP config so the agent can use Agent Heaven's provider tools
+    if (this.mcpServerManager && this.mcpServerManager.port > 0) {
+      try {
+        const mcpFiles = writeMcpConfig({
+          projectPath: run.projectPath || project.path,
+          agent,
+          port: this.mcpServerManager.port,
+          token: this.mcpServerManager.token
+        });
+        if (mcpFiles.length > 0) this.mcpConfigFilesByJob.set(jobId, mcpFiles);
+      } catch (err: any) {
+        processMessages.push({
+          connectorId: "mcp-server",
+          level: "warning",
+          text: `Failed to write MCP config: ${String(err && err.message ? err.message : err)}`
+        });
+      }
+    }
+
     const runPrompt = this.wrapPromptWithStatusHint(enrichedPrompt);
 
     const modelOverride = (params && params.model ? String(params.model) : "").trim();

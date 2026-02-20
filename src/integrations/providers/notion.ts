@@ -6,7 +6,7 @@ import { clipText, fetchJson } from "./http";
 const NOTION_URL_RE = /https?:\/\/(?:www\.)?notion\.so\/[^\s)]+/g;
 const NOTION_PAGE_ID_RE = /([0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})/;
 
-function notionToken(token: string, envVar: string): string {
+export function notionToken(token: string, envVar: string): string {
   const direct = String(token || "").trim();
   if (direct) return direct;
   const name = String(envVar || "").trim();
@@ -20,7 +20,7 @@ function notionMissingTokenHint(envVar: string): string {
   return "no token configured.";
 }
 
-function normalizeNotionPageId(raw: string): string {
+export function normalizeNotionPageId(raw: string): string {
   const s = String(raw || "").replace(/-/g, "").trim();
   if (!/^[0-9a-fA-F]{32}$/.test(s)) return "";
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`.toLowerCase();

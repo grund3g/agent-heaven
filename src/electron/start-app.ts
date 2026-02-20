@@ -28,6 +28,7 @@ import { jobDisplayTitle } from "../core/prompt";
 import { normalizeBranchName } from "../core/git-normalize";
 import { spawnPlatform } from "../platform-spawn";
 import { createDefaultIntegrationRuntime } from "../integrations";
+import { McpServerManager } from "../mcp-server";
 import {
   addAll,
   buildCheckoutReviewDiff,
@@ -1255,6 +1256,10 @@ export async function startApp(): Promise<void> {
   const checkoutsDir = path.join(app.getPath("userData"), "checkouts");
   const history = new JobHistory(jobsDir);
   const integrationRuntime = createDefaultIntegrationRuntime();
+  const mcpServerManager = new McpServerManager(() => store.getSettings());
+  mcpServerManager.start().catch((err: any) => {
+    console.error("[mcp-server] Failed to start:", err);
+  });
   const jobsManager = new JobsManager({
     store,
     history,
@@ -1265,7 +1270,8 @@ export async function startApp(): Promise<void> {
     runClaudeExec,
     runClaudeResume,
     needsAttentionHeuristic,
-    integrationRuntime
+    integrationRuntime,
+    mcpServerManager
   });
   const terminalManager = new TerminalManager();
   app.on("web-contents-created", (_evt, contents) => {
@@ -1278,6 +1284,7 @@ export async function startApp(): Promise<void> {
     windowManager.setWillQuit(true);
     jobsManager.shutdown();
     terminalManager.shutdown();
+    mcpServerManager.shutdown().catch(() => { /* ignore */ });
   });
   app.on("will-quit", () => {
     try {
@@ -1518,6 +1525,13 @@ export async function startApp(): Promise<void> {
     applyRuntimeSettings(next);
     sendSettingsChanged(next);
     return next;
+  });
+
+  ipcMain.handle("mcp:status", async () => {
+    return {
+      running: mcpServerManager.port > 0,
+      port: mcpServerManager.port
+    };
   });
 
   ipcMain.handle("actions:generate", async (evt, payload) => {

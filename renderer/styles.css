@@ -3770,6 +3770,148 @@ body::before {
   justify-content: flex-start;
 }
 
+/* ── Settings full-page view ────────────────────────────── */
+
+.settingsPage {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.settingsPage__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--stroke);
+  flex-shrink: 0;
+}
+.settingsPage__title {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+}
+.settingsPage__nav {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--stroke);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.settingsPage__tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.settingsPage__tab:hover {
+  color: var(--ink);
+}
+.settingsPage__tab--active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+.settingsPage__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+.settingsPage__panel {
+  max-width: 640px;
+}
+.settingsPage__panel--wide {
+  max-width: 960px;
+}
+
+/* Provider cards */
+.providerCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.providerCard {
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  background: var(--surface1);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.providerCard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.providerCard__name {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 16px;
+}
+.providerCard__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted2);
+  cursor: pointer;
+}
+.providerCard__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+.providerCard__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stroke);
+}
+.providerCard__toolBadge {
+  font-size: 11px;
+  font-family: var(--mono);
+  background: var(--surface3);
+  color: var(--muted2);
+  padding: 2px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+/* MCP status */
+.integrations__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface1);
+  border: 1px solid var(--stroke);
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+.integrations__statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.integrations__statusDot--off {
+  background: var(--muted2);
+}
+
 .field {
   display: grid;
   gap: 6px;

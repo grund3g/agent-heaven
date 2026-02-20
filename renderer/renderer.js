@@ -121,6 +121,9 @@ const api = window.agentHeaven;
 
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
+	  settingsSection: document.getElementById("settingsSection"),
+	  saveSettingsPageBtn: document.getElementById("saveSettingsPageBtn"),
+	  mcpStatusBadge: document.getElementById("mcpStatusBadge"),
 	  settingsCodexPath: document.getElementById("settingsCodexPath"),
 	  settingsCodexModel: document.getElementById("settingsCodexModel"),
 	  settingsCodexTransport: document.getElementById("settingsCodexTransport"),
@@ -3546,7 +3549,7 @@ function pickLane(status) {
   return "attention";
 }
 
-const VIEWS = ["board", "archive", "trash"];
+const VIEWS = ["board", "archive", "trash", "settings"];
 const DISPLAY_MODES = ["cards", "table"];
 const TABLE_SCOPES = ["view", "all"];
 
@@ -5730,13 +5733,23 @@ function setViewButtons(view) {
 
 function applyViewLayout() {
   const v = normalizeView(state.view);
+  const isSettings = v === "settings";
   const display = normalizeDisplayMode(state.displayMode);
-  const showCards = display === "cards";
-  const showTable = display === "table";
+  const showCards = !isSettings && display === "cards";
+  const showTable = !isSettings && display === "table";
 
+  if (els.settingsSection) els.settingsSection.hidden = !isSettings;
   if (els.boardSection) els.boardSection.hidden = !showCards;
   if (els.sessionsTableSection) els.sessionsTableSection.hidden = !showTable;
   if (els.tableScopeCtl) els.tableScopeCtl.hidden = !showTable;
+
+  // Hide composer and viewbar controls when showing settings
+  const composer = document.querySelector(".composer");
+  const viewbar = document.querySelector(".viewbar");
+  if (composer) composer.hidden = isSettings;
+  if (viewbar) viewbar.hidden = isSettings;
+
+  if (isSettings) return;
   if (els.tableScopeSelect && els.tableScopeSelect.value !== state.tableScope) {
     els.tableScopeSelect.value = state.tableScope;
   }
@@ -11474,6 +11487,7 @@ function wireUi() {
 	  }
 
 	  els.openSettingsBtn.addEventListener("click", () => {
+	    setView("settings");
 	    openSettingsDialog();
 	  });
 
@@ -12009,13 +12023,17 @@ function wireUi() {
     upsertJob(compactJobForList(job));
   });
 
-	  els.settingsDialogClose.addEventListener("click", () => {
-	    els.settingsDialog.close();
-	  });
+	  if (els.settingsDialogClose) {
+	    els.settingsDialogClose.addEventListener("click", () => {
+	      if (els.settingsDialog) els.settingsDialog.close();
+	    });
+	  }
 
-	  els.settingsDialog.addEventListener("click", (e) => {
-	    if (e.target === els.settingsDialog) els.settingsDialog.close();
-	  });
+	  if (els.settingsDialog) {
+	    els.settingsDialog.addEventListener("click", (e) => {
+	      if (e.target === els.settingsDialog) els.settingsDialog.close();
+	    });
+	  }
 
 	  if (els.settingsEditorPreset) {
 	    els.settingsEditorPreset.addEventListener("change", () => {
@@ -12528,7 +12546,8 @@ function wireUi() {
         if (!helperPersistHistoryFromSettings(state.settings)) clearHelperHistoryNow({ toast: false });
         else syncActiveHelperSessionFromState({ touch: false });
         renderBoard();
-		    els.settingsDialog.close();
+		    if (els.settingsDialog && els.settingsDialog.open) els.settingsDialog.close();
+		    setHint("Settings saved", "info");
 		  });
 
 	  if (els.saveActionsBtn) {
@@ -13567,7 +13586,62 @@ function maybeShowMissingAgentBinariesToast(res) {
 
 		  refreshCodexModelsDatalist({ showErrors: true });
 
-		  els.settingsDialog.showModal();
+		  if (els.settingsDialog && typeof els.settingsDialog.showModal === "function") {
+		    els.settingsDialog.showModal();
+		  }
+
+		  refreshMcpStatus();
+		}
+
+		// ── Settings page: tab switching ──────────────────────────
+		function setSettingsTab(tab) {
+		  document.querySelectorAll(".settingsPage__tab").forEach((btn) => {
+		    const t = btn.getAttribute("data-settings-tab") || "";
+		    btn.classList.toggle("settingsPage__tab--active", t === tab);
+		  });
+		  document.querySelectorAll(".settingsPage__panel").forEach((panel) => {
+		    const p = panel.getAttribute("data-settings-panel") || "";
+		    panel.hidden = p !== tab;
+		  });
+		  if (tab === "integrations") refreshMcpStatus();
+		}
+
+		// Wire up settings tab buttons
+		document.querySelectorAll(".settingsPage__tab").forEach((btn) => {
+		  btn.addEventListener("click", () => {
+		    const tab = btn.getAttribute("data-settings-tab") || "general";
+		    setSettingsTab(tab);
+		  });
+		});
+
+		// Wire up settings page Save button (reuse same save logic)
+		if (els.saveSettingsPageBtn) {
+		  els.saveSettingsPageBtn.addEventListener("click", () => {
+		    // Trigger the existing save handler
+		    if (els.saveSettingsBtn) {
+		      els.saveSettingsBtn.click();
+		    }
+		  });
+		}
+
+		// ── MCP server status ─────────────────────────────────────
+		async function refreshMcpStatus() {
+		  if (!els.mcpStatusBadge) return;
+		  try {
+		    const status = await api.mcpStatus();
+		    const dot = els.mcpStatusBadge.querySelector(".integrations__statusDot");
+		    const text = els.mcpStatusBadge.querySelector(".integrations__statusText");
+		    if (dot) {
+		      dot.classList.toggle("integrations__statusDot--off", !status.running);
+		    }
+		    if (text) {
+		      text.textContent = status.running
+		        ? "MCP Server running on port " + status.port + " \u2014 agents can use provider tools"
+		        : "MCP Server not running";
+		    }
+		  } catch {
+		    // IPC not available yet, ignore
+		  }
 		}
 
 		function openActionsDialog() {

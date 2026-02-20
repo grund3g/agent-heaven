@@ -37,7 +37,7 @@ function collectIssueRefs(prompt: string, maxCount: number): IssueRef[] {
   return out;
 }
 
-function githubToken(token: string, envVar: string): string {
+export function githubToken(token: string, envVar: string): string {
   const direct = String(token || "").trim();
   if (direct) return direct;
   const name = String(envVar || "").trim();
