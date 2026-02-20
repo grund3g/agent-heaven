@@ -934,9 +934,10 @@ describe("electron/jobs-manager", () => {
       ts: "2020-01-01T00:00:00.000Z",
       stream: "stdout",
       kind: "claude",
-      data: { type: "system", subtype: "init", session_id: "s123" }
+      data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
     });
     expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.threadId === "s123")).toBe(true);
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.model === "claude-sonnet-4-5")).toBe(true);
 
     execOnEvent!({
       ts: "2020-01-01T00:00:01.000Z",
@@ -957,12 +958,126 @@ describe("electron/jobs-manager", () => {
     const snap = jm.getJob("job1") as any;
     expect(snap.ok).toBe(true);
     expect(snap.job.threadId).toBe("s123");
+    expect(snap.job.model).toBe("claude-sonnet-4-5");
     expect(snap.job.status).toBe("done");
     expect(snap.job.usageTotal.turns).toBe(1);
 
     const sendRes = await jm.send({ jobId: "job1", prompt: "follow up", images: [] });
     expect(sendRes).toEqual({ ok: true });
     expect(resumeOpts.sessionId).toBe("s123");
+  });
+
+  it("updates claude job model from stream init when no model is configured", async () => {
+    const events: any[] = [];
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOpts: any = null;
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runClaudeExec = (opts: any) => {
+      execOpts = opts;
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: (p: any) => events.push(p),
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec,
+      runClaudeResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOpts && execOpts.model).toBe("");
+    expect(execOnEvent).not.toBeNull();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
+    });
+
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.threadId === "s123")).toBe(true);
+    expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.model === "claude-sonnet-4-5")).toBe(true);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.model).toBe("claude-sonnet-4-5");
+  });
+
+  it("backfills persisted claude model from stored claude log entries", () => {
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = {
+      loadAll: () => [
+        {
+          id: "job1",
+          status: "done",
+          box: "board",
+          createdAt: "2020-01-01T00:00:00.000Z",
+          startedAt: "2020-01-01T00:00:00.000Z",
+          finishedAt: "2020-01-01T00:00:01.000Z",
+          projectId: "p1",
+          projectPath: "/tmp/proj",
+          agent: "claude",
+          model: "",
+          threadId: "s123",
+          prompts: [{ ts: "2020-01-01T00:00:00.000Z", text: "Do the thing", images: [] }],
+          queuedPrompts: [],
+          messages: [],
+          logs: [
+            {
+              ts: "2020-01-01T00:00:00.100Z",
+              stream: "stdout",
+              kind: "claude",
+              data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
+            }
+          ],
+          usage: null,
+          usageTotal: { input_tokens: 0, output_tokens: 0, turns: 0 },
+          exitCode: 0
+        }
+      ],
+      save: () => true,
+      remove: () => true
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec: () => new FakeChild() as any,
+      runClaudeResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false
+    });
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.model).toBe("claude-sonnet-4-5");
   });
 
   it("applies AH_STATUS hints for claude output too", async () => {

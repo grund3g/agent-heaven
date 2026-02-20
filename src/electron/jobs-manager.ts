@@ -589,12 +589,19 @@ export class JobsManager {
     // Load persisted jobs into memory (so renderer can list history).
     const now = new Date().toISOString();
     const fallbackModel = readCodexDefaultModelFromConfigToml();
+    const settings = this.store.getSettings();
+    const claudeSettings = this.getClaudeSettingsFrom(settings);
+    const claudeConfiguredModel = typeof (claudeSettings as any).model === "string" ? String((claudeSettings as any).model || "").trim() : "";
     const loaded = this.history.loadAll();
     for (const raw of loaded) {
       const j = normalizeLoadedJob(raw, now);
       if (!j) continue;
       if (!j.model && j.agent === "codex" && fallbackModel) {
         j.model = fallbackModel;
+      } else if (!j.model && j.agent === "claude") {
+        const fromLogs = this.extractClaudeModelFromLogEntries(Array.isArray(j.logs) ? j.logs : []);
+        if (fromLogs) j.model = fromLogs;
+        else if (claudeConfiguredModel) j.model = claudeConfiguredModel;
       }
       this.jobs.set(j.id, j);
       // If we normalized a running job -> cancelled, persist the change.
@@ -1395,6 +1402,57 @@ export class JobsManager {
     return parts.join("");
   }
 
+  private normalizeModelLabel(value: unknown): string {
+    if (typeof value !== "string") return "";
+    const t = oneLine(value).trim();
+    if (!t) return "";
+    return t.length > 160 ? t.slice(0, 160) : t;
+  }
+
+  private extractClaudeModelFromData(data: any): string {
+    const d = data && typeof data === "object" ? data : {};
+    const msg = d.message && typeof d.message === "object" ? d.message : {};
+    const result = d.result && typeof d.result === "object" ? d.result : {};
+    const usage = d.usage && typeof d.usage === "object" ? d.usage : {};
+    const metadata = d.metadata && typeof d.metadata === "object" ? d.metadata : {};
+    const session = d.session && typeof d.session === "object" ? d.session : {};
+    const candidates = [
+      d.model,
+      d.model_name,
+      d.modelName,
+      d.model_id,
+      d.modelId,
+      msg.model,
+      msg.model_name,
+      msg.modelName,
+      msg.model_id,
+      msg.modelId,
+      result.model,
+      result.model_name,
+      result.modelName,
+      usage.model,
+      metadata.model,
+      session.model
+    ];
+    for (const c of candidates) {
+      const normalized = this.normalizeModelLabel(c);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+
+  private extractClaudeModelFromLogEntries(entries: any[]): string {
+    const arr = Array.isArray(entries) ? entries : [];
+    for (let i = arr.length - 1; i >= 0; i -= 1) {
+      const entry = arr[i];
+      if (!entry || typeof entry !== "object") continue;
+      if ((entry as any).kind !== "claude") continue;
+      const detected = this.extractClaudeModelFromData((entry as any).data);
+      if (detected) return detected;
+    }
+    return "";
+  }
+
   private onClaudeEvent(jobId: string, ev: any) {
     const job = this.jobs.get(jobId);
     if (!job) return;
@@ -1409,6 +1467,13 @@ export class JobsManager {
       const data = ev.data || {};
       this.appendLog(job, ev);
       this.sendJobEvent({ jobId, kind: "claude", entry: ev });
+
+      const modelFromEvent = this.extractClaudeModelFromData(data);
+      if (modelFromEvent && job.model !== modelFromEvent) {
+        job.model = modelFromEvent;
+        this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
+        this.markJobDirty(jobId);
+      }
 
       if (data.type === "system" && data.subtype === "init" && typeof data.session_id === "string" && data.session_id) {
         if (job.threadId !== data.session_id) {
