@@ -122,7 +122,6 @@ const api = window.agentHeaven;
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
 	  settingsSection: document.getElementById("settingsSection"),
-	  closeSettingsPageBtn: document.getElementById("closeSettingsPageBtn"),
 	  saveSettingsPageBtn: document.getElementById("saveSettingsPageBtn"),
 	  mcpStatusBadge: document.getElementById("mcpStatusBadge"),
 	  settingsCodexPath: document.getElementById("settingsCodexPath"),
@@ -11495,18 +11494,10 @@ function wireUi() {
 	    });
 	  }
 
-  if (els.openSettingsBtn) {
-    els.openSettingsBtn.addEventListener("click", () => {
-      if ((els.settingsDialog && els.settingsDialog.open) || state.view === "settings") {
-        closeSettings();
-        return;
-      }
-      openSettings();
-    });
-  }
-  if (els.closeSettingsPageBtn) {
-    els.closeSettingsPageBtn.addEventListener("click", () => closeSettings());
-  }
+	  els.openSettingsBtn.addEventListener("click", () => {
+	    setView("settings");
+	    openSettingsDialog();
+	  });
 
   if (els.openStatusBtn) els.openStatusBtn.addEventListener("click", () => openStatusDialog());
   if (els.openStatusSidebarBtn) els.openStatusSidebarBtn.addEventListener("click", () => openStatusDialog());
@@ -12565,13 +12556,7 @@ function wireUi() {
         renderBoard();
 		    if (els.settingsDialog && els.settingsDialog.open) els.settingsDialog.close();
 		    setHint("Settings saved", "info");
-		  };
-  if (els.saveSettingsBtn) {
-    els.saveSettingsBtn.addEventListener("click", saveSettings);
-  }
-  if (els.saveSettingsPageBtn) {
-    els.saveSettingsPageBtn.addEventListener("click", saveSettings);
-  }
+		  });
 
 	  if (els.saveActionsBtn) {
 	    els.saveActionsBtn.addEventListener("click", async () => {
@@ -13653,6 +13638,16 @@ function closeSettings() {
 		    setSettingsTab(tab);
 		  });
 		});
+
+		// Wire up settings page Save button (reuse same save logic)
+		if (els.saveSettingsPageBtn) {
+		  els.saveSettingsPageBtn.addEventListener("click", () => {
+		    // Trigger the existing save handler
+		    if (els.saveSettingsBtn) {
+		      els.saveSettingsBtn.click();
+		    }
+		  });
+		}
 
 		// ── MCP server status ─────────────────────────────────────
 		async function refreshMcpStatus() {

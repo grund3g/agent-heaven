@@ -28,7 +28,7 @@ import { jobDisplayTitle } from "../core/prompt";
 import { normalizeBranchName } from "../core/git-normalize";
 import { spawnPlatform } from "../platform-spawn";
 import { createDefaultIntegrationRuntime } from "../integrations";
-import { McpServerManager, writeMcpConfig, cleanupMcpConfig } from "../mcp-server";
+import { McpServerManager } from "../mcp-server";
 import {
   addAll,
   buildCheckoutReviewDiff,

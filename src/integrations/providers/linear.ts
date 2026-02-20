@@ -42,7 +42,6 @@ function linearMissingTokenHint(envVar: string): string {
 }
 
 export async function linearGraphql(url: string, token: string, query: string, variables: Record<string, any>): Promise<any> {
-  const authorization = linearAuthorizationHeaderValue(token);
   const payload = await fetchJson(
     url,
     {

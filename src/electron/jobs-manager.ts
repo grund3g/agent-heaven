@@ -2193,8 +2193,8 @@ export class JobsManager {
       return { ok: false, error: "Prompt + integration context is too large" };
     }
 
-    // Claude reads MCP from .mcp.json; Codex gets MCP via inline runner config.
-    if (agent === "claude" && this.mcpServerManager && this.mcpServerManager.port > 0) {
+    // Write MCP config so the agent can use Agent Heaven's provider tools
+    if (this.mcpServerManager && this.mcpServerManager.port > 0) {
       try {
         const mcpFiles = writeMcpConfig({
           projectPath: run.projectPath || project.path,
