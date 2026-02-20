@@ -526,10 +526,14 @@ body::before {
 }
 
 .iconbtn.sidebar__titleIcon {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
-  font-size: 13px;
+}
+
+.iconbtn.sidebar__titleIcon .icon {
+  width: 13px;
+  height: 13px;
 }
 
 .iconbtn.sidebar__titleIcon--text {
@@ -560,8 +564,12 @@ body::before {
 .sidebar__footerActions .iconbtn {
   width: 32px;
   height: 32px;
-  font-size: 16px;
   border-radius: 7px;
+}
+
+.sidebar__footerActions .iconbtn .icon {
+  width: 16px;
+  height: 16px;
 }
 
 .sidebar__toggle {
@@ -1674,18 +1682,17 @@ body::before {
 }
 
 .iconbtn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  font-size: 14px;
   padding: 0;
-  transition: all var(--duration) var(--ease);
+  transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
 }
 
 .iconbtn:hover {
@@ -1705,6 +1712,18 @@ body::before {
 .iconbtn:focus-visible {
   outline: 2px solid rgba(var(--accent-rgb), 0.50);
   outline-offset: 0;
+}
+
+/* Unified SVG icon class */
+.icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.btn--icon .icon {
+  width: 14px;
+  height: 14px;
 }
 
 /* ── 18. Form Controls — Apple-style ────────────────────────────────────── */

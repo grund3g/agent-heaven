@@ -48,7 +48,7 @@
                 title="Add project folder"
                 aria-label="Add project folder"
               >
-                +
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </button>
             </div>
           </div>
@@ -57,10 +57,18 @@
 
         <div class="sidebar__section sidebar__section--bottom sidebar__footer">
           <div class="sidebar__footerActions">
-            <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">⚡</button>
-            <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">⌘</button>
-            <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">⚙</button>
-            <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">◔</button>
+            <button id="openActionsBtn" class="iconbtn" type="button" title="Actions" aria-label="Actions">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </button>
+            <button id="openShortcutsBtn" class="iconbtn" type="button" title="Shortcuts (⌘+/)" aria-label="Shortcuts">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+            </button>
+            <button id="openSettingsBtn" class="iconbtn" type="button" title="Settings" aria-label="Settings">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            <button id="openStatusSidebarBtn" class="iconbtn" type="button" title="Status + token usage" aria-label="Status">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            </button>
           </div>
           <button
             id="toggleSidebarBtn"
@@ -164,7 +172,7 @@
           <div class="searchctl" role="search" aria-label="Search sessions">
             <input id="searchInput" class="searchctl__input" type="search" placeholder="Search sessions…" autocomplete="off" />
             <button id="searchClearBtn" class="iconbtn searchctl__clear" type="button" title="Clear search (Esc)" aria-label="Clear search" hidden>
-              ×
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
           <div id="searchMeta" class="searchmeta" aria-live="polite"></div>
@@ -185,7 +193,7 @@
                   title="Move window to display"
                   aria-label="Move window to display"
                 >
-                  ⇆
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                 </button>
                 <button
                   class="iconbtn lane__pop"
@@ -194,7 +202,7 @@
                   title="Open Running in new window"
                   aria-label="Open Running in new window"
                 >
-                  ↗
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </button>
               </div>
             </div>
@@ -211,7 +219,7 @@
                   title="Move window to display"
                   aria-label="Move window to display"
                 >
-                  ⇆
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                 </button>
                 <button
                   class="iconbtn lane__pop"
@@ -220,7 +228,7 @@
                   title="Open Needs Attention in new window"
                   aria-label="Open Needs Attention in new window"
                 >
-                  ↗
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </button>
               </div>
             </div>
@@ -237,7 +245,7 @@
                   title="Move window to display"
                   aria-label="Move window to display"
                 >
-                  ⇆
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                 </button>
                 <button
                   class="iconbtn lane__pop"
@@ -246,7 +254,7 @@
                   title="Open Done in new window"
                   aria-label="Open Done in new window"
                 >
-                  ↗
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                 </button>
               </div>
             </div>
@@ -286,8 +294,8 @@
         <div class="dialog__header">
           <div class="dialog__title" id="jobDialogTitle">Job</div>
           <div class="dialog__headerActions">
-            <button id="jobDialogPopout" class="btn btn--ghost" type="button" title="Open in new window">
-              ↗
+            <button id="jobDialogPopout" class="btn btn--ghost btn--icon" type="button" title="Open in new window">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </button>
             <button id="jobDialogMove" class="btn btn--ghost" type="button" title="Move this window to a display" hidden>
               Move
@@ -321,7 +329,7 @@
                 title="Previous match (Shift+Enter)"
                 aria-label="Previous match"
               >
-                ↑
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
               </button>
               <button
                 id="jobSearchNextBtn"
@@ -330,7 +338,7 @@
                 title="Next match (Enter)"
                 aria-label="Next match"
               >
-                ↓
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
               <button
                 id="jobSearchClearBtn"
@@ -340,7 +348,7 @@
                 aria-label="Clear search"
                 hidden
               >
-                ×
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
           </div>
@@ -371,7 +379,7 @@
               aria-haspopup="menu"
               aria-expanded="false"
             >
-              <span aria-hidden="true">⋯</span>
+              <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>
             </button>
             <div id="jobMoreMenu" class="ctxmenu" hidden role="menu" aria-label="More job actions">
               <button type="button" class="ctxmenu__item" data-jobmore-action="actions">Actions…</button>
