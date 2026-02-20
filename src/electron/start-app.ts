@@ -27,6 +27,7 @@ import { buildEditorLaunchCommand } from "../core/command-line";
 import { jobDisplayTitle } from "../core/prompt";
 import { normalizeBranchName } from "../core/git-normalize";
 import { spawnPlatform } from "../platform-spawn";
+import { createDefaultIntegrationRuntime } from "../integrations";
 import {
   addAll,
   buildCheckoutReviewDiff,
@@ -1253,6 +1254,7 @@ export async function startApp(): Promise<void> {
   const jobsDir = path.join(app.getPath("userData"), "jobs");
   const checkoutsDir = path.join(app.getPath("userData"), "checkouts");
   const history = new JobHistory(jobsDir);
+  const integrationRuntime = createDefaultIntegrationRuntime();
   const jobsManager = new JobsManager({
     store,
     history,
@@ -1262,7 +1264,8 @@ export async function startApp(): Promise<void> {
     runCodexResume,
     runClaudeExec,
     runClaudeResume,
-    needsAttentionHeuristic
+    needsAttentionHeuristic,
+    integrationRuntime
   });
   const terminalManager = new TerminalManager();
   app.on("web-contents-created", (_evt, contents) => {

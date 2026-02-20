@@ -131,6 +131,66 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("enriches prompt via integration runtime and notifies completion hooks", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } }, integrations: { enabled: true } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const execChild = new FakeChild();
+    const runCodexExec = vi.fn((opts: any) => {
+      (runCodexExec as any).lastOpts = opts;
+      return execChild as any;
+    });
+
+    const integrationRuntime = {
+      preparePrompt: vi.fn(async () => ({
+        prompt: "ENRICHED PROMPT",
+        bindings: [
+          {
+            connectorId: "linear",
+            capability: "ticket.comment",
+            resourceType: "issue",
+            resourceId: "id-123",
+            externalRef: "LIN-123"
+          }
+        ],
+        messages: [{ connectorId: "linear", level: "info", text: "attached" }]
+      })),
+      notifyRunCompleted: vi.fn(async () => ({
+        messages: [{ connectorId: "linear", level: "info", text: "commented" }]
+      }))
+    } as any;
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: runCodexExec as any,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      integrationRuntime,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Fix LIN-123", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(integrationRuntime.preparePrompt).toHaveBeenCalledTimes(1);
+    expect((runCodexExec as any).lastOpts.prompt).toContain("ENRICHED PROMPT");
+
+    execChild.emit("close", 1, null);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(integrationRuntime.notifyRunCompleted).toHaveBeenCalledTimes(1);
+    expect(integrationRuntime.notifyRunCompleted.mock.calls[0][0].status).toBe("failed");
+    expect(integrationRuntime.notifyRunCompleted.mock.calls[0][0].bindings).toHaveLength(1);
+
+    const snap = jm.getJob("job1") as any;
+    expect(Array.isArray(snap.job.processBindings)).toBe(true);
+    expect(snap.job.processBindings[0].externalRef).toBe("LIN-123");
+  });
+
   it("falls back to project path when a job checkout path no longer exists", async () => {
     const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
     const store = {

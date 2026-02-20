@@ -13,6 +13,7 @@ import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
 import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
+import type { IntegrationRuntime } from "../integrations";
 import {
   addWorktree,
   cloneRepo,
@@ -42,6 +43,7 @@ export class JobsManager {
   private runClaudeResume: RunClaudeResume | null;
   private needsAttentionHeuristic: NeedsAttentionHeuristic;
   private createId: () => string;
+  private integrationRuntime: IntegrationRuntime | null;
 
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
@@ -56,6 +58,8 @@ export class JobsManager {
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
   // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
   private integratingToDefaultJobIds = new Set<string>();
+  // Dedupe integration completion hooks per finished run.
+  private finishedRunKeyByJobId = new Map<string, string>();
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -72,6 +76,7 @@ export class JobsManager {
     runClaudeExec?: RunClaudeExec;
     runClaudeResume?: RunClaudeResume;
     needsAttentionHeuristic: NeedsAttentionHeuristic;
+    integrationRuntime?: IntegrationRuntime | null;
     createId?: () => string;
   }) {
     this.store = opts.store;
@@ -83,6 +88,7 @@ export class JobsManager {
     this.runClaudeExec = typeof opts.runClaudeExec === "function" ? opts.runClaudeExec : null;
     this.runClaudeResume = typeof opts.runClaudeResume === "function" ? opts.runClaudeResume : null;
     this.needsAttentionHeuristic = opts.needsAttentionHeuristic;
+    this.integrationRuntime = opts.integrationRuntime || null;
     this.createId = typeof opts.createId === "function" ? opts.createId : newId;
 
     this.loadPersistedJobs();
@@ -1057,6 +1063,169 @@ export class JobsManager {
     this.markJobDirty(job.id);
   }
 
+  private normalizeProcessBinding(value: any) {
+    const v = value && typeof value === "object" ? value : {};
+    const connectorId = typeof v.connectorId === "string" ? v.connectorId.trim() : "";
+    const capability = typeof v.capability === "string" ? v.capability.trim() : "";
+    const resourceType = typeof v.resourceType === "string" ? v.resourceType.trim() : "";
+    const resourceId = typeof v.resourceId === "string" ? v.resourceId.trim() : "";
+    const externalRef = typeof v.externalRef === "string" ? v.externalRef.trim() : "";
+    if (!connectorId || !capability || !resourceType || !resourceId || !externalRef) return null;
+
+    const out: any = {
+      connectorId,
+      capability,
+      resourceType,
+      resourceId,
+      externalRef
+    };
+
+    const url = typeof v.url === "string" ? v.url.trim() : "";
+    if (url) out.url = url;
+    const title = typeof v.title === "string" ? v.title.trim() : "";
+    if (title) out.title = title;
+    if (v.metadata && typeof v.metadata === "object" && !Array.isArray(v.metadata)) out.metadata = v.metadata;
+
+    return out;
+  }
+
+  private mergeProcessBindings(existing: any, incoming: any) {
+    const current = Array.isArray(existing) ? existing : [];
+    const next = Array.isArray(incoming) ? incoming : [];
+
+    const out: any[] = [];
+    const seen = new Set<string>();
+
+    const push = (item: any) => {
+      const norm = this.normalizeProcessBinding(item);
+      if (!norm) return;
+      const key = `${norm.connectorId}|${norm.capability}|${norm.resourceType}|${norm.resourceId}|${norm.externalRef}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(norm);
+    };
+
+    for (const item of current) push(item);
+    for (const item of next) push(item);
+
+    const MAX = 200;
+    if (out.length > MAX) out.splice(0, out.length - MAX);
+    return out;
+  }
+
+  private setProcessBindings(job: Job, bindings: any): boolean {
+    const merged = this.mergeProcessBindings(job.processBindings, bindings);
+    const prev = Array.isArray(job.processBindings) ? job.processBindings : [];
+    const sameLen = prev.length === merged.length;
+    const same =
+      sameLen &&
+      prev.every((item: any, idx: number) => {
+        const other = merged[idx];
+        return JSON.stringify(item) === JSON.stringify(other);
+      });
+    if (same) return false;
+    job.processBindings = merged;
+    this.markJobDirty(job.id);
+    this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { processBindingCount: merged.length } });
+    return true;
+  }
+
+  private appendProcessEvent(job: Job, evt: any): boolean {
+    const v = evt && typeof evt === "object" ? evt : {};
+    const connectorId = typeof v.connectorId === "string" ? v.connectorId.trim() : "";
+    const text = typeof v.text === "string" ? oneLine(v.text).trim() : "";
+    if (!connectorId || !text) return false;
+    const rawLevel = typeof v.level === "string" ? v.level.trim().toLowerCase() : "";
+    const level = rawLevel === "error" || rawLevel === "warning" ? rawLevel : "info";
+
+    const next: any = {
+      ts: new Date().toISOString(),
+      connectorId,
+      level,
+      text: text.length > 600 ? `${text.slice(0, 600).trimEnd()}...` : text
+    };
+
+    const arr = Array.isArray(job.processEvents) ? job.processEvents : [];
+    arr.push(next);
+    const MAX = 500;
+    if (arr.length > MAX) arr.splice(0, arr.length - MAX);
+    job.processEvents = arr;
+    this.markJobDirty(job.id);
+
+    const logLine = `[integration:${connectorId}] ${next.level}: ${next.text}`;
+    this.appendLog(job, { ts: next.ts, stream: next.level === "error" ? "stderr" : "stdout", kind: "log", text: logLine });
+    this.sendJobEvent({ jobId: job.id, kind: "log", entry: job.logs[job.logs.length - 1] });
+    return true;
+  }
+
+  private appendProcessEvents(job: Job, events: any): boolean {
+    const arr = Array.isArray(events) ? events : [];
+    let changed = false;
+    for (const evt of arr) {
+      if (this.appendProcessEvent(job, evt)) changed = true;
+    }
+    return changed;
+  }
+
+  private lastAssistantMessage(job: Job): string {
+    const messages = Array.isArray(job.messages) ? job.messages : [];
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m: any = messages[i];
+      if (!m || m.role !== "assistant") continue;
+      const text = typeof m.text === "string" ? m.text.trim() : "";
+      if (text) return text;
+    }
+    return "";
+  }
+
+  private finalizeIntegrationRun(jobId: string, status: string, finishedAt: string, exitCode: number | null) {
+    if (!this.integrationRuntime) return;
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    const runKey = `${status}|${finishedAt}|${typeof exitCode === "number" ? String(exitCode) : "null"}`;
+    if (this.finishedRunKeyByJobId.get(jobId) === runKey) return;
+    this.finishedRunKeyByJobId.set(jobId, runKey);
+
+    const settings = this.store.getSettings();
+    const assistantSummary = this.lastAssistantMessage(job);
+    const bindings = Array.isArray(job.processBindings) ? job.processBindings : [];
+
+    void (async () => {
+      try {
+        const res = await this.integrationRuntime!.notifyRunCompleted({
+          jobId: job.id,
+          projectId: job.projectId,
+          projectPath: job.projectPath,
+          status,
+          finishedAt,
+          exitCode,
+          assistantSummary,
+          settings,
+          bindings
+        });
+
+        const live = this.jobs.get(jobId);
+        if (!live) return;
+        if (String(live.finishedAt || "") !== String(finishedAt || "")) return;
+        if ((typeof live.exitCode === "number" ? live.exitCode : null) !== (typeof exitCode === "number" ? exitCode : null)) return;
+
+        const changedBindings = this.setProcessBindings(live, res && (res as any).bindings);
+        const changedEvents = this.appendProcessEvents(live, res && (res as any).messages);
+        if (changedBindings || changedEvents) this.tryPersistJobNow(live);
+      } catch (err: any) {
+        const live = this.jobs.get(jobId);
+        if (!live) return;
+        this.appendProcessEvent(live, {
+          connectorId: "runtime",
+          level: "error",
+          text: `Integration completion hook failed: ${String(err && err.message ? err.message : err)}`
+        });
+        this.tryPersistJobNow(live);
+      }
+    })();
+  }
+
   private onCodexEvent(jobId: string, ev: any) {
     const job = this.jobs.get(jobId);
     if (!job) return;
@@ -1185,6 +1354,7 @@ export class JobsManager {
     // Clear per-run hints when a new run begins (prevents stale hints affecting resumed runs).
     if (status === "running") {
       this.attentionHintByJobId.delete(jobId);
+      this.finishedRunKeyByJobId.delete(jobId);
       const classifier = this.attentionLlmProcs.get(jobId);
       if (classifier) {
         try {
@@ -1489,7 +1659,13 @@ export class JobsManager {
     return "done";
   }
 
-  private kickoffAttentionClassification(jobId: string, finishedAt: string, code: number | null, hinted: "done" | "needs_attention" | null) {
+  private kickoffAttentionClassification(
+    jobId: string,
+    finishedAt: string,
+    code: number | null,
+    hinted: "done" | "needs_attention" | null,
+    onResolved?: (status: "done" | "needs_attention") => void
+  ) {
     const startJob = this.jobs.get(jobId);
     if (!startJob) return;
 
@@ -1507,6 +1683,7 @@ export class JobsManager {
       if (live.status !== status) {
         this.setJobStatus(jobId, status, { finishedAt, exitCode: code });
       }
+      if (typeof onResolved === "function") onResolved(status);
     })();
   }
 
@@ -1620,6 +1797,7 @@ export class JobsManager {
       });
       this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+      this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
 
@@ -1668,6 +1846,7 @@ export class JobsManager {
     this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
 
     this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+    this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
   }
 
   private handleChildClose(jobId: string, code: any, signal: any) {
@@ -1694,19 +1873,25 @@ export class JobsManager {
       });
       this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+      this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
       return;
     }
 
     const hinted = this.attentionHintByJobId.get(jobId) || null;
     const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
+    const exitCode = typeof code === "number" ? code : null;
 
     if (signal) {
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
+      this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, exitCode);
     } else if (code !== 0) {
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
+      this.finalizeIntegrationRun(jobId, "failed", finishedAt, exitCode);
     } else {
       this.setJobStatus(jobId, provisionalStatus, { finishedAt, exitCode: code });
-      this.kickoffAttentionClassification(jobId, finishedAt, typeof code === "number" ? code : null, hinted);
+      this.kickoffAttentionClassification(jobId, finishedAt, exitCode, hinted, (finalStatus) => {
+        this.finalizeIntegrationRun(jobId, finalStatus, finishedAt, exitCode);
+      });
     }
   }
 
@@ -1720,7 +1905,6 @@ export class JobsManager {
     const prompt = (params && params.prompt ? String(params.prompt) : "").trim();
     if (!prompt) return { ok: false, error: "Prompt is empty" };
     if (prompt.length > 200_000) return { ok: false, error: "Prompt is too large" };
-    const runPrompt = this.wrapPromptWithStatusHint(prompt);
 
     const projectId = params && params.projectId ? String(params.projectId) : "";
     if (projects.length === 0) return { ok: false, error: "No projects configured. Add one in sidebar." };
@@ -1752,6 +1936,37 @@ export class JobsManager {
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
+
+    let enrichedPrompt = prompt;
+    let processBindings: any[] = [];
+    let processMessages: any[] = [];
+    if (this.integrationRuntime) {
+      try {
+        const enriched = await this.integrationRuntime.preparePrompt({
+          jobId,
+          projectId: String(project && project.id ? project.id : ""),
+          projectPath: run.projectPath || project.path,
+          prompt,
+          settings
+        });
+        if (enriched && typeof enriched === "object") {
+          const promptText = typeof (enriched as any).prompt === "string" ? (enriched as any).prompt : "";
+          if (promptText.trim()) enrichedPrompt = promptText;
+          processBindings = this.mergeProcessBindings([], Array.isArray((enriched as any).bindings) ? (enriched as any).bindings : []);
+          processMessages = Array.isArray((enriched as any).messages) ? (enriched as any).messages : [];
+        }
+      } catch (err: any) {
+        processMessages.push({
+          connectorId: "runtime",
+          level: "error",
+          text: `Prompt enrichment failed: ${String(err && err.message ? err.message : err)}`
+        });
+      }
+    }
+    if (enrichedPrompt.length > 220_000) {
+      return { ok: false, error: "Prompt + integration context is too large" };
+    }
+    const runPrompt = this.wrapPromptWithStatusHint(enrichedPrompt);
 
     const modelOverride = (params && params.model ? String(params.model) : "").trim();
     let model = modelOverride;
@@ -1789,14 +2004,24 @@ export class JobsManager {
       queuedPrompts: [],
       messages: [],
       logs: [],
+      processBindings,
+      processEvents: [],
       usage: null,
       usageTotal: { input_tokens: 0, output_tokens: 0, turns: 0 },
       modelContextWindow: null,
       exitCode: null
     };
 
+    this.finishedRunKeyByJobId.delete(jobId);
+
     this.jobs.set(jobId, job);
     this.sendJobEvent({ jobId, kind: "created", job: snapshotJobMeta(job) });
+    if (processBindings.length > 0) {
+      this.sendJobEvent({ jobId, kind: "meta", patch: { processBindingCount: processBindings.length } });
+    }
+    if (processMessages.length > 0) {
+      this.appendProcessEvents(job, processMessages);
+    }
     this.markJobDirty(jobId);
     try {
       this.history.save(snapshotJob(job));
@@ -1835,7 +2060,8 @@ export class JobsManager {
         });
       }
     } catch (err: any) {
-      this.setJobStatus(jobId, "failed", { finishedAt: new Date().toISOString(), exitCode: -1 });
+      const failedAt = new Date().toISOString();
+      this.setJobStatus(jobId, "failed", { finishedAt: failedAt, exitCode: -1 });
       this.appendLog(job, {
         ts: new Date().toISOString(),
         stream: "stderr",
@@ -1843,6 +2069,7 @@ export class JobsManager {
         text: String(err && err.message ? err.message : err)
       });
       this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+      this.finalizeIntegrationRun(jobId, "failed", failedAt, -1);
       return { ok: true, jobId };
     }
 
@@ -2045,6 +2272,7 @@ export class JobsManager {
     this.pendingTitleSummaryByJobId.delete(id);
     this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
+    this.finishedRunKeyByJobId.delete(id);
     this.integratingToDefaultJobIds.delete(id);
     this.dirtyJobIds.delete(id);
     try {

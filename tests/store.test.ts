@@ -224,6 +224,50 @@ describe("store", () => {
     expect((updated as any).agents.codex.transport).toBe("exec_json");
   });
 
+  it("defaults and normalizes integration settings", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify(
+        {
+          settings: {
+            integrations: {
+              enabled: true,
+              requestTimeoutMs: 999999,
+              providers: {
+                linear: {
+                  enabled: "true",
+                  apiBaseUrl: "http://invalid.local",
+                  tokenEnvVar: " LINEAR-KEY ",
+                  maxIssuesPerPrompt: 0
+                }
+              }
+            }
+          },
+          projects: []
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+
+    const integrations: any = (s.getSettings() as any).integrations;
+    expect(integrations.enabled).toBe(true);
+    expect(integrations.requestTimeoutMs).toBe(60000);
+    expect(integrations.providers.linear.enabled).toBe(false);
+    expect(integrations.providers.linear.apiBaseUrl).toBe("https://api.linear.app/graphql");
+    expect(integrations.providers.linear.tokenEnvVar).toBe("LINEARKEY");
+    expect(integrations.providers.linear.maxIssuesPerPrompt).toBe(1);
+    expect(integrations.providers.github.apiBaseUrl).toBe("https://api.github.com");
+    expect(integrations.providers.notion.apiBaseUrl).toBe("https://api.notion.com/v1");
+  });
+
   it("defaults uiDesignVersion to v1 and normalizes invalid values", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
     const storePath = path.join(tmpDir, "agent-heaven.store.json");

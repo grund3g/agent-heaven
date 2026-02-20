@@ -55,6 +55,36 @@ export const DEFAULT_STATE = {
     helperDefaultModel: "opus",
     helperPersistHistory: true,
 
+    // Provider integrations (Linear/GitHub/Notion). Secrets are read from environment variables.
+    integrations: {
+      enabled: false,
+      autoEnrichPrompt: true,
+      autoCommentOnComplete: true,
+      requestTimeoutMs: 12000,
+      providers: {
+        linear: {
+          enabled: false,
+          apiBaseUrl: "https://api.linear.app/graphql",
+          tokenEnvVar: "LINEAR_API_KEY",
+          maxIssuesPerPrompt: 3,
+          includeDescription: true
+        },
+        github: {
+          enabled: false,
+          apiBaseUrl: "https://api.github.com",
+          tokenEnvVar: "GITHUB_TOKEN",
+          maxIssuesPerPrompt: 3
+        },
+        notion: {
+          enabled: false,
+          apiBaseUrl: "https://api.notion.com/v1",
+          tokenEnvVar: "NOTION_API_KEY",
+          notionVersion: "2022-06-28",
+          maxPagesPerPrompt: 2
+        }
+      }
+    },
+
     // Saved shell actions for quick access in the job dialog (executed via the Terminal tab).
     // Versioned seeding for built-in actions (so existing installs can pick up new defaults once).
     actionsDefaultsVersion: 0,
@@ -669,6 +699,173 @@ function ensureHelperSettings(settings) {
   return { settings: next, changed };
 }
 
+function normalizeIntegrationsApiBaseUrl(value, fallback) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const base = raw || fallback;
+  try {
+    const u = new URL(base);
+    if (u.protocol !== "https:") return fallback;
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeTokenEnvVar(value, fallback) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return fallback;
+  const safe = raw.replace(/[^A-Za-z0-9_]/g, "").slice(0, 80);
+  return safe || fallback;
+}
+
+function normalizeBoundedInt(value, fallback, min, max) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.trunc(n);
+  if (i < min) return min;
+  if (i > max) return max;
+  return i;
+}
+
+function ensureIntegrationsSettings(settings) {
+  const s = isPlainObject(settings) ? settings : {};
+  const next = { ...s };
+  let changed = false;
+
+  const root = isPlainObject((next as any).integrations) ? { ...((next as any).integrations as any) } : {};
+  if (!isPlainObject((next as any).integrations)) changed = true;
+
+  if (typeof (root as any).enabled !== "boolean") {
+    (root as any).enabled = false;
+    changed = true;
+  }
+  if (typeof (root as any).autoEnrichPrompt !== "boolean") {
+    (root as any).autoEnrichPrompt = true;
+    changed = true;
+  }
+  if (typeof (root as any).autoCommentOnComplete !== "boolean") {
+    (root as any).autoCommentOnComplete = true;
+    changed = true;
+  }
+
+  {
+    const nextTimeout = normalizeBoundedInt((root as any).requestTimeoutMs, 12000, 1000, 60000);
+    if ((root as any).requestTimeoutMs !== nextTimeout) {
+      (root as any).requestTimeoutMs = nextTimeout;
+      changed = true;
+    }
+  }
+
+  const providers = isPlainObject((root as any).providers) ? { ...((root as any).providers as any) } : {};
+  if (!isPlainObject((root as any).providers)) changed = true;
+
+  const linear = isPlainObject((providers as any).linear) ? { ...((providers as any).linear as any) } : {};
+  const github = isPlainObject((providers as any).github) ? { ...((providers as any).github as any) } : {};
+  const notion = isPlainObject((providers as any).notion) ? { ...((providers as any).notion as any) } : {};
+
+  if (!isPlainObject((providers as any).linear)) changed = true;
+  if (!isPlainObject((providers as any).github)) changed = true;
+  if (!isPlainObject((providers as any).notion)) changed = true;
+
+  if (typeof (linear as any).enabled !== "boolean") {
+    (linear as any).enabled = false;
+    changed = true;
+  }
+  {
+    const nextUrl = normalizeIntegrationsApiBaseUrl((linear as any).apiBaseUrl, "https://api.linear.app/graphql");
+    if ((linear as any).apiBaseUrl !== nextUrl) {
+      (linear as any).apiBaseUrl = nextUrl;
+      changed = true;
+    }
+  }
+  {
+    const nextEnv = normalizeTokenEnvVar((linear as any).tokenEnvVar, "LINEAR_API_KEY");
+    if ((linear as any).tokenEnvVar !== nextEnv) {
+      (linear as any).tokenEnvVar = nextEnv;
+      changed = true;
+    }
+  }
+  {
+    const nextMax = normalizeBoundedInt((linear as any).maxIssuesPerPrompt, 3, 1, 10);
+    if ((linear as any).maxIssuesPerPrompt !== nextMax) {
+      (linear as any).maxIssuesPerPrompt = nextMax;
+      changed = true;
+    }
+  }
+  if (typeof (linear as any).includeDescription !== "boolean") {
+    (linear as any).includeDescription = true;
+    changed = true;
+  }
+
+  if (typeof (github as any).enabled !== "boolean") {
+    (github as any).enabled = false;
+    changed = true;
+  }
+  {
+    const nextUrl = normalizeIntegrationsApiBaseUrl((github as any).apiBaseUrl, "https://api.github.com");
+    if ((github as any).apiBaseUrl !== nextUrl) {
+      (github as any).apiBaseUrl = nextUrl;
+      changed = true;
+    }
+  }
+  {
+    const nextEnv = normalizeTokenEnvVar((github as any).tokenEnvVar, "GITHUB_TOKEN");
+    if ((github as any).tokenEnvVar !== nextEnv) {
+      (github as any).tokenEnvVar = nextEnv;
+      changed = true;
+    }
+  }
+  {
+    const nextMax = normalizeBoundedInt((github as any).maxIssuesPerPrompt, 3, 1, 10);
+    if ((github as any).maxIssuesPerPrompt !== nextMax) {
+      (github as any).maxIssuesPerPrompt = nextMax;
+      changed = true;
+    }
+  }
+
+  if (typeof (notion as any).enabled !== "boolean") {
+    (notion as any).enabled = false;
+    changed = true;
+  }
+  {
+    const nextUrl = normalizeIntegrationsApiBaseUrl((notion as any).apiBaseUrl, "https://api.notion.com/v1");
+    if ((notion as any).apiBaseUrl !== nextUrl) {
+      (notion as any).apiBaseUrl = nextUrl;
+      changed = true;
+    }
+  }
+  {
+    const nextEnv = normalizeTokenEnvVar((notion as any).tokenEnvVar, "NOTION_API_KEY");
+    if ((notion as any).tokenEnvVar !== nextEnv) {
+      (notion as any).tokenEnvVar = nextEnv;
+      changed = true;
+    }
+  }
+  {
+    const nextVersion = typeof (notion as any).notionVersion === "string" ? (notion as any).notionVersion.trim() : "";
+    const normalized = nextVersion || "2022-06-28";
+    if ((notion as any).notionVersion !== normalized) {
+      (notion as any).notionVersion = normalized;
+      changed = true;
+    }
+  }
+  {
+    const nextMax = normalizeBoundedInt((notion as any).maxPagesPerPrompt, 2, 1, 8);
+    if ((notion as any).maxPagesPerPrompt !== nextMax) {
+      (notion as any).maxPagesPerPrompt = nextMax;
+      changed = true;
+    }
+  }
+
+  (providers as any).linear = linear;
+  (providers as any).github = github;
+  (providers as any).notion = notion;
+  (root as any).providers = providers;
+  (next as any).integrations = root;
+
+  return { settings: next, changed };
+}
+
 function ensureSettings(settings) {
   let next = isPlainObject(settings) ? { ...settings } : {};
   let changed = !isPlainObject(settings);
@@ -732,6 +929,10 @@ function ensureSettings(settings) {
   const helperRes = ensureHelperSettings(next);
   next = helperRes.settings;
   if (helperRes.changed) changed = true;
+
+  const integrationsRes = ensureIntegrationsSettings(next);
+  next = integrationsRes.settings;
+  if (integrationsRes.changed) changed = true;
 
   return { settings: next, changed };
 }

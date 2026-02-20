@@ -108,6 +108,32 @@ Agent Heaven runs `codex` / `claude` as normal child processes with your user pe
 - Prefer using sandboxed modes and normal approval/permission flows.
 - Avoid "dangerous" bypass flags unless you explicitly need them.
 
+## Provider Integrations (Experimental)
+
+Agent Heaven now includes a connector runtime for external work systems. The core app stays provider-agnostic; connectors add context/comment behavior for providers like Linear, GitHub, and Notion.
+
+- Prompt enrichment: detect references in your prompt (for example `LIN-123`, `owner/repo#123`, Notion page URL) and inject read-only context.
+- Completion hooks: post a run summary back to the linked ticket/page after the job finishes.
+
+### Configuration
+
+In settings (`settings.integrations` in the store JSON), enable integrations and provider flags. Secrets are read from environment variables only.
+
+```json
+{
+  "integrations": {
+    "enabled": true,
+    "autoEnrichPrompt": true,
+    "autoCommentOnComplete": true,
+    "providers": {
+      "linear": { "enabled": true, "tokenEnvVar": "LINEAR_API_KEY" },
+      "github": { "enabled": true, "tokenEnvVar": "GITHUB_TOKEN" },
+      "notion": { "enabled": true, "tokenEnvVar": "NOTION_API_KEY" }
+    }
+  }
+}
+```
+
 ## License
 
 MIT. See `LICENSE`.

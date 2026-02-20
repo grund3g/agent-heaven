@@ -10,6 +10,22 @@ export type JobLogEntry =
   | { ts: string; stream: "stdout" | "stderr"; kind: "log"; text: string }
   | { ts: string; stream: "stdout" | "stderr"; kind: "codex"; data: any }
   | { ts: string; stream: "stdout" | "stderr"; kind: "claude"; data: any };
+export type JobProcessBinding = {
+  connectorId: string;
+  capability: string;
+  resourceType: string;
+  resourceId: string;
+  externalRef: string;
+  url?: string;
+  title?: string;
+  metadata?: Record<string, any>;
+};
+export type JobProcessEvent = {
+  ts: string;
+  connectorId: string;
+  level: "info" | "warning" | "error";
+  text: string;
+};
 
 export type Job = {
   id: string;
@@ -35,6 +51,8 @@ export type Job = {
   queuedPrompts: JobPrompt[];
   messages: JobMessage[];
   logs: JobLogEntry[];
+  processBindings?: JobProcessBinding[];
+  processEvents?: JobProcessEvent[];
   usage: any;
   usageTotal: UsageTotals;
   modelContextWindow?: number | null;
@@ -83,6 +101,8 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   out.queuedPrompts = Array.isArray(out.queuedPrompts) ? out.queuedPrompts : [];
   out.messages = Array.isArray(out.messages) ? out.messages : [];
   out.logs = Array.isArray(out.logs) ? out.logs : [];
+  out.processBindings = Array.isArray(out.processBindings) ? out.processBindings : [];
+  out.processEvents = Array.isArray(out.processEvents) ? out.processEvents : [];
   if (!out.title) out.title = jobTitleFromPrompts(out.prompts);
 
   out.usage = out.usage && typeof out.usage === "object" ? out.usage : null;
@@ -116,6 +136,8 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   if (out.logs.length > 2000) out.logs.splice(0, out.logs.length - 2000);
   if (out.messages.length > 200) out.messages.splice(0, out.messages.length - 200);
   if (out.queuedPrompts.length > 50) out.queuedPrompts.splice(0, out.queuedPrompts.length - 50);
+  if (out.processBindings.length > 200) out.processBindings.splice(0, out.processBindings.length - 200);
+  if (out.processEvents.length > 500) out.processEvents.splice(0, out.processEvents.length - 500);
 
   return out as Job;
 }
@@ -145,6 +167,8 @@ export function snapshotJob(job: Job): Job {
     queuedPrompts,
     messages,
     logs,
+    processBindings,
+    processEvents,
     usage,
     usageTotal,
     modelContextWindow,
@@ -173,6 +197,8 @@ export function snapshotJob(job: Job): Job {
     queuedPrompts,
     messages,
     logs,
+    processBindings,
+    processEvents,
     usage,
     usageTotal,
     modelContextWindow,
@@ -266,6 +292,7 @@ export function snapshotJobMeta(job: Job): any {
     agent,
     model,
     threadId,
+    processBindingCount: Array.isArray(job.processBindings) ? job.processBindings.length : 0,
     queuedCount: Array.isArray(job.queuedPrompts) ? job.queuedPrompts.length : 0,
     usage,
     usageTotal,
