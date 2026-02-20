@@ -3786,6 +3786,11 @@ body::before {
   border-bottom: 1px solid var(--stroke);
   flex-shrink: 0;
 }
+.settingsPage__headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .settingsPage__title {
   font-family: var(--serif);
   font-size: 22px;

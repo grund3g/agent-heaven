@@ -122,6 +122,7 @@ const api = window.agentHeaven;
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
 	  settingsSection: document.getElementById("settingsSection"),
+	  closeSettingsPageBtn: document.getElementById("closeSettingsPageBtn"),
 	  saveSettingsPageBtn: document.getElementById("saveSettingsPageBtn"),
 	  mcpStatusBadge: document.getElementById("mcpStatusBadge"),
 	  settingsCodexPath: document.getElementById("settingsCodexPath"),
@@ -268,6 +269,7 @@ const state = {
   activeTab: "chat",
   cardEls: new Map(), // jobId -> HTMLElement
   view: "board", // board | archive | trash
+  lastMainView: "board", // last non-settings view
   displayMode: "cards", // cards | table
   tableScope: "view", // view | all (table mode only)
   focusLane: "", // running | attention | done (popout window)
@@ -5793,6 +5795,13 @@ function setView(value) {
   if (state.focusLane) return; // popout windows are locked to the board view
   const next = normalizeView(value);
   if (state.view === next) return;
+
+  if (next === "settings") {
+    const current = normalizeView(state.view);
+    if (current !== "settings") state.lastMainView = current;
+  } else {
+    state.lastMainView = next;
+  }
 
   if (next !== "board") state.showAllDone = false;
   state.view = next;
@@ -11486,10 +11495,18 @@ function wireUi() {
 	    });
 	  }
 
-	  els.openSettingsBtn.addEventListener("click", () => {
-	    setView("settings");
-	    openSettingsDialog();
-	  });
+  if (els.openSettingsBtn) {
+    els.openSettingsBtn.addEventListener("click", () => {
+      if ((els.settingsDialog && els.settingsDialog.open) || state.view === "settings") {
+        closeSettings();
+        return;
+      }
+      openSettings();
+    });
+  }
+  if (els.closeSettingsPageBtn) {
+    els.closeSettingsPageBtn.addEventListener("click", () => closeSettings());
+  }
 
   if (els.openStatusBtn) els.openStatusBtn.addEventListener("click", () => openStatusDialog());
   if (els.openStatusSidebarBtn) els.openStatusSidebarBtn.addEventListener("click", () => openStatusDialog());
@@ -11529,7 +11546,7 @@ function wireUi() {
         } catch {
           // ignore
         }
-        openSettingsDialog();
+        openSettings();
         return;
       }
 
@@ -11593,7 +11610,7 @@ function wireUi() {
         } catch {
           // ignore
         }
-        openSettingsDialog();
+        openSettings();
         return;
       }
     });
@@ -13460,9 +13477,26 @@ function maybeShowMissingAgentBinariesToast(res) {
   showToast(msg, null, 12_000, {
     actions: [
       { label: "Install...", kind: "primary", onClick: () => openAgentsInstallDialog() },
-      { label: "Settings", onClick: () => openSettingsDialog() }
+      { label: "Settings", onClick: () => openSettings() }
     ]
   });
+}
+
+function openSettings() {
+  if (els.settingsSection) setView("settings");
+  openSettingsDialog();
+}
+
+function closeSettings() {
+  try {
+    if (els.settingsDialog && els.settingsDialog.open) els.settingsDialog.close();
+  } catch {
+    // ignore
+  }
+  if (!els.settingsSection) return;
+  if (state.view !== "settings") return;
+  const fallback = normalizeView(state.lastMainView);
+  setView(fallback === "settings" ? "board" : fallback);
 }
 
 			function openSettingsDialog() {
