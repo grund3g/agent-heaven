@@ -606,37 +606,45 @@ body::before {
 .projects {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  padding-right: 1px;
 }
 
 .project {
   --proj-color: transparent;
-  padding: 8px 8px;
-  border-radius: 0;
-  border: none;
-  border-bottom: 0.5px solid var(--stroke-faint);
-  background: transparent;
+  position: relative;
+  padding: 9px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-faint);
+  background: var(--surface0);
   cursor: default;
   display: flex;
   gap: 8px;
-  align-items: center;
-  transition: background var(--duration) var(--ease);
-}
-
-.project:last-child {
-  border-bottom: none;
+  align-items: flex-start;
+  transition:
+    background var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
 }
 
 .project:hover {
-  background: var(--hover-bg);
+  background: var(--surface1);
+  border-color: var(--stroke-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.project:focus-within {
+  background: var(--surface1);
+  border-color: rgba(var(--accent-rgb), 0.30);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.14), var(--shadow-card);
 }
 
 .project__swatch {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   padding: 0;
   border-radius: var(--radius-pill);
   border: 0;
@@ -644,6 +652,7 @@ body::before {
   box-shadow: 0 0 0 1px var(--proj-swatch-inset) inset;
   flex: 0 0 auto;
   cursor: pointer;
+  margin-top: 3px;
 }
 
 .project__swatch::-webkit-color-swatch-wrapper {
@@ -666,6 +675,7 @@ body::before {
   align-items: center;
   flex: 0 0 auto;
   margin-left: auto;
+  margin-top: 1px;
 }
 
 .project__main {
@@ -685,6 +695,7 @@ body::before {
 
 .project__main[role="button"] {
   cursor: pointer;
+  border-radius: 5px;
 }
 
 .project__main[role="button"]:hover .project__nametext {
@@ -749,8 +760,8 @@ body::before {
 
 .project__path {
   font-size: 11px;
-  color: var(--muted2);
-  margin-top: 1px;
+  color: var(--ink-label);
+  margin-top: 2px;
   font-family: var(--mono);
   white-space: nowrap;
   overflow: hidden;
