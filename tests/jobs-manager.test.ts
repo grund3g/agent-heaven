@@ -523,6 +523,78 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.projectPath).toBe("/tmp/proj");
   });
 
+  it("switches deferred in-place jobs to worktree when follow-up asks for changes", async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ah-checkouts-"));
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectPath, checkoutMode: "worktree" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runCodexResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const addWorktreeSpy = vi.spyOn(git, "addWorktree").mockImplementation(async (opts: any) => {
+      const wt = String(opts && opts.worktreeDir ? opts.worktreeDir : "").trim();
+      if (wt) fs.mkdirSync(wt, { recursive: true });
+    });
+
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Kannst du das bitte analysieren?", projectId: "p1", images: [] })).toEqual({
+      ok: true,
+      jobId: "job1"
+    });
+    expect(execOnEvent).not.toBeNull();
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+    execChild.emit("close", 0, null);
+
+    expect(await jm.send({ jobId: "job1", prompt: "Bitte implementiere jetzt die Änderung in src/app.ts", images: [] })).toEqual({
+      ok: true
+    });
+
+    const expectedWorktree = path.join(checkoutsDir, "worktrees", "p1", "job1");
+    expect(addWorktreeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoDir: projectPath,
+        worktreeDir: expectedWorktree,
+        branchName: "ah/job/job1"
+      })
+    );
+    expect(resumeOpts).not.toBeNull();
+    expect(resumeOpts.cwd).toBe(expectedWorktree);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.projectPath).toBe(expectedWorktree);
+    expect(snap.job.checkoutModePreference).toBe("worktree");
+    expect(snap.job.checkoutModeEffective).toBe("worktree");
+  });
+
   it("still requires checkoutsDir for worktree write prompts", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),

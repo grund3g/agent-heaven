@@ -55,7 +55,7 @@ export const DEFAULT_STATE = {
     helperDefaultModel: "opus",
     helperPersistHistory: true,
 
-    // Provider integrations (Linear/GitHub/Notion). Secrets are read from environment variables.
+    // Provider integrations (Linear/GitHub/Notion). Tokens can be set directly in settings or via env-var fallback.
     integrations: {
       enabled: false,
       autoEnrichPrompt: true,
@@ -65,6 +65,7 @@ export const DEFAULT_STATE = {
         linear: {
           enabled: false,
           apiBaseUrl: "https://api.linear.app/graphql",
+          token: "",
           tokenEnvVar: "LINEAR_API_KEY",
           maxIssuesPerPrompt: 3,
           includeDescription: true
@@ -72,12 +73,14 @@ export const DEFAULT_STATE = {
         github: {
           enabled: false,
           apiBaseUrl: "https://api.github.com",
+          token: "",
           tokenEnvVar: "GITHUB_TOKEN",
           maxIssuesPerPrompt: 3
         },
         notion: {
           enabled: false,
           apiBaseUrl: "https://api.notion.com/v1",
+          token: "",
           tokenEnvVar: "NOTION_API_KEY",
           notionVersion: "2022-06-28",
           maxPagesPerPrompt: 2
@@ -718,6 +721,12 @@ function normalizeTokenEnvVar(value, fallback) {
   return safe || fallback;
 }
 
+function normalizeIntegrationToken(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  return raw.slice(0, 4096);
+}
+
 function normalizeBoundedInt(value, fallback, min, max) {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -779,6 +788,13 @@ function ensureIntegrationsSettings(settings) {
     }
   }
   {
+    const nextToken = normalizeIntegrationToken((linear as any).token);
+    if ((linear as any).token !== nextToken) {
+      (linear as any).token = nextToken;
+      changed = true;
+    }
+  }
+  {
     const nextEnv = normalizeTokenEnvVar((linear as any).tokenEnvVar, "LINEAR_API_KEY");
     if ((linear as any).tokenEnvVar !== nextEnv) {
       (linear as any).tokenEnvVar = nextEnv;
@@ -809,6 +825,13 @@ function ensureIntegrationsSettings(settings) {
     }
   }
   {
+    const nextToken = normalizeIntegrationToken((github as any).token);
+    if ((github as any).token !== nextToken) {
+      (github as any).token = nextToken;
+      changed = true;
+    }
+  }
+  {
     const nextEnv = normalizeTokenEnvVar((github as any).tokenEnvVar, "GITHUB_TOKEN");
     if ((github as any).tokenEnvVar !== nextEnv) {
       (github as any).tokenEnvVar = nextEnv;
@@ -831,6 +854,13 @@ function ensureIntegrationsSettings(settings) {
     const nextUrl = normalizeIntegrationsApiBaseUrl((notion as any).apiBaseUrl, "https://api.notion.com/v1");
     if ((notion as any).apiBaseUrl !== nextUrl) {
       (notion as any).apiBaseUrl = nextUrl;
+      changed = true;
+    }
+  }
+  {
+    const nextToken = normalizeIntegrationToken((notion as any).token);
+    if ((notion as any).token !== nextToken) {
+      (notion as any).token = nextToken;
       changed = true;
     }
   }

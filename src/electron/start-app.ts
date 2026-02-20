@@ -2384,9 +2384,14 @@ export async function startApp(): Promise<void> {
     if (!projectPath) return { ok: false, error: "Project is missing path" };
     if (!fs.existsSync(projectPath)) return { ok: false, error: `Project path does not exist: ${projectPath}` };
 
-    // If this job ran in-place in the project folder, there is nothing to integrate.
+    // If this job ran in-place in the project folder, there is no separate checkout to cherry-pick from.
     if (path.resolve(sourceDir) === path.resolve(projectPath)) {
-      return { ok: false, error: "This job is using the project folder checkout (in-place). Nothing to integrate." };
+      return {
+        ok: false,
+        error:
+          "This job used the project folder checkout (in-place), so there is no separate checkout to integrate.\n\n" +
+          "Run the next job with checkout mode Worktree or Clone (composer dropdown or Project settings), then use Integrate to default branch."
+      };
     }
 
     const configuredBranch = normalizeBranchName((project as any).defaultBranch);

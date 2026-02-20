@@ -44,6 +44,7 @@ function normalizeApiBaseUrl(value: unknown, fallback: string): string {
 export type LinearProviderSettings = {
   enabled: boolean;
   apiBaseUrl: string;
+  token: string;
   tokenEnvVar: string;
   maxIssuesPerPrompt: number;
   includeDescription: boolean;
@@ -52,6 +53,7 @@ export type LinearProviderSettings = {
 export type GithubProviderSettings = {
   enabled: boolean;
   apiBaseUrl: string;
+  token: string;
   tokenEnvVar: string;
   maxIssuesPerPrompt: number;
 };
@@ -59,6 +61,7 @@ export type GithubProviderSettings = {
 export type NotionProviderSettings = {
   enabled: boolean;
   apiBaseUrl: string;
+  token: string;
   tokenEnvVar: string;
   notionVersion: string;
   maxPagesPerPrompt: number;
@@ -94,6 +97,7 @@ export function normalizeIntegrationsSettings(settings: any): IntegrationsSettin
       linear: {
         enabled: normalizeFlag(linearRaw.enabled, false),
         apiBaseUrl: normalizeApiBaseUrl(linearRaw.apiBaseUrl, "https://api.linear.app/graphql"),
+        token: normalizeString(linearRaw.token, "", 4096),
         tokenEnvVar: normalizeString(linearRaw.tokenEnvVar, "LINEAR_API_KEY", 80),
         maxIssuesPerPrompt: normalizePositiveInt(linearRaw.maxIssuesPerPrompt, 3, 1, 10),
         includeDescription: normalizeFlag(linearRaw.includeDescription, true)
@@ -101,12 +105,14 @@ export function normalizeIntegrationsSettings(settings: any): IntegrationsSettin
       github: {
         enabled: normalizeFlag(githubRaw.enabled, false),
         apiBaseUrl: normalizeApiBaseUrl(githubRaw.apiBaseUrl, "https://api.github.com"),
+        token: normalizeString(githubRaw.token, "", 4096),
         tokenEnvVar: normalizeString(githubRaw.tokenEnvVar, "GITHUB_TOKEN", 80),
         maxIssuesPerPrompt: normalizePositiveInt(githubRaw.maxIssuesPerPrompt, 3, 1, 10)
       },
       notion: {
         enabled: normalizeFlag(notionRaw.enabled, false),
         apiBaseUrl: normalizeApiBaseUrl(notionRaw.apiBaseUrl, "https://api.notion.com/v1"),
+        token: normalizeString(notionRaw.token, "", 4096),
         tokenEnvVar: normalizeString(notionRaw.tokenEnvVar, "NOTION_API_KEY", 80),
         notionVersion: normalizeString(notionRaw.notionVersion, "2022-06-28", 40),
         maxPagesPerPrompt: normalizePositiveInt(notionRaw.maxPagesPerPrompt, 2, 1, 8)

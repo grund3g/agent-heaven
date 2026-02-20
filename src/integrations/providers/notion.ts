@@ -6,10 +6,18 @@ import { clipText, fetchJson } from "./http";
 const NOTION_URL_RE = /https?:\/\/(?:www\.)?notion\.so\/[^\s)]+/g;
 const NOTION_PAGE_ID_RE = /([0-9a-fA-F]{32}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})/;
 
-function notionToken(envVar: string): string {
+function notionToken(token: string, envVar: string): string {
+  const direct = String(token || "").trim();
+  if (direct) return direct;
   const name = String(envVar || "").trim();
   if (!name) return "";
   return String(process.env[name] || "").trim();
+}
+
+function notionMissingTokenHint(envVar: string): string {
+  const name = String(envVar || "").trim();
+  if (name) return `no token configured (token field empty and env var ${name} not set).`;
+  return "no token configured.";
 }
 
 function normalizeNotionPageId(raw: string): string {
@@ -132,14 +140,14 @@ export const notionConnector: IntegrationConnector = {
     const pageIds = collectPageRefs(ctx.prompt, cfg.maxPagesPerPrompt);
     if (pageIds.length === 0) return null;
 
-    const token = notionToken(cfg.tokenEnvVar);
+    const token = notionToken(cfg.token, cfg.tokenEnvVar);
     if (!token) {
       return {
         messages: [
           {
             connectorId: "notion",
             level: "warning",
-            text: `Notion page URL detected, but env var ${cfg.tokenEnvVar} is empty.`
+            text: `Notion page URL detected, but ${notionMissingTokenHint(cfg.tokenEnvVar)}`
           }
         ]
       };
@@ -201,14 +209,14 @@ export const notionConnector: IntegrationConnector = {
     if (!cfg.enabled) return null;
     if (!isCommentableStatus(ctx.status)) return null;
 
-    const token = notionToken(cfg.tokenEnvVar);
+    const token = notionToken(cfg.token, cfg.tokenEnvVar);
     if (!token) {
       return {
         messages: [
           {
             connectorId: "notion",
             level: "warning",
-            text: `Skipping Notion completion comments because ${cfg.tokenEnvVar} is not set.`
+            text: `Skipping Notion completion comments: ${notionMissingTokenHint(cfg.tokenEnvVar)}`
           }
         ]
       };

@@ -20,10 +20,18 @@ function collectIssueIdentifiers(prompt: string, maxCount: number): string[] {
   return out;
 }
 
-function linearAuthToken(envVar: string): string {
+function linearAuthToken(token: string, envVar: string): string {
+  const direct = String(token || "").trim();
+  if (direct) return direct;
   const name = String(envVar || "").trim();
   if (!name) return "";
   return String(process.env[name] || "").trim();
+}
+
+function linearMissingTokenHint(envVar: string): string {
+  const name = String(envVar || "").trim();
+  if (name) return `no token configured (token field empty and env var ${name} not set).`;
+  return "no token configured.";
 }
 
 async function linearGraphql(url: string, token: string, query: string, variables: Record<string, any>): Promise<any> {
@@ -113,14 +121,14 @@ export const linearConnector: IntegrationConnector = {
     const identifiers = collectIssueIdentifiers(ctx.prompt, cfg.maxIssuesPerPrompt);
     if (identifiers.length === 0) return null;
 
-    const token = linearAuthToken(cfg.tokenEnvVar);
+    const token = linearAuthToken(cfg.token, cfg.tokenEnvVar);
     if (!token) {
       return {
         messages: [
           {
             connectorId: "linear",
             level: "warning",
-            text: `Issue reference detected (${identifiers.join(", ")}), but env var ${cfg.tokenEnvVar} is empty.`
+            text: `Issue reference detected (${identifiers.join(", ")}), but ${linearMissingTokenHint(cfg.tokenEnvVar)}`
           }
         ]
       };
@@ -199,14 +207,14 @@ export const linearConnector: IntegrationConnector = {
     if (!cfg.enabled) return null;
     if (!isCommentableStatus(ctx.status)) return null;
 
-    const token = linearAuthToken(cfg.tokenEnvVar);
+    const token = linearAuthToken(cfg.token, cfg.tokenEnvVar);
     if (!token) {
       return {
         messages: [
           {
             connectorId: "linear",
             level: "warning",
-            text: `Skipping Linear completion comment because ${cfg.tokenEnvVar} is not set.`
+            text: `Skipping Linear completion comment: ${linearMissingTokenHint(cfg.tokenEnvVar)}`
           }
         ]
       };

@@ -44,6 +44,8 @@ export type Job = {
   finishedAt: string;
   projectId: string;
   projectPath: string;
+  checkoutModePreference?: string;
+  checkoutModeEffective?: string;
   agent: string;
   model: string;
   threadId: string;
@@ -92,6 +94,8 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
 
   out.projectId = typeof out.projectId === "string" ? out.projectId : "";
   out.projectPath = typeof out.projectPath === "string" ? out.projectPath : "";
+  out.checkoutModePreference = typeof out.checkoutModePreference === "string" ? out.checkoutModePreference : "";
+  out.checkoutModeEffective = typeof out.checkoutModeEffective === "string" ? out.checkoutModeEffective : "";
   // Migration/default: historical jobs were Codex-only.
   out.agent = typeof out.agent === "string" ? out.agent : "codex";
   out.model = typeof out.model === "string" ? out.model : "";
@@ -160,6 +164,8 @@ export function snapshotJob(job: Job): Job {
     finishedAt,
     projectId,
     projectPath,
+    checkoutModePreference,
+    checkoutModeEffective,
     agent,
     model,
     threadId,
@@ -190,6 +196,8 @@ export function snapshotJob(job: Job): Job {
     finishedAt,
     projectId,
     projectPath,
+    checkoutModePreference,
+    checkoutModeEffective,
     agent,
     model,
     threadId,

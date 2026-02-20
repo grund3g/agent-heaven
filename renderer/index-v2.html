@@ -633,6 +633,128 @@
           </div>
 
           <div class="settings__section">
+            <div class="settings__sectionTitle">Integrations</div>
+            <label class="field field--row">
+              <input id="settingsIntegrationsEnabled" type="checkbox" />
+              <div class="field__label field__label--inline">Enable provider integrations</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsIntegrationsAutoEnrichPrompt" type="checkbox" />
+              <div class="field__label field__label--inline">Auto-enrich prompts with external context</div>
+            </label>
+            <label class="field field--row">
+              <input id="settingsIntegrationsAutoCommentOnComplete" type="checkbox" />
+              <div class="field__label field__label--inline">Post run updates to linked tickets/pages</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Request timeout (ms)</div>
+              <input id="settingsIntegrationsRequestTimeoutMs" class="input" type="number" min="1000" max="60000" step="500" />
+            </label>
+            <div class="settings__note">Tokens are stored locally in your settings file. Leave token empty to use env var fallback.</div>
+
+            <div class="settings__divider"></div>
+
+            <div class="settings__groupTitle">Linear</div>
+            <label class="field field--row">
+              <input id="settingsIntegrationsLinearEnabled" type="checkbox" />
+              <div class="field__label field__label--inline">Enable Linear connector</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Linear API base URL</div>
+              <input id="settingsIntegrationsLinearApiBaseUrl" class="input" placeholder="https://api.linear.app/graphql" />
+            </label>
+            <label class="field">
+              <div class="field__label">Linear API token</div>
+              <input
+                id="settingsIntegrationsLinearToken"
+                class="input"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="lin_api_..."
+              />
+            </label>
+            <label class="field">
+              <div class="field__label">Linear token env var (fallback)</div>
+              <input id="settingsIntegrationsLinearTokenEnvVar" class="input" placeholder="LINEAR_API_KEY" spellcheck="false" />
+            </label>
+            <label class="field">
+              <div class="field__label">Linear: max issues per prompt</div>
+              <input id="settingsIntegrationsLinearMaxIssuesPerPrompt" class="input" type="number" min="1" max="10" step="1" />
+            </label>
+            <label class="field field--row">
+              <input id="settingsIntegrationsLinearIncludeDescription" type="checkbox" />
+              <div class="field__label field__label--inline">Include issue description in prompt context</div>
+            </label>
+
+            <div class="settings__divider"></div>
+
+            <div class="settings__groupTitle">GitHub</div>
+            <label class="field field--row">
+              <input id="settingsIntegrationsGithubEnabled" type="checkbox" />
+              <div class="field__label field__label--inline">Enable GitHub connector</div>
+            </label>
+            <label class="field">
+              <div class="field__label">GitHub API base URL</div>
+              <input id="settingsIntegrationsGithubApiBaseUrl" class="input" placeholder="https://api.github.com" />
+            </label>
+            <label class="field">
+              <div class="field__label">GitHub token</div>
+              <input
+                id="settingsIntegrationsGithubToken"
+                class="input"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="ghp_..."
+              />
+            </label>
+            <label class="field">
+              <div class="field__label">GitHub token env var (fallback)</div>
+              <input id="settingsIntegrationsGithubTokenEnvVar" class="input" placeholder="GITHUB_TOKEN" spellcheck="false" />
+            </label>
+            <label class="field">
+              <div class="field__label">GitHub: max issues per prompt</div>
+              <input id="settingsIntegrationsGithubMaxIssuesPerPrompt" class="input" type="number" min="1" max="10" step="1" />
+            </label>
+
+            <div class="settings__divider"></div>
+
+            <div class="settings__groupTitle">Notion</div>
+            <label class="field field--row">
+              <input id="settingsIntegrationsNotionEnabled" type="checkbox" />
+              <div class="field__label field__label--inline">Enable Notion connector</div>
+            </label>
+            <label class="field">
+              <div class="field__label">Notion API base URL</div>
+              <input id="settingsIntegrationsNotionApiBaseUrl" class="input" placeholder="https://api.notion.com/v1" />
+            </label>
+            <label class="field">
+              <div class="field__label">Notion API token</div>
+              <input
+                id="settingsIntegrationsNotionToken"
+                class="input"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="secret_..."
+              />
+            </label>
+            <label class="field">
+              <div class="field__label">Notion token env var (fallback)</div>
+              <input id="settingsIntegrationsNotionTokenEnvVar" class="input" placeholder="NOTION_API_KEY" spellcheck="false" />
+            </label>
+            <label class="field">
+              <div class="field__label">Notion API version</div>
+              <input id="settingsIntegrationsNotionVersion" class="input" placeholder="2022-06-28" spellcheck="false" />
+            </label>
+            <label class="field">
+              <div class="field__label">Notion: max pages per prompt</div>
+              <input id="settingsIntegrationsNotionMaxPagesPerPrompt" class="input" type="number" min="1" max="8" step="1" />
+            </label>
+          </div>
+
+          <div class="settings__section">
             <div class="settings__sectionTitle">Shortcuts</div>
             <label class="field field--row">
               <input id="settingsGlobalHotkeyEnabled" type="checkbox" />
@@ -832,6 +954,7 @@
         </div>
         <div class="dialog__footer">
           <div class="dialog__actions dialog__actions--left">
+            <button id="projectDialogOpenFinderBtn" class="btn btn--ghost" type="button" hidden>Im Finder öffnen</button>
             <button id="projectDialogCheckoutsBtn" class="btn btn--ghost" type="button">Manage checkouts…</button>
             <button id="projectDialogRemoveBtn" class="btn btn--danger" type="button" title="Remove project from the sidebar list">Remove project</button>
           </div>

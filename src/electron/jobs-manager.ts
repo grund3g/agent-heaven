@@ -32,6 +32,63 @@ type RunClaudeExec = (opts: any) => ChildProcess;
 type RunClaudeResume = (opts: any) => ChildProcess;
 type NeedsAttentionHeuristic = (text: unknown) => boolean;
 
+const WRITE_INTENT_PATTERNS = [
+  /\bfix\b/,
+  /\bimplement\b/,
+  /\badd\b/,
+  /\bupdate\b/,
+  /\bchange\b/,
+  /\bedit\b/,
+  /\brefactor\b/,
+  /\bpatch\b/,
+  /\bwrite\b/,
+  /\bcreate\b/,
+  /\bremove\b/,
+  /\brename\b/,
+  /\bmigrate\b/,
+  /\bcommit\b/,
+  /\bbugfix\b/,
+  /\bcode\s+change/,
+  /\bcode\s+changes/,
+  /\bmake\s+changes?\b/,
+  /\bbehebe\b/,
+  /\bfixe\b/,
+  /\bimplementier/,
+  /\bfu[eü]g(?:e|en)?\b/,
+  /\b[aä]nder(?:e|n|ung)/,
+  /\baktualisier/,
+  /\berstell(?:e|en)?\b/,
+  /\bschreib(?:e|en)?\b/,
+  /\brefaktorisier/,
+  /\bl[oö]sch(?:e|en)?\b/,
+  /\bumbau(?:en)?\b/,
+  /\bmigrier(?:e|en)?\b/
+];
+
+const READ_ONLY_INTENT_PATTERNS = [
+  /\banalys(?:e|is|ier)/,
+  /\banaly[sz]e\b/,
+  /\bexplain\b/,
+  /\berkl[aä]r/,
+  /\breview\b/,
+  /\binspect\b/,
+  /\binvestigat/,
+  /\buntersuch/,
+  /\bcheck\b/,
+  /\bpr[uü]f(?:e|en)?\b/,
+  /\bwhy\b/,
+  /\bwarum\b/,
+  /\bwieso\b/,
+  /\bplan\b/,
+  /\bbrainstorm\b/,
+  /\bidee(?:n)?\b/,
+  /\bsummariz/,
+  /\bzusammenfass/,
+  /\bstatus\b/,
+  /\bcompare\b/,
+  /\bvergleich/
+];
+
 export class JobsManager {
   private store: any;
   private history: any;
@@ -111,70 +168,27 @@ export class JobsManager {
     return "ask";
   }
 
-  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
-    const text = typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
+  private promptTextNormalized(prompt: unknown): string {
+    return typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
+  }
+
+  private hasWriteIntent(prompt: unknown): boolean {
+    const text = this.promptTextNormalized(prompt);
     if (!text) return false;
+    return WRITE_INTENT_PATTERNS.some((re) => re.test(text));
+  }
 
-    // If the prompt explicitly asks for edits/implementation, keep eager checkout creation.
-    const writePatterns = [
-      /\bfix\b/,
-      /\bimplement\b/,
-      /\badd\b/,
-      /\bupdate\b/,
-      /\bchange\b/,
-      /\bedit\b/,
-      /\brefactor\b/,
-      /\bpatch\b/,
-      /\bwrite\b/,
-      /\bcreate\b/,
-      /\bremove\b/,
-      /\brename\b/,
-      /\bmigrate\b/,
-      /\bcommit\b/,
-      /\bbugfix\b/,
-      /\bcode\s+change/,
-      /\bcode\s+changes/,
-      /\bmake\s+changes?\b/,
-      /\bbehebe\b/,
-      /\bfixe\b/,
-      /\bimplementier/,
-      /\bfu[eü]g(?:e|en)?\b/,
-      /\b[aä]nder(?:e|n|ung)/,
-      /\baktualisier/,
-      /\berstell(?:e|en)?\b/,
-      /\bschreib(?:e|en)?\b/,
-      /\brefaktorisier/,
-      /\bl[oö]sch(?:e|en)?\b/,
-      /\bumbau(?:en)?\b/,
-      /\bmigrier(?:e|en)?\b/
-    ];
-    if (writePatterns.some((re) => re.test(text))) return false;
+  private hasReadOnlyIntent(prompt: unknown): boolean {
+    const text = this.promptTextNormalized(prompt);
+    if (!text) return false;
+    return READ_ONLY_INTENT_PATTERNS.some((re) => re.test(text));
+  }
 
-    // Prompts focused on analysis/explanation can run in-place without creating a dedicated worktree.
-    const readOnlyPatterns = [
-      /\banalys(?:e|is|ier)/,
-      /\banaly[sz]e\b/,
-      /\bexplain\b/,
-      /\berkl[aä]r/,
-      /\breview\b/,
-      /\binspect\b/,
-      /\binvestigat/,
-      /\buntersuch/,
-      /\bcheck\b/,
-      /\bpr[uü]f(?:e|en)?\b/,
-      /\bwhy\b/,
-      /\bwarum\b/,
-      /\bwieso\b/,
-      /\bplan\b/,
-      /\bbrainstorm\b/,
-      /\bidee(?:n)?\b/,
-      /\bsummariz/,
-      /\bzusammenfass/,
-      /\bstatus\b/,
-      /\bcompare\b/,
-      /\bvergleich/
-    ];
-    if (readOnlyPatterns.some((re) => re.test(text))) return true;
+  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
+    const text = this.promptTextNormalized(prompt);
+    if (!text) return false;
+    if (this.hasWriteIntent(text)) return false;
+    if (this.hasReadOnlyIntent(text)) return true;
 
     // Questions without edit intent are typically informational.
     if (text.endsWith("?")) return true;
@@ -336,6 +350,70 @@ export class JobsManager {
     return projects.find((p: any) => p && String(p.id || "").trim() === id) || null;
   }
 
+  private checkoutModePreferenceForJob(job: Job): "inplace" | "worktree" | "clone" {
+    if (!job || typeof job !== "object") return "inplace";
+
+    const preferredRaw = typeof (job as any).checkoutModePreference === "string" ? (job as any).checkoutModePreference : "";
+    if (preferredRaw) return this.normalizeCheckoutMode(preferredRaw);
+
+    const project = this.projectById(job.projectId);
+    return this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+  }
+
+  private isInplaceCheckoutForJob(job: Job): boolean {
+    if (!job || typeof job !== "object") return false;
+
+    const current = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!current) return false;
+
+    const project = this.projectById(job.projectId);
+    const projectPath = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    if (!projectPath) return false;
+
+    return path.resolve(current) === path.resolve(projectPath);
+  }
+
+  private async maybePromoteFollowupToPreferredCheckout(
+    job: Job,
+    promptText: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!job || typeof job !== "object") return { ok: true };
+    if (!this.hasWriteIntent(promptText)) return { ok: true };
+
+    const preferred = this.checkoutModePreferenceForJob(job);
+    if (preferred !== "worktree") return { ok: true };
+    if (!this.isInplaceCheckoutForJob(job)) return { ok: true };
+
+    const project = this.projectById(job.projectId);
+    if (!project) return { ok: false, error: "Project not found" };
+
+    try {
+      const run = await this.prepareCheckout(project, job.id, promptText, "worktree");
+      const nextPath = typeof run.projectPath === "string" ? run.projectPath.trim() : "";
+      if (!nextPath) return { ok: false, error: "Failed to create worktree checkout for follow-up prompt." };
+
+      if (nextPath !== job.projectPath) {
+        job.projectPath = nextPath;
+        (job as any).checkoutModeEffective = run.checkoutMode || "worktree";
+        this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: job.projectPath } });
+        this.markJobDirty(job.id);
+        this.tryPersistJobNow(job);
+      } else if ((job as any).checkoutModeEffective !== "worktree") {
+        (job as any).checkoutModeEffective = "worktree";
+        this.markJobDirty(job.id);
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      return {
+        ok: false,
+        error:
+          "Follow-up requested code changes, but preparing a worktree checkout failed.\n\n" +
+          String(err && err.message ? err.message : err)
+      };
+    }
+  }
+
   private detectMissingManagedWorktreeForJob(job: Job): { missingPath: string; projectPath: string } | null {
     if (!job || typeof job !== "object") return null;
 
@@ -380,9 +458,13 @@ export class JobsManager {
 
       if (nextPath !== job.projectPath) {
         job.projectPath = nextPath;
+        (job as any).checkoutModeEffective = run.checkoutMode || "worktree";
         this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: job.projectPath } });
         this.markJobDirty(job.id);
         this.tryPersistJobNow(job);
+      } else if ((job as any).checkoutModeEffective !== "worktree") {
+        (job as any).checkoutModeEffective = "worktree";
+        this.markJobDirty(job.id);
       }
       return { ok: true };
     } catch (err: any) {
@@ -401,9 +483,13 @@ export class JobsManager {
     if (fallback && fs.existsSync(fallback)) {
       if (fallback !== current) {
         job.projectPath = fallback;
+        (job as any).checkoutModeEffective = "inplace";
         this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: fallback } });
         this.markJobDirty(job.id);
         this.tryPersistJobNow(job);
+      } else if ((job as any).checkoutModeEffective !== "inplace") {
+        (job as any).checkoutModeEffective = "inplace";
+        this.markJobDirty(job.id);
       }
       return fallback;
     }
@@ -1928,10 +2014,13 @@ export class JobsManager {
     if (imgErr) return { ok: false, error: imgErr };
 
     const jobId = this.createId();
+    const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
+    const checkoutModePreference = this.normalizeCheckoutMode(
+      checkoutModeOverride || (project && typeof project === "object" ? (project as any).checkoutMode : "")
+    );
 
     let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
     try {
-      const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
       run = await this.prepareCheckout(project, jobId, prompt, checkoutModeOverride);
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
@@ -1997,6 +2086,8 @@ export class JobsManager {
       finishedAt: "",
       projectId: project.id,
       projectPath: run.projectPath || project.path,
+      checkoutModePreference,
+      checkoutModeEffective: run.checkoutMode || "inplace",
       agent,
       model,
       threadId,
@@ -2131,6 +2222,9 @@ export class JobsManager {
         }
       }
     }
+
+    const promoted = await this.maybePromoteFollowupToPreferredCheckout(job, text);
+    if (!promoted.ok) return promoted;
 
     const runProjectPath = this.ensureRunnableProjectPath(job);
 

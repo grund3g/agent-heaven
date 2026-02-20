@@ -37,10 +37,18 @@ function collectIssueRefs(prompt: string, maxCount: number): IssueRef[] {
   return out;
 }
 
-function githubToken(envVar: string): string {
+function githubToken(token: string, envVar: string): string {
+  const direct = String(token || "").trim();
+  if (direct) return direct;
   const name = String(envVar || "").trim();
   if (!name) return "";
   return String(process.env[name] || "").trim();
+}
+
+function githubMissingTokenHint(envVar: string): string {
+  const name = String(envVar || "").trim();
+  if (name) return `no token configured (token field empty and env var ${name} not set).`;
+  return "no token configured.";
 }
 
 async function githubIssue(baseUrl: string, token: string, ref: IssueRef): Promise<any> {
@@ -125,7 +133,7 @@ export const githubConnector: IntegrationConnector = {
     const refs = collectIssueRefs(ctx.prompt, cfg.maxIssuesPerPrompt);
     if (refs.length === 0) return null;
 
-    const token = githubToken(cfg.tokenEnvVar);
+    const token = githubToken(cfg.token, cfg.tokenEnvVar);
     const issues: any[] = [];
 
     for (const ref of refs) {
@@ -186,14 +194,14 @@ export const githubConnector: IntegrationConnector = {
     if (!cfg.enabled) return null;
     if (!isCommentableStatus(ctx.status)) return null;
 
-    const token = githubToken(cfg.tokenEnvVar);
+    const token = githubToken(cfg.token, cfg.tokenEnvVar);
     if (!token) {
       return {
         messages: [
           {
             connectorId: "github",
             level: "warning",
-            text: `Skipping GitHub completion comments because ${cfg.tokenEnvVar} is not set.`
+            text: `Skipping GitHub completion comments: ${githubMissingTokenHint(cfg.tokenEnvVar)}`
           }
         ]
       };

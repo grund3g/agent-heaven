@@ -2243,6 +2243,68 @@ body::before {
   flex-wrap: wrap;
 }
 
+.jobmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.jobmeta__chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--stroke2);
+  border-radius: 999px;
+  background: var(--surface3);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.14);
+}
+
+.jobmeta__chip--long {
+  max-width: min(100%, 78ch);
+}
+
+.jobmeta__chip--run {
+  border-color: rgba(var(--accent-rgb), 0.40);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.11) inset;
+}
+
+.jobmeta__chip--done {
+  border-color: rgba(var(--accent2-rgb), 0.40);
+  box-shadow: 0 0 0 1px rgba(var(--accent2-rgb), 0.11) inset;
+}
+
+.jobmeta__chip--attn {
+  border-color: rgba(var(--danger-rgb), 0.42);
+  box-shadow: 0 0 0 1px rgba(var(--danger-rgb), 0.12) inset;
+}
+
+.jobmeta__key {
+  flex: 0 0 auto;
+  padding: 4px 7px 4px 9px;
+  border-right: 1px solid var(--stroke-soft);
+  font-family: var(--ui);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+
+.jobmeta__value {
+  min-width: 0;
+  padding: 4px 10px 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ink-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dialog__body {
   padding: 12px 14px;
   overflow: hidden;

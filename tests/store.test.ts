@@ -240,6 +240,7 @@ describe("store", () => {
                 linear: {
                   enabled: "true",
                   apiBaseUrl: "http://invalid.local",
+                  token: "  linear-token  ",
                   tokenEnvVar: " LINEAR-KEY ",
                   maxIssuesPerPrompt: 0
                 }
@@ -262,10 +263,13 @@ describe("store", () => {
     expect(integrations.requestTimeoutMs).toBe(60000);
     expect(integrations.providers.linear.enabled).toBe(false);
     expect(integrations.providers.linear.apiBaseUrl).toBe("https://api.linear.app/graphql");
+    expect(integrations.providers.linear.token).toBe("linear-token");
     expect(integrations.providers.linear.tokenEnvVar).toBe("LINEARKEY");
     expect(integrations.providers.linear.maxIssuesPerPrompt).toBe(1);
     expect(integrations.providers.github.apiBaseUrl).toBe("https://api.github.com");
+    expect(integrations.providers.github.token).toBe("");
     expect(integrations.providers.notion.apiBaseUrl).toBe("https://api.notion.com/v1");
+    expect(integrations.providers.notion.token).toBe("");
   });
 
   it("defaults uiDesignVersion to v1 and normalizes invalid values", () => {

@@ -82,6 +82,7 @@ const api = window.agentHeaven;
   projectShortNameInput: document.getElementById("projectShortNameInput"),
   projectDefaultBranchInput: document.getElementById("projectDefaultBranchInput"),
   projectCheckoutModeSelect: document.getElementById("projectCheckoutModeSelect"),
+  projectDialogOpenFinderBtn: document.getElementById("projectDialogOpenFinderBtn"),
   projectDialogSave: document.getElementById("projectDialogSave"),
   projectDialogRemoveBtn: document.getElementById("projectDialogRemoveBtn"),
 
@@ -151,14 +152,35 @@ const api = window.agentHeaven;
 	  settingsSoundVolume: document.getElementById("settingsSoundVolume"),
 			  settingsTestSoundAttention: document.getElementById("settingsTestSoundAttention"),
 			  settingsTestSoundDone: document.getElementById("settingsTestSoundDone"),
-	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
-	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
-	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
-	  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
-  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
-  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
-  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
-  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
+		  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
+		  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
+		  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
+		  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
+	  settingsIntegrationsEnabled: document.getElementById("settingsIntegrationsEnabled"),
+	  settingsIntegrationsAutoEnrichPrompt: document.getElementById("settingsIntegrationsAutoEnrichPrompt"),
+	  settingsIntegrationsAutoCommentOnComplete: document.getElementById("settingsIntegrationsAutoCommentOnComplete"),
+	  settingsIntegrationsRequestTimeoutMs: document.getElementById("settingsIntegrationsRequestTimeoutMs"),
+	  settingsIntegrationsLinearEnabled: document.getElementById("settingsIntegrationsLinearEnabled"),
+	  settingsIntegrationsLinearApiBaseUrl: document.getElementById("settingsIntegrationsLinearApiBaseUrl"),
+	  settingsIntegrationsLinearToken: document.getElementById("settingsIntegrationsLinearToken"),
+	  settingsIntegrationsLinearTokenEnvVar: document.getElementById("settingsIntegrationsLinearTokenEnvVar"),
+	  settingsIntegrationsLinearMaxIssuesPerPrompt: document.getElementById("settingsIntegrationsLinearMaxIssuesPerPrompt"),
+	  settingsIntegrationsLinearIncludeDescription: document.getElementById("settingsIntegrationsLinearIncludeDescription"),
+	  settingsIntegrationsGithubEnabled: document.getElementById("settingsIntegrationsGithubEnabled"),
+	  settingsIntegrationsGithubApiBaseUrl: document.getElementById("settingsIntegrationsGithubApiBaseUrl"),
+	  settingsIntegrationsGithubToken: document.getElementById("settingsIntegrationsGithubToken"),
+	  settingsIntegrationsGithubTokenEnvVar: document.getElementById("settingsIntegrationsGithubTokenEnvVar"),
+	  settingsIntegrationsGithubMaxIssuesPerPrompt: document.getElementById("settingsIntegrationsGithubMaxIssuesPerPrompt"),
+	  settingsIntegrationsNotionEnabled: document.getElementById("settingsIntegrationsNotionEnabled"),
+	  settingsIntegrationsNotionApiBaseUrl: document.getElementById("settingsIntegrationsNotionApiBaseUrl"),
+	  settingsIntegrationsNotionToken: document.getElementById("settingsIntegrationsNotionToken"),
+	  settingsIntegrationsNotionTokenEnvVar: document.getElementById("settingsIntegrationsNotionTokenEnvVar"),
+	  settingsIntegrationsNotionVersion: document.getElementById("settingsIntegrationsNotionVersion"),
+	  settingsIntegrationsNotionMaxPagesPerPrompt: document.getElementById("settingsIntegrationsNotionMaxPagesPerPrompt"),
+	  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
+	  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
+	  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
+	  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -840,9 +862,21 @@ function stashTitlesInTree(root) {
   for (const node of matches) stashNativeTitle(node);
 }
 
-function ensureTokenTooltipEl() {
-  if (tokenTooltip.root) return tokenTooltip.root;
+function tooltipHostForElement(el) {
   if (!document || !document.body) return null;
+  if (!el || typeof el.closest !== "function") return document.body;
+  const dlg = el.closest("dialog[open]");
+  if (dlg && dlg.nodeType === Node.ELEMENT_NODE) return dlg;
+  return document.body;
+}
+
+function ensureTokenTooltipEl(hostEl) {
+  if (!document || !document.body) return null;
+  const host = hostEl && hostEl.nodeType === Node.ELEMENT_NODE ? hostEl : document.body;
+  if (tokenTooltip.root) {
+    if (tokenTooltip.root.parentElement !== host) host.appendChild(tokenTooltip.root);
+    return tokenTooltip.root;
+  }
   const wrap = document.createElement("div");
   wrap.className = "tokenTooltip";
   wrap.setAttribute("role", "tooltip");
@@ -850,7 +884,7 @@ function ensureTokenTooltipEl() {
   const text = document.createElement("div");
   text.className = "tokenTooltip__text";
   wrap.appendChild(text);
-  document.body.appendChild(wrap);
+  host.appendChild(wrap);
   tokenTooltip.root = wrap;
   tokenTooltip.textEl = text;
   return wrap;
@@ -872,9 +906,10 @@ function hideTokenTooltip() {
 }
 
 function positionTokenTooltip() {
-  const root = tokenTooltip.root;
   const activeEl = tokenTooltip.activeEl;
-  if (!root || !activeEl) return;
+  if (!activeEl) return;
+  const root = ensureTokenTooltipEl(tooltipHostForElement(activeEl));
+  if (!root) return;
   if (!document.body || !document.body.contains(activeEl)) {
     hideTokenTooltip();
     return;
@@ -936,7 +971,7 @@ function showTokenTooltipFor(target) {
     hideTokenTooltip();
     return;
   }
-  if (!ensureTokenTooltipEl()) return;
+  if (!ensureTokenTooltipEl(tooltipHostForElement(target))) return;
   tokenTooltip.activeEl = target;
   if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
   scheduleTokenTooltipPosition();
@@ -5272,6 +5307,14 @@ async function openProjectDialog(projectId) {
   if (els.projectShortNameInput) els.projectShortNameInput.value = normalizeShortName(project.shortName || "");
   if (els.projectDefaultBranchInput) els.projectDefaultBranchInput.value = normalizeBranchName(project.defaultBranch || "");
   if (els.projectCheckoutModeSelect) els.projectCheckoutModeSelect.value = normalizeCheckoutMode(project.checkoutMode);
+  if (els.projectDialogOpenFinderBtn) {
+    const fullPath = String(project.path || "").trim();
+    const isTemporary = !!project.isTemporary;
+    const canOpenPath = isTemporary && !!fullPath && api && typeof api.shellOpenPath === "function";
+    els.projectDialogOpenFinderBtn.hidden = !isTemporary;
+    els.projectDialogOpenFinderBtn.disabled = !canOpenPath;
+    els.projectDialogOpenFinderBtn.title = fullPath ? fullPath : "";
+  }
 
   renderProjectDialogMeta(project);
 
@@ -6831,6 +6874,60 @@ function normalizeIntegrateToDefaultMode(value) {
   return "agent";
 }
 
+function normalizeIntegrationApiBaseUrl(value, fallback) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw || fallback;
+}
+
+function normalizeIntegrationEnvVar(value, fallback) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw || fallback;
+}
+
+function normalizeIntegrationToken(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeIntegrationSettingsForUi(value) {
+  const root = value && typeof value === "object" ? value : {};
+  const providers = root.providers && typeof root.providers === "object" ? root.providers : {};
+  const linear = providers.linear && typeof providers.linear === "object" ? providers.linear : {};
+  const github = providers.github && typeof providers.github === "object" ? providers.github : {};
+  const notion = providers.notion && typeof providers.notion === "object" ? providers.notion : {};
+
+  return {
+    enabled: !!root.enabled,
+    autoEnrichPrompt: root.autoEnrichPrompt !== false,
+    autoCommentOnComplete: root.autoCommentOnComplete !== false,
+    requestTimeoutMs: clampNumber(root.requestTimeoutMs, 1000, 60000, 12000),
+    providers: {
+      linear: {
+        enabled: !!linear.enabled,
+        apiBaseUrl: normalizeIntegrationApiBaseUrl(linear.apiBaseUrl, "https://api.linear.app/graphql"),
+        token: normalizeIntegrationToken(linear.token),
+        tokenEnvVar: normalizeIntegrationEnvVar(linear.tokenEnvVar, "LINEAR_API_KEY"),
+        maxIssuesPerPrompt: clampNumber(linear.maxIssuesPerPrompt, 1, 10, 3),
+        includeDescription: linear.includeDescription !== false
+      },
+      github: {
+        enabled: !!github.enabled,
+        apiBaseUrl: normalizeIntegrationApiBaseUrl(github.apiBaseUrl, "https://api.github.com"),
+        token: normalizeIntegrationToken(github.token),
+        tokenEnvVar: normalizeIntegrationEnvVar(github.tokenEnvVar, "GITHUB_TOKEN"),
+        maxIssuesPerPrompt: clampNumber(github.maxIssuesPerPrompt, 1, 10, 3)
+      },
+      notion: {
+        enabled: !!notion.enabled,
+        apiBaseUrl: normalizeIntegrationApiBaseUrl(notion.apiBaseUrl, "https://api.notion.com/v1"),
+        token: normalizeIntegrationToken(notion.token),
+        tokenEnvVar: normalizeIntegrationEnvVar(notion.tokenEnvVar, "NOTION_API_KEY"),
+        notionVersion: (typeof notion.notionVersion === "string" ? notion.notionVersion.trim() : "") || "2022-06-28",
+        maxPagesPerPrompt: clampNumber(notion.maxPagesPerPrompt, 1, 8, 2)
+      }
+    }
+  };
+}
+
 let integrateDialogJobId = "";
 let integrateDialogPhase = ""; // confirm | pending | success | error
 let integrateDialogStatusText = "";
@@ -6960,7 +7057,9 @@ function openIntegrateDialog(jobId) {
   setIntegrateDialogPhase("confirm", {
     status: "Integrate checkout",
     message:
-      "Integrate this job's checkout into the project's default branch?\n\nThis will cherry-pick the job's commits onto the default branch. Conflicts may require manual resolution."
+      "Integrate this job's checkout into the project's default branch?\n\n" +
+      "This works for jobs that ran in a Worktree/Clone checkout and will cherry-pick the job's commits onto the default branch.\n" +
+      "If the job ran in-place in the project folder, there is nothing separate to integrate."
   });
 
   try {
@@ -8454,9 +8553,43 @@ async function openJobDialog(jobId) {
 }
 
 function renderJobDialogMeta(job) {
-  const bits = [];
-  bits.push(`status=${job.status || "?"}`);
-  bits.push(`box=${jobBox(job)}`);
+  if (!els.jobDialogMeta) return;
+  els.jobDialogMeta.removeAttribute(TOKEN_TOOLTIP_ATTR);
+  els.jobDialogMeta.removeAttribute("title");
+  const chips = [];
+  const pushChip = (key, value, opts = {}) => {
+    const k = oneLine(key);
+    const v = oneLine(value);
+    if (!k || !v) return;
+    const wantsTooltip = !!(opts && (opts.long || opts.tooltip));
+    const rawTitle = opts && opts.title ? oneLine(opts.title) : "";
+    const title = wantsTooltip && rawTitle && rawTitle !== v ? rawTitle : "";
+    chips.push({
+      key: k,
+      value: v,
+      title,
+      tone: opts && opts.tone ? String(opts.tone) : "",
+      long: !!(opts && opts.long)
+    });
+  };
+  const fmtTokMeta = (raw) => {
+    if (raw == null || raw === "") return "?";
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0) return fmtTokCompact(Math.trunc(n));
+    return oneLine(raw);
+  };
+
+  const uiStatus = jobStatusForUi(job);
+  const statusTone =
+    uiStatus === "running"
+      ? "run"
+      : uiStatus === "done"
+        ? "done"
+        : uiStatus === "needs_attention" || uiStatus === "failed" || uiStatus === "cancelled"
+          ? "attn"
+          : "";
+  pushChip("status", uiStatus || "?", { tone: statusTone });
+  pushChip("box", jobBox(job));
   {
     const qc =
       typeof job.queuedCount === "number"
@@ -8464,13 +8597,13 @@ function renderJobDialogMeta(job) {
         : Array.isArray(job.queuedPrompts)
           ? job.queuedPrompts.length
           : 0;
-    if (qc > 0) bits.push(`queued=${qc}`);
+    if (qc > 0) pushChip("queued", String(qc));
   }
   if (job && job.status === "running") {
     const dur = jobElapsedText(job);
-    if (dur) bits.push(`elapsed=${dur}`);
+    if (dur) pushChip("elapsed", dur);
   }
-  if (job) bits.push(`agent=${normalizeAgentKey(job.agent)}`);
+  if (job) pushChip("agent", normalizeAgentKey(job.agent));
 
   // Project + checkout path
   {
@@ -8481,40 +8614,58 @@ function renderJobDialogMeta(job) {
     const projShort = project ? normalizeShortName(project.shortName || "") : "";
     const projName = project && project.name ? String(project.name) : "";
     const projLabel = projShort || projName;
-    if (projLabel) bits.push(`project=${projLabel}`);
+    if (projLabel) pushChip("project", projLabel);
 
     const cwdDisp = formatProjectPathForDisplay(cwdPath);
-    if (cwdDisp) bits.push(`cwd=${cwdDisp}`);
+    if (cwdDisp) pushChip("cwd", cwdDisp, { title: cwdPath, long: true });
 
     if (basePath && cwdPath && basePath !== cwdPath) {
       const baseDisp = formatProjectPathForDisplay(basePath);
-      if (baseDisp) bits.push(`base=${baseDisp}`);
-    }
-
-    if (els.jobDialogMeta) {
-      const titles = [];
-      if (cwdPath) titles.push(`cwd=${cwdPath}`);
-      if (basePath && cwdPath && basePath !== cwdPath) titles.push(`base=${basePath}`);
-      els.jobDialogMeta.title = titles.join("  ");
+      if (baseDisp) pushChip("base", baseDisp, { title: basePath, long: true });
     }
   }
 
-  if (job.threadId) bits.push(`thread=${job.threadId}`);
-  if (job.model) bits.push(`model=${job.model}`);
+  if (job.threadId) {
+    const threadRaw = String(job.threadId);
+    pushChip("thread", middleEllipsis(threadRaw, { head: 12, tail: 10 }), { title: threadRaw, long: true });
+  }
+  if (job.model) pushChip("model", job.model);
   const ut = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : null;
   if (ut && toIntOrZero(ut.turns) > 0) {
-    bits.push(`tokens in=${ut.input_tokens ?? "?"} out=${ut.output_tokens ?? "?"} turns=${ut.turns ?? "?"}`);
+    const turns = toIntOrZero(ut.turns);
+    const value = `in ${fmtTokMeta(ut.input_tokens)} out ${fmtTokMeta(ut.output_tokens)} t ${turns}`;
+    const title = `tokens in=${ut.input_tokens ?? "?"} out=${ut.output_tokens ?? "?"} turns=${turns}`;
+    pushChip("tokens", value, { title, tooltip: true });
   } else if (job.usage) {
     const u = job.usage;
-    bits.push(`tokens in=${u.input_tokens ?? "?"} out=${u.output_tokens ?? "?"}`);
+    const value = `in ${fmtTokMeta(u.input_tokens)} out ${fmtTokMeta(u.output_tokens)}`;
+    const title = `tokens in=${u.input_tokens ?? "?"} out=${u.output_tokens ?? "?"}`;
+    pushChip("tokens", value, { title, tooltip: true });
   }
   {
     const ctx = jobContextUsage(job);
     if (ctx) {
-      bits.push(`context=${fmtPctCompact(ctx.percent)} (${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in)`);
+      const value = `${fmtPctCompact(ctx.percent)} · ${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in`;
+      const title = `context ${fmtPctCompact(ctx.percent)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
+      pushChip("context", value, { title, tooltip: true });
     }
   }
-  els.jobDialogMeta.textContent = bits.join("  ");
+  if (chips.length === 0) {
+    els.jobDialogMeta.removeAttribute(TOKEN_TOOLTIP_ATTR);
+    els.jobDialogMeta.removeAttribute("title");
+    els.jobDialogMeta.textContent = "";
+    return;
+  }
+  const chipsHtml = chips
+    .map((chip) => {
+      const classes = ["jobmeta__chip"];
+      if (chip.long) classes.push("jobmeta__chip--long");
+      if (chip.tone === "run" || chip.tone === "done" || chip.tone === "attn") classes.push(`jobmeta__chip--${chip.tone}`);
+      const tooltipAttr = chip.title ? ` ${TOKEN_TOOLTIP_ATTR}="${escapeHtml(chip.title)}"` : "";
+      return `<span class="${classes.join(" ")}"${tooltipAttr}><span class="jobmeta__key">${escapeHtml(chip.key)}</span><span class="jobmeta__value">${escapeHtml(chip.value)}</span></span>`;
+    })
+    .join("");
+  els.jobDialogMeta.innerHTML = `<div class="jobmeta">${chipsHtml}</div>`;
 }
 
 function setActiveTab(tab) {
@@ -11169,6 +11320,25 @@ function wireUi() {
       await openCheckoutsDialog(id);
     });
   }
+  if (els.projectDialogOpenFinderBtn) {
+    els.projectDialogOpenFinderBtn.addEventListener("click", async () => {
+      const id = String(state.editingProjectId || "").trim();
+      if (!id) return;
+      const project = state.projects.find((p) => p && p.id === id) || null;
+      if (!project || !project.isTemporary) return;
+      const fullPath = String(project.path || "").trim();
+      if (!fullPath) {
+        showToast("Temporary project path is missing.");
+        return;
+      }
+      if (!api || typeof api.shellOpenPath !== "function") return;
+      try {
+        await api.shellOpenPath(fullPath);
+      } catch (err) {
+        showToast(String(err && err.message ? err.message : err));
+      }
+    });
+  }
   if (els.projectDialogRemoveBtn) {
     els.projectDialogRemoveBtn.addEventListener("click", async () => {
       const id = String(state.editingProjectId || "").trim();
@@ -12244,14 +12414,92 @@ function wireUi() {
                 helperDefaultAgent: normalizeHelperAgentSelection(
                   els.settingsHelperDefaultAgent ? els.settingsHelperDefaultAgent.value : ""
                 ),
-                helperDefaultModel: normalizeHelperModelValue(
-                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
-                ),
-                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
-					      agents: {
-				        codex: {
-				          path: els.settingsCodexPath.value.trim(),
-			          model: els.settingsCodexModel.value.trim(),
+	                helperDefaultModel: normalizeHelperModelValue(
+	                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
+	                ),
+	                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
+	                integrations: {
+	                  enabled: !!(els.settingsIntegrationsEnabled && els.settingsIntegrationsEnabled.checked),
+	                  autoEnrichPrompt: !!(
+	                    els.settingsIntegrationsAutoEnrichPrompt && els.settingsIntegrationsAutoEnrichPrompt.checked
+	                  ),
+	                  autoCommentOnComplete: !!(
+	                    els.settingsIntegrationsAutoCommentOnComplete && els.settingsIntegrationsAutoCommentOnComplete.checked
+	                  ),
+	                  requestTimeoutMs: clampNumber(
+	                    els.settingsIntegrationsRequestTimeoutMs ? els.settingsIntegrationsRequestTimeoutMs.value : 12000,
+	                    1000,
+	                    60000,
+	                    12000
+	                  ),
+	                  providers: {
+	                    linear: {
+	                      enabled: !!(els.settingsIntegrationsLinearEnabled && els.settingsIntegrationsLinearEnabled.checked),
+	                      apiBaseUrl: els.settingsIntegrationsLinearApiBaseUrl
+	                        ? els.settingsIntegrationsLinearApiBaseUrl.value.trim()
+	                        : "",
+	                      token: els.settingsIntegrationsLinearToken ? els.settingsIntegrationsLinearToken.value.trim() : "",
+	                      tokenEnvVar: els.settingsIntegrationsLinearTokenEnvVar
+	                        ? els.settingsIntegrationsLinearTokenEnvVar.value.trim()
+	                        : "",
+	                      maxIssuesPerPrompt: clampNumber(
+	                        els.settingsIntegrationsLinearMaxIssuesPerPrompt
+	                          ? els.settingsIntegrationsLinearMaxIssuesPerPrompt.value
+	                          : 3,
+	                        1,
+	                        10,
+	                        3
+	                      ),
+	                      includeDescription: !!(
+	                        els.settingsIntegrationsLinearIncludeDescription &&
+	                        els.settingsIntegrationsLinearIncludeDescription.checked
+	                      )
+	                    },
+	                    github: {
+	                      enabled: !!(els.settingsIntegrationsGithubEnabled && els.settingsIntegrationsGithubEnabled.checked),
+	                      apiBaseUrl: els.settingsIntegrationsGithubApiBaseUrl
+	                        ? els.settingsIntegrationsGithubApiBaseUrl.value.trim()
+	                        : "",
+	                      token: els.settingsIntegrationsGithubToken ? els.settingsIntegrationsGithubToken.value.trim() : "",
+	                      tokenEnvVar: els.settingsIntegrationsGithubTokenEnvVar
+	                        ? els.settingsIntegrationsGithubTokenEnvVar.value.trim()
+	                        : "",
+	                      maxIssuesPerPrompt: clampNumber(
+	                        els.settingsIntegrationsGithubMaxIssuesPerPrompt
+	                          ? els.settingsIntegrationsGithubMaxIssuesPerPrompt.value
+	                          : 3,
+	                        1,
+	                        10,
+	                        3
+	                      )
+	                    },
+	                    notion: {
+	                      enabled: !!(els.settingsIntegrationsNotionEnabled && els.settingsIntegrationsNotionEnabled.checked),
+	                      apiBaseUrl: els.settingsIntegrationsNotionApiBaseUrl
+	                        ? els.settingsIntegrationsNotionApiBaseUrl.value.trim()
+	                        : "",
+	                      token: els.settingsIntegrationsNotionToken ? els.settingsIntegrationsNotionToken.value.trim() : "",
+	                      tokenEnvVar: els.settingsIntegrationsNotionTokenEnvVar
+	                        ? els.settingsIntegrationsNotionTokenEnvVar.value.trim()
+	                        : "",
+	                      notionVersion: els.settingsIntegrationsNotionVersion
+	                        ? els.settingsIntegrationsNotionVersion.value.trim()
+	                        : "",
+	                      maxPagesPerPrompt: clampNumber(
+	                        els.settingsIntegrationsNotionMaxPagesPerPrompt
+	                          ? els.settingsIntegrationsNotionMaxPagesPerPrompt.value
+	                          : 2,
+	                        1,
+	                        8,
+	                        2
+	                      )
+	                    }
+	                  }
+	                },
+						      agents: {
+					        codex: {
+					          path: els.settingsCodexPath.value.trim(),
+				          model: els.settingsCodexModel.value.trim(),
 			          transport: els.settingsCodexTransport ? els.settingsCodexTransport.value : "exec_json",
 		          sandboxMode: els.settingsCodexSandboxMode.value,
 		          skipGitRepoCheck: !!els.settingsCodexSkipGitRepoCheck.checked,
@@ -13227,10 +13475,82 @@ function maybeShowMissingAgentBinariesToast(res) {
 					  if (els.settingsIntegrateToDefaultMode) {
 					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
 					  }
-            if (els.settingsHelperDefaultAgent) {
-              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
-            }
-            if (els.settingsHelperDefaultModel) {
+	            {
+	              const integrations = normalizeIntegrationSettingsForUi(s.integrations);
+	              if (els.settingsIntegrationsEnabled) {
+	                els.settingsIntegrationsEnabled.checked = integrations.enabled;
+	              }
+	              if (els.settingsIntegrationsAutoEnrichPrompt) {
+	                els.settingsIntegrationsAutoEnrichPrompt.checked = integrations.autoEnrichPrompt;
+	              }
+	              if (els.settingsIntegrationsAutoCommentOnComplete) {
+	                els.settingsIntegrationsAutoCommentOnComplete.checked = integrations.autoCommentOnComplete;
+	              }
+	              if (els.settingsIntegrationsRequestTimeoutMs) {
+	                els.settingsIntegrationsRequestTimeoutMs.value = String(integrations.requestTimeoutMs);
+	              }
+	              if (els.settingsIntegrationsLinearEnabled) {
+	                els.settingsIntegrationsLinearEnabled.checked = integrations.providers.linear.enabled;
+	              }
+	              if (els.settingsIntegrationsLinearApiBaseUrl) {
+	                els.settingsIntegrationsLinearApiBaseUrl.value = integrations.providers.linear.apiBaseUrl;
+	              }
+	              if (els.settingsIntegrationsLinearToken) {
+	                els.settingsIntegrationsLinearToken.value = integrations.providers.linear.token;
+	              }
+	              if (els.settingsIntegrationsLinearTokenEnvVar) {
+	                els.settingsIntegrationsLinearTokenEnvVar.value = integrations.providers.linear.tokenEnvVar;
+	              }
+	              if (els.settingsIntegrationsLinearMaxIssuesPerPrompt) {
+	                els.settingsIntegrationsLinearMaxIssuesPerPrompt.value = String(
+	                  integrations.providers.linear.maxIssuesPerPrompt
+	                );
+	              }
+	              if (els.settingsIntegrationsLinearIncludeDescription) {
+	                els.settingsIntegrationsLinearIncludeDescription.checked = integrations.providers.linear.includeDescription;
+	              }
+	              if (els.settingsIntegrationsGithubEnabled) {
+	                els.settingsIntegrationsGithubEnabled.checked = integrations.providers.github.enabled;
+	              }
+	              if (els.settingsIntegrationsGithubApiBaseUrl) {
+	                els.settingsIntegrationsGithubApiBaseUrl.value = integrations.providers.github.apiBaseUrl;
+	              }
+	              if (els.settingsIntegrationsGithubToken) {
+	                els.settingsIntegrationsGithubToken.value = integrations.providers.github.token;
+	              }
+	              if (els.settingsIntegrationsGithubTokenEnvVar) {
+	                els.settingsIntegrationsGithubTokenEnvVar.value = integrations.providers.github.tokenEnvVar;
+	              }
+	              if (els.settingsIntegrationsGithubMaxIssuesPerPrompt) {
+	                els.settingsIntegrationsGithubMaxIssuesPerPrompt.value = String(
+	                  integrations.providers.github.maxIssuesPerPrompt
+	                );
+	              }
+	              if (els.settingsIntegrationsNotionEnabled) {
+	                els.settingsIntegrationsNotionEnabled.checked = integrations.providers.notion.enabled;
+	              }
+	              if (els.settingsIntegrationsNotionApiBaseUrl) {
+	                els.settingsIntegrationsNotionApiBaseUrl.value = integrations.providers.notion.apiBaseUrl;
+	              }
+	              if (els.settingsIntegrationsNotionToken) {
+	                els.settingsIntegrationsNotionToken.value = integrations.providers.notion.token;
+	              }
+	              if (els.settingsIntegrationsNotionTokenEnvVar) {
+	                els.settingsIntegrationsNotionTokenEnvVar.value = integrations.providers.notion.tokenEnvVar;
+	              }
+	              if (els.settingsIntegrationsNotionVersion) {
+	                els.settingsIntegrationsNotionVersion.value = integrations.providers.notion.notionVersion;
+	              }
+	              if (els.settingsIntegrationsNotionMaxPagesPerPrompt) {
+	                els.settingsIntegrationsNotionMaxPagesPerPrompt.value = String(
+	                  integrations.providers.notion.maxPagesPerPrompt
+	                );
+	              }
+	            }
+	            if (els.settingsHelperDefaultAgent) {
+	              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
+	            }
+	            if (els.settingsHelperDefaultModel) {
               els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
             }
             if (els.settingsHelperPersistHistory) {

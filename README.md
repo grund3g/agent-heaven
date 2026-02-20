@@ -117,7 +117,7 @@ Agent Heaven now includes a connector runtime for external work systems. The cor
 
 ### Configuration
 
-In settings (`settings.integrations` in the store JSON), enable integrations and provider flags. Secrets are read from environment variables only.
+In settings (`settings.integrations` in the store JSON), enable integrations and provider flags. Tokens can be entered directly in settings (`token`) or resolved from environment variables (`tokenEnvVar`) as fallback.
 
 ```json
 {
@@ -126,9 +126,9 @@ In settings (`settings.integrations` in the store JSON), enable integrations and
     "autoEnrichPrompt": true,
     "autoCommentOnComplete": true,
     "providers": {
-      "linear": { "enabled": true, "tokenEnvVar": "LINEAR_API_KEY" },
-      "github": { "enabled": true, "tokenEnvVar": "GITHUB_TOKEN" },
-      "notion": { "enabled": true, "tokenEnvVar": "NOTION_API_KEY" }
+      "linear": { "enabled": true, "token": "", "tokenEnvVar": "LINEAR_API_KEY" },
+      "github": { "enabled": true, "token": "", "tokenEnvVar": "GITHUB_TOKEN" },
+      "notion": { "enabled": true, "token": "", "tokenEnvVar": "NOTION_API_KEY" }
     }
   }
 }
