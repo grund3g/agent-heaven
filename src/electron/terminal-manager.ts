@@ -11,6 +11,7 @@ type TermSession = {
   buffer: string;
   seq: number;
   subscribers: Set<number>; // webContents.id
+  noSubscriberTimer: NodeJS.Timeout | null;
   createdAtMs: number;
   lastActiveAtMs: number;
 };
@@ -71,7 +72,31 @@ function ensureExecBit(filePath: string): boolean {
 export class TerminalManager {
   private sessions = new Map<string, TermSession>();
   private readonly MAX_BUFFER_CHARS = 260_000;
+  private readonly UNSUBSCRIBED_DESTROY_DELAY_MS = 45_000;
   private checkedNodePtyHelperPerms = false;
+
+  private clearNoSubscriberTimer(session: TermSession | null) {
+    if (!session || !session.noSubscriberTimer) return;
+    try {
+      clearTimeout(session.noSubscriberTimer);
+    } catch {
+      // ignore
+    }
+    session.noSubscriberTimer = null;
+  }
+
+  private scheduleDestroyIfUnsubscribed(jobId: string, session: TermSession | null) {
+    if (!session) return;
+    this.clearNoSubscriberTimer(session);
+    if (session.subscribers.size > 0) return;
+
+    session.noSubscriberTimer = setTimeout(() => {
+      const live = this.sessions.get(jobId) || null;
+      if (!live || live !== session) return;
+      if (live.subscribers.size > 0) return;
+      this.destroy(jobId);
+    }, this.UNSUBSCRIBED_DESTROY_DELAY_MS);
+  }
 
   private ensureNodePtySpawnHelperPerms() {
     if (this.checkedNodePtyHelperPerms) return;
@@ -157,6 +182,7 @@ export class TerminalManager {
           buffer: "",
           seq: 0,
           subscribers: new Set<number>(),
+          noSubscriberTimer: null,
           createdAtMs: Date.now(),
           lastActiveAtMs: Date.now()
         };
@@ -177,6 +203,7 @@ export class TerminalManager {
       }
     }
 
+    this.clearNoSubscriberTimer(session);
     session.subscribers.add(wcId);
     session.lastActiveAtMs = Date.now();
 
@@ -226,14 +253,16 @@ export class TerminalManager {
     const session = this.sessions.get(id) || null;
     if (!session) return { ok: true as const };
     if (Number.isFinite(wcId)) session.subscribers.delete(wcId);
+    this.scheduleDestroyIfUnsubscribed(id, session);
     return { ok: true as const };
   }
 
   detachAllByWebContentsId(webContentsId: unknown) {
     const wcId = typeof webContentsId === "number" ? webContentsId : Number(webContentsId);
     if (!Number.isFinite(wcId)) return;
-    for (const session of this.sessions.values()) {
+    for (const [jobId, session] of this.sessions.entries()) {
       session.subscribers.delete(wcId);
+      this.scheduleDestroyIfUnsubscribed(jobId, session);
     }
   }
 
@@ -242,6 +271,7 @@ export class TerminalManager {
     const session = this.sessions.get(id) || null;
     if (!session) return { ok: true as const };
     this.sessions.delete(id);
+    this.clearNoSubscriberTimer(session);
     try {
       session.pty.kill();
     } catch {
@@ -300,6 +330,7 @@ export class TerminalManager {
     }
 
     // Drop the session after exit; the next `ensure()` will create a fresh PTY.
+    this.clearNoSubscriberTimer(session);
     this.sessions.delete(jobId);
   }
 }

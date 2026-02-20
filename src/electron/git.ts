@@ -7,6 +7,14 @@ function truncate(s: string, max = 12_000): string {
   return `${str.slice(0, max)}\n...[truncated ${str.length - max} chars]`;
 }
 
+function appendLimited(cur: string, chunk: unknown, max: number): { next: string; truncated: boolean } {
+  const add = typeof chunk === "string" ? chunk : chunk == null ? "" : String(chunk);
+  if (!add) return { next: cur, truncated: false };
+  const next = cur + add;
+  if (next.length <= max) return { next, truncated: false };
+  return { next: next.slice(next.length - max), truncated: true };
+}
+
 function normalizeNewlines(s: unknown): string {
   return String(s || "").replaceAll("\r\n", "\n").replaceAll("\r", "\n");
 }
@@ -25,6 +33,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
   return await new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
     let done = false;
 
     const child = spawn(cmd, args, {
@@ -44,8 +54,8 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       }
       resolve({
         ok: false,
-        stdout: truncate(stdout, maxOutputChars),
-        stderr: truncate(stderr, maxOutputChars),
+        stdout: stdoutTruncated ? `...[truncated earlier output]\n${truncate(stdout, maxOutputChars)}` : truncate(stdout, maxOutputChars),
+        stderr: stderrTruncated ? `...[truncated earlier output]\n${truncate(stderr, maxOutputChars)}` : truncate(stderr, maxOutputChars),
         code: null,
         error: `Command timed out after ${timeoutMs}ms: ${cmd} ${args.join(" ")}`
       });
@@ -53,8 +63,16 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
+    child.stdout.on("data", (d) => {
+      const res = appendLimited(stdout, d, maxOutputChars);
+      stdout = res.next;
+      stdoutTruncated = stdoutTruncated || res.truncated;
+    });
+    child.stderr.on("data", (d) => {
+      const res = appendLimited(stderr, d, maxOutputChars);
+      stderr = res.next;
+      stderrTruncated = stderrTruncated || res.truncated;
+    });
 
     child.on("error", (err: any) => {
       if (done) return;
@@ -62,28 +80,31 @@ async function run(cmd: string, args: string[], opts: RunOpts): Promise<RunResul
       clearTimeout(timer);
       resolve({
         ok: false,
-        stdout: truncate(stdout, maxOutputChars),
-        stderr: truncate(stderr, maxOutputChars),
+        stdout: stdoutTruncated ? `...[truncated earlier output]\n${truncate(stdout, maxOutputChars)}` : truncate(stdout, maxOutputChars),
+        stderr: stderrTruncated ? `...[truncated earlier output]\n${truncate(stderr, maxOutputChars)}` : truncate(stderr, maxOutputChars),
         code: null,
         error: String(err && err.message ? err.message : err)
       });
     });
 
-    child.on("close", (code: any) => {
+    child.on("close", (code: any, signal: any) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      const c = typeof code === "number" ? code : 0;
-      const out = truncate(stdout, maxOutputChars);
-      const err = truncate(stderr, maxOutputChars);
-      if (c === 0) resolve({ ok: true, stdout: out, stderr: err, code: c, error: "" });
+      const c = typeof code === "number" ? code : null;
+      const sig = typeof signal === "string" ? String(signal) : "";
+      const out = stdoutTruncated ? `...[truncated earlier output]\n${truncate(stdout, maxOutputChars)}` : truncate(stdout, maxOutputChars);
+      const err = stderrTruncated ? `...[truncated earlier output]\n${truncate(stderr, maxOutputChars)}` : truncate(stderr, maxOutputChars);
+      if (c === 0 && !sig) resolve({ ok: true, stdout: out, stderr: err, code: c, error: "" });
       else
         resolve({
           ok: false,
           stdout: out,
           stderr: err,
           code: c,
-          error: `Command failed (code=${c}): ${cmd} ${args.join(" ")}${err ? `\n${err.trim()}` : ""}`
+          error: `Command failed (${c == null ? "code=?" : `code=${c}`}${sig ? `, signal=${sig}` : ""}): ${cmd} ${args.join(" ")}${
+            err ? `\n${err.trim()}` : ""
+          }`
         });
     });
   });

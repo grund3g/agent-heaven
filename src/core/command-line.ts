@@ -15,7 +15,8 @@ export function splitCommandLine(raw: unknown): string[] {
     buf = "";
   };
 
-  for (const ch of src) {
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
     if (escaping) {
       buf += ch;
       escaping = false;
@@ -23,6 +24,17 @@ export function splitCommandLine(raw: unknown): string[] {
     }
 
     if (quote) {
+      // In double quotes, only treat backslashes as escapes for " and \ to avoid
+      // corrupting Windows paths like C:\Users\me\Project.
+      if (quote === '"' && ch === "\\") {
+        const next = src[i + 1] || "";
+        if (next === '"' || next === "\\") {
+          escaping = true;
+          continue;
+        }
+        buf += ch;
+        continue;
+      }
       if (ch === quote) {
         quote = "";
       } else {
@@ -32,7 +44,14 @@ export function splitCommandLine(raw: unknown): string[] {
     }
 
     if (ch === "\\") {
-      escaping = true;
+      // Outside quotes, keep path separators by default (Windows), but still allow
+      // escaping whitespace/quotes when users need it.
+      const next = src[i + 1] || "";
+      if (next === '"' || next === "'" || /\s/.test(next || "")) {
+        escaping = true;
+        continue;
+      }
+      buf += ch;
       continue;
     }
 

@@ -258,13 +258,14 @@ const state = {
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
   durationTimer: null,
-	  projectRefreshTimer: null,
-	  composerCheckoutModeProjectId: "",
+  projectRefreshTimer: null,
+  projectRefreshInFlight: false,
+  composerCheckoutModeProjectId: "",
 
-	  editingProjectId: "",
-	  branchDialogResolver: null,
-	  checkoutsProjectId: "",
-	  checkoutsEntries: [],
+  editingProjectId: "",
+  branchDialogResolver: null,
+  checkoutsProjectId: "",
+  checkoutsEntries: [],
   checkoutsLoading: false,
 
   projectFilterId: "", // projectId | ""
@@ -5995,6 +5996,24 @@ function renderBoard() {
     return;
   }
   renderCardsBoard(jobs);
+}
+
+function projectListSignature(projects) {
+  const arr = Array.isArray(projects) ? projects : [];
+  return arr
+    .map((p) =>
+      [
+        String(p && p.id ? p.id : ""),
+        String(p && p.name ? p.name : ""),
+        String(p && p.path ? p.path : ""),
+        String(p && p.gitBranch ? p.gitBranch : ""),
+        String(p && p.gitSha ? p.gitSha : ""),
+        p && p.gitDirty ? "1" : "0",
+        p && p.gitDetached ? "1" : "0",
+        String(p && p.gitError ? p.gitError : "")
+      ].join("|")
+    )
+    .join("\n");
 }
 
 function projectById(id) {
@@ -13918,11 +13937,21 @@ async function init() {
   renderProjects();
   if (!state.projectRefreshTimer) {
     state.projectRefreshTimer = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (state.projectRefreshInFlight) return;
+      state.projectRefreshInFlight = true;
       try {
-        state.projects = await api.projectsList();
-        renderProjects();
+        const nextProjects = await api.projectsList();
+        const prevSig = projectListSignature(state.projects);
+        const nextSig = projectListSignature(nextProjects);
+        if (nextSig !== prevSig) {
+          state.projects = nextProjects;
+          renderProjects();
+        }
       } catch {
         // ignore
+      } finally {
+        state.projectRefreshInFlight = false;
       }
     }, 30_000);
   }

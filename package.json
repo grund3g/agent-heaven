@@ -28,9 +28,9 @@
     "@types/node": "^24.0.0",
     "chokidar": "^4.0.3",
     "electron": "^35.7.5",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.8.1",
     "typescript": "^5.9.0",
-    "vitest": "^2.1.9"
+    "vitest": "^4.0.18"
   },
   "build": {
     "appId": "com.simonschnabl.agentheaven",

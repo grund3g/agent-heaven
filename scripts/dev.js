@@ -30,38 +30,97 @@ function runInitialBuild() {
   execFileSync(bin("tsc"), ["-p", "tsconfig.json"], { stdio: "inherit" });
 }
 
+function killProcessTree(child, opts = {}) {
+  const c = child && typeof child === "object" ? child : null;
+  const pid = c && typeof c.pid === "number" ? c.pid : 0;
+  if (!pid) return;
+
+  const force = !!(opts && opts.force);
+
+  if (process.platform === "win32") {
+    const args = ["/pid", String(pid), "/t"];
+    if (force) args.push("/f");
+    try {
+      spawn("taskkill", args, { stdio: "ignore", windowsHide: true });
+    } catch {
+      // ignore
+    }
+    return;
+  }
+
+  const sig = force ? "SIGKILL" : "SIGTERM";
+  try {
+    process.kill(-pid, sig);
+    return;
+  } catch {
+    // ignore
+  }
+
+  try {
+    c.kill(sig);
+  } catch {
+    // ignore
+  }
+}
+
 function main() {
   patchMacElectronBundleName("Agent Heaven");
   runInitialBuild();
 
-  const tsc = spawn(bin("tsc"), ["-w", "-p", "tsconfig.json"], { stdio: "inherit" });
+  const spawnOpts = { stdio: "inherit", detached: process.platform !== "win32" };
+  const tsc = spawn(bin("tsc"), ["-w", "-p", "tsconfig.json"], spawnOpts);
 
   const env = { ...process.env, AGENT_HEAVEN_DEV_RELOAD: "1" };
-  const electron = spawn(bin("electron"), ["."], { stdio: "inherit", env });
+  const electron = spawn(bin("electron"), ["."], { ...spawnOpts, env });
 
-  function shutdown(code) {
-    try {
-      tsc.kill("SIGTERM");
-    } catch {
-      // ignore
+  const children = new Set([tsc, electron]);
+  let shuttingDown = false;
+  let exitCode = 0;
+  let hardKillTimer = null;
+  let forceExitTimer = null;
+
+  function finalize() {
+    if (hardKillTimer) {
+      clearTimeout(hardKillTimer);
+      hardKillTimer = null;
     }
-    try {
-      electron.kill("SIGTERM");
-    } catch {
-      // ignore
+    if (forceExitTimer) {
+      clearTimeout(forceExitTimer);
+      forceExitTimer = null;
     }
-    process.exit(code);
+    process.exit(exitCode);
   }
 
-  electron.on("exit", (code, signal) => {
-    if (signal) shutdown(1);
-    shutdown(typeof code === "number" ? code : 1);
-  });
+  function shutdown(code) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    exitCode = typeof code === "number" ? code : 1;
 
-  tsc.on("exit", (code, signal) => {
-    if (signal) shutdown(1);
-    shutdown(typeof code === "number" ? code : 1);
-  });
+    for (const child of children) killProcessTree(child, { force: false });
+
+    hardKillTimer = setTimeout(() => {
+      for (const child of children) killProcessTree(child, { force: true });
+    }, 2500);
+
+    forceExitTimer = setTimeout(() => {
+      process.exit(exitCode);
+    }, 6000);
+
+    if (children.size === 0) finalize();
+  }
+
+  function onChildExit(child, code, signal) {
+    children.delete(child);
+    if (!shuttingDown) {
+      if (signal) shutdown(1);
+      else shutdown(typeof code === "number" ? code : 1);
+      return;
+    }
+    if (children.size === 0) finalize();
+  }
+
+  electron.on("exit", (code, signal) => onChildExit(electron, code, signal));
+  tsc.on("exit", (code, signal) => onChildExit(tsc, code, signal));
 
   process.on("SIGINT", () => shutdown(130));
   process.on("SIGTERM", () => shutdown(143));

@@ -855,6 +855,8 @@ export class Store {
 
   updateProject(id, patch) {
     const rawPatch = patch && typeof patch === "object" ? { ...patch } : {};
+    // Project ids are immutable. Ignore accidental/hostile id mutations.
+    if (Object.prototype.hasOwnProperty.call(rawPatch, "id")) delete (rawPatch as any).id;
     if (Object.prototype.hasOwnProperty.call(rawPatch, "color")) {
       const c = normalizeHexColor(rawPatch.color);
       if (c) rawPatch.color = c;
