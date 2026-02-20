@@ -1341,7 +1341,8 @@ export class JobsManager {
 
       if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
         const extracted = this.extractStatusHint(data.item.text || "");
-        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
+        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
+        if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (String(text || "").trim()) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
@@ -1417,7 +1418,8 @@ export class JobsManager {
 
       if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
         const extracted = this.extractStatusHint(this.claudeMessageToText(data.message));
-        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
+        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
+        if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (text) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
@@ -1471,7 +1473,7 @@ export class JobsManager {
     if (!base) return raw;
 
     const suffix =
-      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nDo not add any other text after the AH_STATUS line.\n";
+      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nIf you choose needs_attention, include one concise actionable sentence before the AH_STATUS line that says exactly what you need from the user.\nNever output AH_STATUS: needs_attention by itself.\nDo not add any other text after the AH_STATUS line.\n";
 
     // Best-effort: keep within the existing max prompt size guard.
     if (base.length + suffix.length > 200_000) return raw;
@@ -1499,6 +1501,30 @@ export class JobsManager {
     while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
 
     return { cleanText: out.join("\n"), hint };
+  }
+
+  private hasActionableNeedsAttentionText(text: unknown): boolean {
+    const raw = typeof text === "string" ? text : text == null ? "" : String(text);
+    const plain = raw.trim();
+    if (!plain) return false;
+
+    if (this.needsAttentionHeuristic(plain)) return true;
+
+    const fallbackSignals = [
+      /\b(sag|sage)\s+(einfach\s+)?["']?(ja|yes)["']?\b/i,
+      /\b(waiting for your|warte auf dein)\b/i,
+      /\b(please|bitte)\b.{0,80}\b(confirm|best[aä]tig|choose|select|pick|w[aä]hl|entscheide|run|execute|ausf(?:ue|ü)hr)\w*/i
+    ];
+
+    return fallbackSignals.some((re) => re.test(plain));
+  }
+
+  private normalizeStatusHint(
+    hint: "done" | "needs_attention" | null,
+    cleanText: string
+  ): "done" | "needs_attention" | null {
+    if (hint !== "needs_attention") return hint;
+    return this.hasActionableNeedsAttentionText(cleanText) ? "needs_attention" : null;
   }
 
   private buildAttentionClassifierPrompt(opts: { lastUserPrompt: string; lastAssistant: string }): string {
