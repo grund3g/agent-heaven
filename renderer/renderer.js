@@ -8524,6 +8524,14 @@ async function openJobDialog(jobId) {
   setFollowupFiles([]);
   els.jobDialog.showModal();
   scheduleAutosizeFollowupInput();
+  try {
+    els.followupInput.focus();
+    const end = els.followupInput.value.length;
+    els.followupInput.selectionStart = end;
+    els.followupInput.selectionEnd = end;
+  } catch {
+    // ignore
+  }
 
   // Lazy-load full logs/messages/prompts to keep the board fast when many jobs exist.
   if (!jobDetailsLoaded(job)) {
