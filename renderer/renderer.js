@@ -12414,9 +12414,9 @@ function wireUi() {
     els.rerunAgentSelect.addEventListener("change", () => rerunAgentUiSync());
   }
 
-					  els.saveSettingsBtn.addEventListener("click", async () => {
-							    const patch = {
-						      uiModel: getUiModelFromControls(),
+  const saveSettings = async () => {
+								    const patch = {
+							      uiModel: getUiModelFromControls(),
 						      uiTheme: els.settingsTheme.value,
 						      uiColorScheme: els.settingsColorScheme.value,
 					      editorCommand: els.settingsEditorCommand ? els.settingsEditorCommand.value.trim() : "",
@@ -12548,7 +12548,13 @@ function wireUi() {
         renderBoard();
 		    if (els.settingsDialog && els.settingsDialog.open) els.settingsDialog.close();
 		    setHint("Settings saved", "info");
-		  });
+		  };
+  if (els.saveSettingsBtn) {
+    els.saveSettingsBtn.addEventListener("click", saveSettings);
+  }
+  if (els.saveSettingsPageBtn) {
+    els.saveSettingsPageBtn.addEventListener("click", saveSettings);
+  }
 
 	  if (els.saveActionsBtn) {
 	    els.saveActionsBtn.addEventListener("click", async () => {
@@ -13613,16 +13619,6 @@ function maybeShowMissingAgentBinariesToast(res) {
 		    setSettingsTab(tab);
 		  });
 		});
-
-		// Wire up settings page Save button (reuse same save logic)
-		if (els.saveSettingsPageBtn) {
-		  els.saveSettingsPageBtn.addEventListener("click", () => {
-		    // Trigger the existing save handler
-		    if (els.saveSettingsBtn) {
-		      els.saveSettingsBtn.click();
-		    }
-		  });
-		}
 
 		// ── MCP server status ─────────────────────────────────────
 		async function refreshMcpStatus() {
