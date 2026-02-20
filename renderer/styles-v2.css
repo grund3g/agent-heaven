@@ -1967,7 +1967,9 @@ body::before {
 }
 
 .dropwrap .textarea {
+  display: block;
   width: 100%;
+  margin: 0;
 }
 
 .dropwrap:has(.attachbadge:not([hidden])) .textarea {

@@ -1694,7 +1694,8 @@ body::before {
 }
 
 .dropwrap .textarea {
-  margin-top: 0;
+  display: block;
+  margin: 0;
 }
 
 /*
