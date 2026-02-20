@@ -156,4 +156,23 @@ describe("store", () => {
     const updated2 = s.updateSettings({ uiDesignVersion: "garbage" });
     expect((updated2 as any).uiDesignVersion).toBe("v1");
   });
+
+  it("ignores project id changes in updateProject patch", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-store-"));
+    const storePath = path.join(tmpDir, "agent-heaven.store.json");
+
+    fs.writeFileSync(
+      storePath,
+      JSON.stringify({ settings: {}, projects: [{ id: "p1", name: "One", path: "/tmp/p1" }] }, null, 2),
+      "utf8"
+    );
+
+    const s = new Store(storePath);
+    s.load();
+
+    const updated = s.updateProject("p1", { id: "p2", name: "Renamed" } as any);
+    expect(updated).toMatchObject({ id: "p1", name: "Renamed" });
+    expect(s.listProjects()).toHaveLength(1);
+    expect((s.listProjects()[0] as any).id).toBe("p1");
+  });
 });
