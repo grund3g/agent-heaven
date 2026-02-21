@@ -7,6 +7,11 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const AGENT_HEAVEN_INLINE_MCP_NAME = "agent_heaven";
+const AGENT_HEAVEN_INLINE_MCP_TOKEN_ENV = "AGENT_HEAVEN_MCP_BEARER_TOKEN";
+
+type InlineMcpServerConfig = { url: string; token: string };
+
 function pushImageArgs(args: string[], images: unknown) {
   const arr = Array.isArray(images) ? images : [];
   for (const img of arr) {
@@ -14,6 +19,40 @@ function pushImageArgs(args: string[], images: unknown) {
     if (!p) continue;
     args.push("--image", p);
   }
+}
+
+function parseInlineMcpServer(value: unknown): InlineMcpServerConfig | null {
+  if (!value || typeof value !== "object") return null;
+  const rawUrl = typeof (value as any).url === "string" ? String((value as any).url || "").trim() : "";
+  const token = typeof (value as any).token === "string" ? String((value as any).token || "").trim() : "";
+  if (!rawUrl || !token) return null;
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return { url: u.toString(), token };
+  } catch {
+    return null;
+  }
+}
+
+function inlineMcpServerFromSettings(settings: any): InlineMcpServerConfig | null {
+  const s = settings && typeof settings === "object" ? settings : {};
+  return parseInlineMcpServer((s as any).__agentHeavenMcp);
+}
+
+function appendInlineMcpArgs(args: string[], mcp: InlineMcpServerConfig | null) {
+  if (!mcp) return;
+  args.push("-c", `mcp_servers.${AGENT_HEAVEN_INLINE_MCP_NAME}.url=${JSON.stringify(mcp.url)}`);
+  args.push(
+    "-c",
+    `mcp_servers.${AGENT_HEAVEN_INLINE_MCP_NAME}.bearer_token_env_var=${JSON.stringify(AGENT_HEAVEN_INLINE_MCP_TOKEN_ENV)}`
+  );
+}
+
+function buildCodexEnv(mcp: InlineMcpServerConfig | null): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (mcp) env[AGENT_HEAVEN_INLINE_MCP_TOKEN_ENV] = mcp.token;
+  return env;
 }
 
 function looksLikeJsonObjectLine(line: string) {
@@ -30,7 +69,19 @@ function parseJsonLine(line: string) {
   }
 }
 
-function buildExecArgs({ settings, model, projectPath, images }: { settings: any; model: string; projectPath: string; images: string[] }) {
+function buildExecArgs({
+  settings,
+  model,
+  projectPath,
+  images,
+  mcp
+}: {
+  settings: any;
+  model: string;
+  projectPath: string;
+  images: string[];
+  mcp: InlineMcpServerConfig | null;
+}) {
   const args = ["exec", "--json"];
 
   if (settings.color && settings.color !== "auto") {
@@ -57,13 +108,27 @@ function buildExecArgs({ settings, model, projectPath, images }: { settings: any
     args.push("-C", projectPath);
   }
 
+  appendInlineMcpArgs(args, mcp);
+
   // Read prompt from stdin to avoid command-line length/escaping problems.
   args.push("-");
 
   return args;
 }
 
-function buildResumeArgs({ settings, model, threadId, images }: { settings: any; model: string; threadId: string; images: string[] }) {
+function buildResumeArgs({
+  settings,
+  model,
+  threadId,
+  images,
+  mcp
+}: {
+  settings: any;
+  model: string;
+  threadId: string;
+  images: string[];
+  mcp: InlineMcpServerConfig | null;
+}) {
   const args = ["exec", "resume", "--json"];
 
   if (settings.skipGitRepoCheck) {
@@ -77,17 +142,30 @@ function buildResumeArgs({ settings, model, threadId, images }: { settings: any;
   }
 
   pushImageArgs(args, images);
+  appendInlineMcpArgs(args, mcp);
 
   args.push(threadId);
   args.push("-");
   return args;
 }
 
-function spawnCodex({ codexPath, cwd, args, prompt }: { codexPath: string; cwd: string; args: string[]; prompt: string }) {
+function spawnCodex({
+  codexPath,
+  cwd,
+  args,
+  prompt,
+  mcp
+}: {
+  codexPath: string;
+  cwd: string;
+  args: string[];
+  prompt: string;
+  mcp: InlineMcpServerConfig | null;
+}) {
   const child = spawnPlatform(codexPath, args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
-    env: process.env
+    env: buildCodexEnv(mcp)
   });
 
   child.stdin.setDefaultEncoding("utf8");
@@ -117,8 +195,9 @@ function attachLineStream(stream: NodeJS.ReadableStream, onLine: (line: string) 
 }
 
 function runCodexExecJson({ codexPath, settings, projectPath, model, prompt, images, onEvent }: any) {
-  const args = buildExecArgs({ settings, model, projectPath, images });
-  const child = spawnCodex({ codexPath, cwd: projectPath || process.cwd(), args, prompt });
+  const mcp = inlineMcpServerFromSettings(settings);
+  const args = buildExecArgs({ settings, model, projectPath, images, mcp });
+  const child = spawnCodex({ codexPath, cwd: projectPath || process.cwd(), args, prompt, mcp });
 
   attachLineStream(child.stdout, (line) => {
     const json = parseJsonLine(line);
@@ -135,8 +214,9 @@ function runCodexExecJson({ codexPath, settings, projectPath, model, prompt, ima
 }
 
 function runCodexResumeJson({ codexPath, settings, cwd, threadId, model, prompt, images, onEvent }: any) {
-  const args = buildResumeArgs({ settings, model, threadId, images });
-  const child = spawnCodex({ codexPath, cwd: cwd || process.cwd(), args, prompt });
+  const mcp = inlineMcpServerFromSettings(settings);
+  const args = buildResumeArgs({ settings, model, threadId, images, mcp });
+  const child = spawnCodex({ codexPath, cwd: cwd || process.cwd(), args, prompt, mcp });
 
   attachLineStream(child.stdout, (line) => {
     const json = parseJsonLine(line);

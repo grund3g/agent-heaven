@@ -99,6 +99,59 @@ describe("codex-runner", () => {
     ).toBe(true);
   });
 
+  it("injects inline MCP config and bearer env for codex runs", async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-codex-"));
+
+    const script = [
+      "#!/usr/bin/env node",
+      "const args = process.argv.slice(2);",
+      "let input = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (c) => (input += c));",
+      "process.stdin.on('end', () => {",
+      "  const payload = { args, token: process.env.AGENT_HEAVEN_MCP_BEARER_TOKEN || '' };",
+      "  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(payload) } }));",
+      "  process.exit(0);",
+      "});"
+    ].join("\n");
+
+    const binPath = writeFakeCodex(script);
+    const events: any[] = [];
+    const child = runCodexExec({
+      codexPath: binPath,
+      settings: {
+        sandboxMode: "workspace-write",
+        __agentHeavenMcp: {
+          url: "http://127.0.0.1:4321/mcp",
+          token: "secret-token"
+        }
+      },
+      projectPath: tmpDir,
+      model: "",
+      prompt: "hello",
+      images: [],
+      onEvent: (ev: any) => events.push(ev)
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", () => resolve());
+    });
+
+    const msgEvent = events.find(
+      (e) => e.kind === "codex" && e.data && e.data.type === "item.completed" && e.data.item && e.data.item.type === "agent_message"
+    );
+    expect(msgEvent && msgEvent.data && msgEvent.data.item && typeof msgEvent.data.item.text === "string").toBe(true);
+
+    const parsed = JSON.parse(String(msgEvent.data.item.text || "{}"));
+    const args = Array.isArray(parsed.args) ? parsed.args : [];
+    expect(parsed.token).toBe("secret-token");
+    expect(args.some((a: any) => String(a).includes('mcp_servers.agent_heaven.url="http://127.0.0.1:4321/mcp"'))).toBe(true);
+    expect(args.some((a: any) => String(a).includes('mcp_servers.agent_heaven.bearer_token_env_var="AGENT_HEAVEN_MCP_BEARER_TOKEN"'))).toBe(
+      true
+    );
+  });
+
   it("falls back to exec --json when app-server bootstrap fails", async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-codex-"));
 
