@@ -2124,10 +2124,6 @@ function normalizeImageList(list) {
   return normalizePathList(list);
 }
 
-function normalizeFileList(list) {
-  return normalizePathList(list);
-}
-
 function mergeImages(existing, added, maxCount = 8) {
   const out = normalizeImageList([...(existing || []), ...(added || [])]);
   return out.slice(0, Math.max(0, maxCount));
@@ -2183,6 +2179,45 @@ function droppedFileEntries(e) {
   }
 
   return Array.from(out.values());
+}
+
+function imagePathsFromDroppedEntries(entries) {
+  const arr = Array.isArray(entries) ? entries : [];
+  return normalizeImageList(
+    arr
+      .filter((f) => f && f.isImage)
+      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
+  );
+}
+
+function nonImagePathsFromDroppedEntries(entries) {
+  const arr = Array.isArray(entries) ? entries : [];
+  return normalizePathList(
+    arr
+      .filter((f) => f && !f.isImage)
+      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
+  );
+}
+
+function appendPathsToTextarea(inputEl, paths) {
+  if (!inputEl || typeof inputEl.value !== "string") return;
+  const arr = normalizePathList(paths);
+  if (arr.length === 0) return;
+
+  const block = `Files:\n${arr.join("\n")}`;
+  const prev = inputEl.value || "";
+  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
+  inputEl.value = next;
+
+  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
+  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
+
+  try {
+    inputEl.focus();
+    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+  } catch {
+    // ignore
+  }
 }
 
 function imagePathsFromDroppedEntries(entries) {
@@ -10901,45 +10936,7 @@ function wireUi() {
   );
   restoreComposerDraft();
 
-  // Attach images/files via drag&drop and render them as removable preview tiles.
-  let fileDragDepth = 0;
-  function clearDropwrapDragover() {
-    if (els.promptDropwrap) els.promptDropwrap.classList.remove("dropwrap--dragover");
-    if (els.followupDropwrap) els.followupDropwrap.classList.remove("dropwrap--dragover");
-  }
-  function activeAttachmentDropTarget() {
-    if (els.jobDialog && els.jobDialog.open && els.followupDropwrap && els.followupInput) {
-      return {
-        wrap: els.followupDropwrap,
-        input: els.followupInput,
-        addImages: (imgs) => setFollowupImages(mergeImages(state.followupImages, imgs)),
-        addFiles: (files) => setFollowupFiles(mergeFiles(state.followupFiles, files))
-      };
-    }
-    if (els.promptDropwrap && els.promptInput) {
-      return {
-        wrap: els.promptDropwrap,
-        input: els.promptInput,
-        addImages: (imgs) => setComposerImages(mergeImages(state.composerImages, imgs)),
-        addFiles: (files) => setComposerFiles(mergeFiles(state.composerFiles, files))
-      };
-    }
-    return null;
-  }
-  function syncActiveDropwrapHighlight() {
-    const target = activeAttachmentDropTarget();
-    clearDropwrapDragover();
-    if (!target || !target.wrap) return null;
-    target.wrap.classList.add("dropwrap--dragover");
-    return target;
-  }
-  document.addEventListener("dragenter", (e) => {
-    const dt = e.dataTransfer;
-    if (!dataTransferHasFiles(dt)) return;
-    e.preventDefault();
-    fileDragDepth += 1;
-    syncActiveDropwrapHighlight();
-  });
+  // Attach images via drag&drop and append non-image files as paths to the prompt/follow-up text.
   document.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
     if (!dataTransferHasFiles(dt)) return;
@@ -11032,6 +11029,48 @@ function wireUi() {
     const thumb = e.target && e.target.closest ? e.target.closest(".attachthumb") : null;
     if (!thumb) return;
     openImageDialogForThumbEl(e.target);
+  });
+
+  els.promptDropwrap.addEventListener("dragover", (e) => {
+    const dt = e.dataTransfer;
+    if (!dataTransferHasFiles(dt)) return;
+    e.preventDefault();
+    els.promptDropwrap.classList.add("dropwrap--dragover");
+  });
+  els.promptDropwrap.addEventListener("dragleave", () => {
+    els.promptDropwrap.classList.remove("dropwrap--dragover");
+  });
+  els.promptDropwrap.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    els.promptDropwrap.classList.remove("dropwrap--dragover");
+    const dropped = droppedFileEntries(e);
+    const imgs = imagePathsFromDroppedEntries(dropped);
+    const files = nonImagePathsFromDroppedEntries(dropped);
+    if (imgs.length > 0) setComposerImages(mergeImages(state.composerImages, imgs));
+    if (files.length > 0) appendPathsToTextarea(els.promptInput, files);
+    else if (imgs.length > 0) els.promptInput.focus();
+  });
+
+  els.followupDropwrap.addEventListener("dragover", (e) => {
+    const dt = e.dataTransfer;
+    if (!dataTransferHasFiles(dt)) return;
+    e.preventDefault();
+    els.followupDropwrap.classList.add("dropwrap--dragover");
+  });
+  els.followupDropwrap.addEventListener("dragleave", () => {
+    els.followupDropwrap.classList.remove("dropwrap--dragover");
+  });
+  els.followupDropwrap.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    els.followupDropwrap.classList.remove("dropwrap--dragover");
+    const dropped = droppedFileEntries(e);
+    const imgs = imagePathsFromDroppedEntries(dropped);
+    const files = nonImagePathsFromDroppedEntries(dropped);
+    if (imgs.length > 0) setFollowupImages(mergeImages(state.followupImages, imgs));
+    if (files.length > 0) appendPathsToTextarea(els.followupInput, files);
+    else if (imgs.length > 0) els.followupInput.focus();
   });
 
   els.jobDialogClose.addEventListener("click", () => {
