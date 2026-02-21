@@ -191,6 +191,37 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.processBindings[0].externalRef).toBe("LIN-123");
   });
 
+  it("adds direct Linear MCP lookup hints when issue IDs are present in the prompt", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const runCodexExec = vi.fn((opts: any) => {
+      (runCodexExec as any).lastOpts = opts;
+      return new FakeChild() as any;
+    });
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: runCodexExec as any,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    const res = await jm.start({ prompt: "check mal Linear ticket DEV-1106", projectId: "p1", images: [] });
+    expect(res).toEqual({ ok: true, jobId: "job1" });
+
+    const finalPrompt = String((runCodexExec as any).lastOpts.prompt || "");
+    expect(finalPrompt).toContain("Detected issue identifiers: DEV-1106.");
+    expect(finalPrompt).toContain("Call `linear_get_issue` immediately for each identifier before any other investigation.");
+    expect(finalPrompt).toContain("Do not assume there is an MCP server named `linear`");
+  });
+
   it("falls back to project path when a job checkout path no longer exists", async () => {
     const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "ah-proj-"));
     const store = {

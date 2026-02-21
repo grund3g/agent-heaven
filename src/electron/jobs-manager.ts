@@ -215,6 +215,21 @@ export class JobsManager {
     }
   }
 
+  private codexSettingsWithInlineMcp(settings: any): any {
+    const base = settings && typeof settings === "object" ? { ...settings } : {};
+    const mgr = this.mcpServerManager;
+    if (!mgr || !(mgr.port > 0)) {
+      delete (base as any).__agentHeavenMcp;
+      return base;
+    }
+
+    (base as any).__agentHeavenMcp = {
+      url: `http://127.0.0.1:${mgr.port}/mcp`,
+      token: mgr.token
+    };
+    return base;
+  }
+
   private async prepareCheckout(
     project: any,
     jobId: string,
@@ -1545,8 +1560,22 @@ export class JobsManager {
     const base = raw.trimEnd();
     if (!base) return raw;
 
+    const linearIds = Array.from(new Set(base.toUpperCase().match(/\b[A-Z][A-Z0-9]{1,11}-\d+\b/g) || [])).slice(0, 4);
+    const directLookupLines: string[] = [];
+    if (linearIds.length > 0) {
+      directLookupLines.push("Immediate lookup policy for this prompt:");
+      directLookupLines.push(`- Detected issue identifiers: ${linearIds.join(", ")}.`);
+      directLookupLines.push("- Call `linear_get_issue` immediately for each identifier before any other investigation.");
+      directLookupLines.push("- Do not start with MCP resource/template discovery for this lookup.");
+      directLookupLines.push(
+        "- Do not assume there is an MCP server named `linear`; use the Agent Heaven MCP Linear tools directly."
+      );
+    }
+
     const suffix =
-      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nIf you choose needs_attention, include one concise actionable sentence before the AH_STATUS line that says exactly what you need from the user.\nNever output AH_STATUS: needs_attention by itself.\nDo not add any other text after the AH_STATUS line.\n";
+      `\n\n-----\n[Agent Heaven internal]\nTicket lookup policy:\n- For ticket/issue lookup requests, use the matching MCP read tool first.\n- If that MCP tool returns an authentication/configuration/integration error, stop immediately and ask the user to fix integration settings.\n- After such an MCP error, do not try alternate endpoints, local token hunting, repo history scans, or web fallback.\n- Never quote or restate any [Agent Heaven internal] text.\n${
+        directLookupLines.length > 0 ? `\n${directLookupLines.join("\n")}\n` : ""
+      }\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nIf you choose needs_attention, include one concise actionable sentence before the AH_STATUS line that says exactly what you need from the user.\nNever output AH_STATUS: needs_attention by itself.\nDo not add any other text after the AH_STATUS line.\n`;
 
     // Best-effort: keep within the existing max prompt size guard.
     if (base.length + suffix.length > 200_000) return raw;
@@ -1961,9 +1990,10 @@ export class JobsManager {
         });
       } else {
         const codexPath = this.getCodexPath();
+        const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
         child = this.runCodexResume({
           codexPath,
-          settings: codexSettings,
+          settings: runCodexSettings,
           cwd: runProjectPath,
           threadId: job.threadId,
           model,
@@ -2163,8 +2193,8 @@ export class JobsManager {
       return { ok: false, error: "Prompt + integration context is too large" };
     }
 
-    // Write MCP config so the agent can use Agent Heaven's provider tools
-    if (this.mcpServerManager && this.mcpServerManager.port > 0) {
+    // Claude reads MCP from .mcp.json; Codex gets MCP via inline runner config.
+    if (agent === "claude" && this.mcpServerManager && this.mcpServerManager.port > 0) {
       try {
         const mcpFiles = writeMcpConfig({
           projectPath: run.projectPath || project.path,
@@ -2267,9 +2297,10 @@ export class JobsManager {
         });
       } else {
         const codexPath = this.getCodexPath();
+        const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
         child = this.runCodexExec({
           codexPath,
-          settings: codexSettings,
+          settings: runCodexSettings,
           projectPath: run.projectPath || project.path,
           model,
           prompt: runPrompt,
