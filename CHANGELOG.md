@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.11.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.11.0...agent-heaven-v0.11.1) (2026-02-21)
+
+
+### Bug Fixes
+
+* restore broken settings/integrations/helper UI and MCP wiring after merge-corrupted rollback
+* recover current jobs/session rendering flow while preserving existing local session data
+* keep Linear API auth header handling compatible with direct API key format
+
 ## [0.11.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.10.0...agent-heaven-v0.11.0) (2026-02-18)
 
 
