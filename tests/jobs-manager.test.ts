@@ -49,6 +49,89 @@ describe("electron/jobs-manager", () => {
     });
   });
 
+  it("honors explicit worktree override even for read-only looking prompts", async () => {
+    const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-checkouts-"));
+    const worktreeSpy = vi.spyOn(git, "addWorktree").mockResolvedValue(undefined as any);
+
+    const runCalls: any[] = [];
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectDir, checkoutMode: "worktree", defaultBranch: "main" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec: (opts: any) => {
+        runCalls.push(opts);
+        return new FakeChild() as any;
+      },
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    const res = await jm.start({
+      prompt: "Kannst du das bitte mal checken und warum ist das so?",
+      projectId: "p1",
+      checkoutMode: "worktree"
+    });
+    expect(res).toEqual({ ok: true, jobId: "job1" });
+    expect(worktreeSpy).toHaveBeenCalledTimes(1);
+    expect(runCalls[0].projectPath).toBe(path.join(checkoutsDir, "worktrees", "p1", "job1"));
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.checkoutModePreference).toBe("worktree");
+    expect(snap.job.checkoutModeEffective).toBe("worktree");
+
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    fs.rmSync(checkoutsDir, { recursive: true, force: true });
+  });
+
+  it("can still defer project-default worktree for read-only prompts", async () => {
+    const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-proj-"));
+    const checkoutsDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-checkouts-"));
+    const worktreeSpy = vi.spyOn(git, "addWorktree").mockResolvedValue(undefined as any);
+
+    const runCalls: any[] = [];
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: projectDir, checkoutMode: "worktree", defaultBranch: "main" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+    const jm = new JobsManager({
+      store,
+      history,
+      checkoutsDir,
+      sendJobEvent: () => {},
+      runCodexExec: (opts: any) => {
+        runCalls.push(opts);
+        return new FakeChild() as any;
+      },
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    const res = await jm.start({
+      prompt: "Kannst du das bitte mal checken und warum ist das so?",
+      projectId: "p1"
+    });
+    expect(res).toEqual({ ok: true, jobId: "job1" });
+    expect(worktreeSpy).not.toHaveBeenCalled();
+    expect(runCalls[0].projectPath).toBe(projectDir);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.job.checkoutModePreference).toBe("worktree");
+    expect(snap.job.checkoutModeEffective).toBe("inplace");
+
+    fs.rmSync(projectDir, { recursive: true, force: true });
+    fs.rmSync(checkoutsDir, { recursive: true, force: true });
+  });
+
   it("starts jobs, handles thread.started, and can resume", async () => {
     const events: any[] = [];
     const saved: any[] = [];
