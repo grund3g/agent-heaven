@@ -1821,6 +1821,31 @@ export class JobsManager {
     return { cleanText: out.join("\n"), hint };
   }
 
+  private hasActionableNeedsAttentionText(text: unknown): boolean {
+    const raw = typeof text === "string" ? text : text == null ? "" : String(text);
+    const plain = raw.trim();
+    if (!plain) return false;
+
+    if (this.needsAttentionHeuristic(plain)) return true;
+
+    const fallbackSignals = [
+      /\b(sag|sage)\s+(einfach\s+)?["']?(ja|yes)["']?\b/i,
+      /\b(waiting for your|warte auf dein)\b/i,
+      /\b(please|bitte)\b.{0,80}\b(confirm|best[aä]tig|choose|select|pick|w[aä]hl|entscheide|run|execute|ausf(?:ue|ü)hr)\w*/i,
+      /\b(please|bitte)\b.{0,140}\b(fix|configure|set\s+up|enable|disable|provide|share|send|upload|retry|tell\s+me|sag\s+mir)\b/i
+    ];
+
+    return fallbackSignals.some((re) => re.test(plain));
+  }
+
+  private normalizeStatusHint(
+    hint: "done" | "needs_attention" | null,
+    cleanText: string
+  ): "done" | "needs_attention" | null {
+    if (hint !== "needs_attention") return hint;
+    return this.hasActionableNeedsAttentionText(cleanText) ? "needs_attention" : null;
+  }
+
   private buildAttentionClassifierPrompt(opts: { lastUserPrompt: string; lastAssistant: string }): string {
     const MAX_PROMPT_CHARS = 4_000;
     const userRaw = String(opts && opts.lastUserPrompt ? opts.lastUserPrompt : "").trim();
