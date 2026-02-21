@@ -111,6 +111,28 @@ function jobHasToken(job: Job, tokenLower: string, includeLogs: boolean): boolea
         }
       }
     }
+    if ((l as any).kind === "gemini") {
+      const d = (l as any).data && typeof (l as any).data === "object" ? (l as any).data : {};
+      if (includesToken((d as any).type, tokenLower)) return true;
+      if (includesToken((d as any).subtype, tokenLower)) return true;
+      if (includesToken((d as any).session_id, tokenLower)) return true;
+      if (includesToken((d as any).sessionId, tokenLower)) return true;
+      if (includesToken((d as any).model, tokenLower)) return true;
+      if (includesToken((d as any).text, tokenLower)) return true;
+
+      const content = (d as any).content;
+      if (typeof content === "string") {
+        if (includesToken(content, tokenLower)) return true;
+      } else if (Array.isArray(content)) {
+        for (const b of content) {
+          if (!b || typeof b !== "object") continue;
+          if (includesToken((b as any).type, tokenLower)) return true;
+          if (includesToken((b as any).text, tokenLower)) return true;
+        }
+      } else if (content && typeof content === "object") {
+        if (includesToken((content as any).text, tokenLower)) return true;
+      }
+    }
   }
 
   return false;

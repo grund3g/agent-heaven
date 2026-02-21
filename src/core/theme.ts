@@ -1,24 +1,17 @@
-export type UiTheme = "heaven" | "nord" | "gruvbox" | "solarized" | "dracula" | "ocean";
-export type UiColorScheme = "dark" | "light" | "system";
+export type UiTheme = "heaven";
+export type UiColorScheme = "dark" | "light";
 export type EffectiveColorScheme = "dark" | "light";
 
 export function normalizeTheme(value: unknown): UiTheme {
   const t = String(value || "")
     .trim()
     .toLowerCase();
-  if (t === "heaven" || t === "nord" || t === "gruvbox" || t === "solarized" || t === "dracula" || t === "ocean") {
-    return t as UiTheme;
-  }
+  if (t === "heaven") return "heaven";
   return "heaven";
 }
 
 export function windowBgForTheme(value: unknown): string {
-  const t = normalizeTheme(value);
-  if (t === "nord") return "#2e3440";
-  if (t === "gruvbox") return "#282828";
-  if (t === "solarized") return "#002b36";
-  if (t === "dracula") return "#282a36";
-  if (t === "ocean") return "#082234";
+  normalizeTheme(value);
   return "#0f1417";
 }
 
@@ -26,7 +19,7 @@ export function normalizeColorScheme(value: unknown): UiColorScheme {
   const v = String(value || "")
     .trim()
     .toLowerCase();
-  if (v === "light" || v === "dark" || v === "system") return v as UiColorScheme;
+  if (v === "light" || v === "dark") return v as UiColorScheme;
   return "dark";
 }
 
@@ -35,8 +28,8 @@ export function effectiveColorScheme(
   opts?: { systemScheme?: EffectiveColorScheme }
 ): EffectiveColorScheme {
   const pref = normalizeColorScheme(value);
-  if (pref !== "system") return pref;
-  return opts && opts.systemScheme ? opts.systemScheme : "dark";
+  void opts;
+  return pref;
 }
 
 export function windowBgForSettings(settings: unknown, opts?: { systemScheme?: EffectiveColorScheme }): string {

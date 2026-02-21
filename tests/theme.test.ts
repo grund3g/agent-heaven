@@ -3,20 +3,19 @@ import { effectiveColorScheme, normalizeColorScheme, normalizeTheme, windowBgFor
 
 describe("core/theme", () => {
   it("normalizes theme + computes background colors", () => {
-    expect(normalizeTheme("Nord")).toBe("nord");
+    expect(normalizeTheme("Nord")).toBe("heaven");
     expect(normalizeTheme("nope")).toBe("heaven");
 
-    expect(windowBgForTheme("nord")).toBe("#2e3440");
+    expect(windowBgForTheme("nord")).toBe("#0f1417");
     expect(windowBgForTheme("heaven")).toBe("#0f1417");
 
     expect(normalizeColorScheme("LIGHT")).toBe("light");
     expect(normalizeColorScheme("")).toBe("dark");
-    expect(normalizeColorScheme("system")).toBe("system");
+    expect(normalizeColorScheme("system")).toBe("dark");
 
-    expect(effectiveColorScheme("system", { systemScheme: "light" })).toBe("light");
-    expect(windowBgForSettings({ uiColorScheme: "system", uiTheme: "nord" }, { systemScheme: "light" })).toBe("#eef2f6");
+    expect(effectiveColorScheme("light", { systemScheme: "dark" })).toBe("light");
 
     expect(windowBgForSettings({ uiColorScheme: "light", uiTheme: "nord" })).toBe("#eef2f6");
-    expect(windowBgForSettings({ uiColorScheme: "dark", uiTheme: "nord" })).toBe("#2e3440");
+    expect(windowBgForSettings({ uiColorScheme: "dark", uiTheme: "nord" })).toBe("#0f1417");
   });
 });

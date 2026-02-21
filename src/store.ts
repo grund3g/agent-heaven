@@ -22,8 +22,8 @@ const PROJECT_COLOR_PALETTE = [
 export const DEFAULT_STATE = {
   settings: {
     uiModel: "",
-    uiTheme: "heaven", // heaven | nord | gruvbox | solarized | dracula | ocean
-    uiColorScheme: "dark", // system | dark | light
+    uiTheme: "heaven", // fixed
+    uiColorScheme: "dark", // dark | light
     uiDesignVersion: "v1", // v1 | v2
     editorCommand: "", // command/binary for "Open in editor" (e.g. code, cursor, zed)
 
@@ -51,7 +51,7 @@ export const DEFAULT_STATE = {
     attentionOnQuestionPrompts: true, // send Q&A style prompts to Needs Attention on success
     integrateAutoArchive: true, // auto-archive ticket after "Integrate to default branch"
     integrateToDefaultMode: "cli", // agent | cli
-    helperDefaultAgent: "", // "" | claude | codex
+    helperDefaultAgent: "", // "" | claude | codex | gemini
     helperDefaultModel: "opus",
     helperPersistHistory: true,
 
@@ -128,6 +128,11 @@ export const DEFAULT_STATE = {
         model: "",
         permissionMode: "acceptEdits", // default | acceptEdits | bypassPermissions | plan
         dangerouslySkipPermissions: false
+      },
+      gemini: {
+        path: "", // empty => use PATH resolution ("gemini")
+        model: "",
+        sandboxMode: "workspace-write" // read-only | workspace-write | danger-full-access
       }
     }
   },
@@ -220,10 +225,22 @@ function normalizeIntegrateToDefaultMode(value) {
   return "";
 }
 
+function normalizeUiTheme(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return raw === "heaven" ? "heaven" : "heaven";
+}
+
+function normalizeUiColorScheme(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "light") return "light";
+  return "dark";
+}
+
 function normalizeHelperDefaultAgent(value) {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
   if (raw === "claude" || raw === "anthropic") return "claude";
   if (raw === "codex" || raw === "openai") return "codex";
+  if (raw === "gemini" || raw === "google") return "gemini";
   return "";
 }
 
@@ -351,6 +368,7 @@ function ensureAgentSettings(settings) {
   const agents = isPlainObject(next.agents) ? { ...next.agents } : {};
   const codex = isPlainObject(agents.codex) ? { ...agents.codex } : {};
   const claude = isPlainObject(agents.claude) ? { ...agents.claude } : {};
+  const gemini = isPlainObject(agents.gemini) ? { ...agents.gemini } : {};
 
   // Migrate legacy flat Codex settings into `agents.codex`.
   const codexDefaults: any =
@@ -468,12 +486,32 @@ function ensureAgentSettings(settings) {
     changed = true;
   }
 
+  if (typeof gemini.path !== "string") {
+    gemini.path = "";
+    changed = true;
+  }
+  if (typeof gemini.model !== "string") {
+    gemini.model = "";
+    changed = true;
+  }
+  {
+    const raw = typeof gemini.sandboxMode === "string" ? gemini.sandboxMode.trim() : "";
+    const allowed = new Set(["read-only", "workspace-write", "danger-full-access"]);
+    const nextMode = allowed.has(raw) ? raw : "workspace-write";
+    if (gemini.sandboxMode !== nextMode) {
+      gemini.sandboxMode = nextMode;
+      changed = true;
+    }
+  }
+
   if (!isPlainObject(next.agents)) changed = true;
   if (!isPlainObject(agents.codex)) changed = true;
   if (!isPlainObject(agents.claude)) changed = true;
+  if (!isPlainObject(agents.gemini)) changed = true;
 
   agents.codex = codex;
   agents.claude = claude;
+  agents.gemini = gemini;
   next.agents = agents;
 
   // Drop deprecated flat keys (kept for backward compatibility in older store files).
@@ -916,6 +954,22 @@ function ensureSettings(settings) {
     const nextVersion = raw === "v2" ? "v2" : "v1";
     if ((next as any).uiDesignVersion !== nextVersion) {
       (next as any).uiDesignVersion = nextVersion;
+      changed = true;
+    }
+  }
+
+  {
+    const theme = normalizeUiTheme((next as any).uiTheme);
+    if ((next as any).uiTheme !== theme) {
+      (next as any).uiTheme = theme;
+      changed = true;
+    }
+  }
+
+  {
+    const scheme = normalizeUiColorScheme((next as any).uiColorScheme);
+    if ((next as any).uiColorScheme !== scheme) {
+      (next as any).uiColorScheme = scheme;
       changed = true;
     }
   }

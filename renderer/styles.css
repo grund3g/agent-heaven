@@ -3836,6 +3836,42 @@ body::before {
   max-width: 960px;
 }
 
+.settingsAgents__subnav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: var(--surface1);
+}
+
+.settingsAgents__subtab {
+  padding: 8px 14px;
+  font-size: 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted2);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.settingsAgents__subtab:hover {
+  color: var(--ink);
+}
+
+.settingsAgents__subtab--active {
+  color: var(--ink);
+  border-color: var(--stroke-strong);
+  background: var(--card);
+}
+
+.settingsAgents__panel {
+  max-width: 640px;
+}
+
 /* Provider cards */
 .providerCards {
   display: grid;

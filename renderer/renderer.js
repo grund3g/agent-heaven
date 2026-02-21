@@ -131,7 +131,6 @@ const api = window.agentHeaven;
 	  settingsUiModel: document.getElementById("settingsUiModel"),
 	  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
 	  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-	  settingsTheme: document.getElementById("settingsTheme"),
 	  settingsColorScheme: document.getElementById("settingsColorScheme"),
 	  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
 	  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
@@ -143,6 +142,9 @@ const api = window.agentHeaven;
 	  settingsClaudeModel: document.getElementById("settingsClaudeModel"),
 	  settingsClaudePermissionMode: document.getElementById("settingsClaudePermissionMode"),
 	  settingsClaudeSkipPermissions: document.getElementById("settingsClaudeSkipPermissions"),
+	  settingsGeminiPath: document.getElementById("settingsGeminiPath"),
+	  settingsGeminiModel: document.getElementById("settingsGeminiModel"),
+	  settingsGeminiSandboxMode: document.getElementById("settingsGeminiSandboxMode"),
 	  settingsMenuBarMode: document.getElementById("settingsMenuBarMode"),
 	  settingsStartAtLogin: document.getElementById("settingsStartAtLogin"),
   settingsOpenOnAllDisplays: document.getElementById("settingsOpenOnAllDisplays"),
@@ -279,8 +281,8 @@ const state = {
   toastTimer: null,
   toastUndo: null,
   toastActions: [],
-  agentInstallInFlight: "", // codex | claude
-  agentInstallResults: { codex: null, claude: null },
+  agentInstallInFlight: "", // codex | claude | gemini
+  agentInstallResults: { codex: null, claude: null, gemini: null },
   cardCtxJobId: "",
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
@@ -517,8 +519,8 @@ const TOUR_STEPS = [
 
 applySidebarCollapsed(getStoredSidebarCollapsed());
 
-const THEMES = ["heaven", "nord", "gruvbox", "solarized", "dracula", "ocean"];
-const COLOR_SCHEMES = ["system", "dark", "light"];
+const THEMES = ["heaven"];
+const COLOR_SCHEMES = ["dark", "light"];
 const SOUND_PRESETS = ["classic", "chime", "pop", "bell", "arcade", "cucaracha", "fun_drum", "pipe", "sergei", "pop_wow", "goat"];
 const GRID_SVG = `
   <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -1430,6 +1432,7 @@ function normalizeHelperAgentSelection(value) {
     .toLowerCase();
   if (s === "claude") return "claude";
   if (s === "codex") return "codex";
+  if (s === "gemini" || s === "google") return "gemini";
   return "";
 }
 
@@ -1526,7 +1529,7 @@ function helperDefaultModelFromSettings(settings = state.settings) {
   const raw = normalizeHelperModelValue(s.helperDefaultModel);
   if (raw) return raw;
   const agent = helperDefaultAgentFromSettings(s);
-  return agent === "codex" ? "" : "opus";
+  return agent === "claude" ? "opus" : "";
 }
 
 function helperPersistHistoryFromSettings(settings = state.settings) {
@@ -3076,6 +3079,7 @@ function normalizeAgentKey(value) {
     .trim()
     .toLowerCase();
   if (s === "claude" || s === "anthropic") return "claude";
+  if (s === "gemini" || s === "google") return "gemini";
   // Migration/default: historical jobs were Codex-only.
   return "codex";
 }
@@ -3083,6 +3087,7 @@ function normalizeAgentKey(value) {
 function agentDisplayName(agentKey) {
   const a = normalizeAgentKey(agentKey);
   if (a === "claude") return "Claude";
+  if (a === "gemini") return "Gemini";
   return "Codex";
 }
 
@@ -3293,6 +3298,44 @@ function summarizeClaudeEvent(data) {
   return null;
 }
 
+function summarizeGeminiEvent(data) {
+  const d = data && typeof data === "object" ? data : {};
+  const type = String(d.type || d.event || "")
+    .trim()
+    .toLowerCase();
+
+  const textCandidates = [];
+  if (typeof d.text === "string") textCandidates.push(d.text);
+  if (typeof d.message === "string") textCandidates.push(d.message);
+  if (typeof d.output === "string") textCandidates.push(d.output);
+  if (typeof d.content === "string") textCandidates.push(d.content);
+  if (d.content && typeof d.content === "object" && typeof d.content.text === "string") textCandidates.push(d.content.text);
+
+  for (const raw of textCandidates) {
+    const line = truncateText(oneLine(raw), 160);
+    if (line) return line;
+  }
+
+  if (type === "init") {
+    const bits = [];
+    const sessionId = d.session_id || d.sessionId || (d.session && typeof d.session === "object" ? d.session.id : "");
+    if (sessionId) bits.push(`session=${sessionId}`);
+    if (d.model) bits.push(`model=${d.model}`);
+    return bits.length > 0 ? `[init] ${bits.join(" ")}` : "[init]";
+  }
+
+  if (type === "chatcomplete" || type === "result") {
+    const u = d.usage && typeof d.usage === "object" ? d.usage : {};
+    const inTok = u.input_tokens ?? "?";
+    const outTok = u.output_tokens ?? "?";
+    return `[${type}] tokens in=${inTok} out=${outTok}`;
+  }
+
+  if (!type) return null;
+  if (type === "content" || type === "message") return null;
+  return `[${type}]`;
+}
+
 function summarizeLogEntry(entry) {
   if (!entry) return null;
 
@@ -3313,6 +3356,12 @@ function summarizeLogEntry(entry) {
 
   if (entry.kind === "claude") {
     const s = summarizeClaudeEvent(entry.data);
+    if (!s) return null;
+    return entry.stream === "stderr" ? prefixEveryNonEmptyLine(s, "ERR: ") : s;
+  }
+
+  if (entry.kind === "gemini") {
+    const s = summarizeGeminiEvent(entry.data);
     if (!s) return null;
     return entry.stream === "stderr" ? prefixEveryNonEmptyLine(s, "ERR: ") : s;
   }
@@ -3441,6 +3490,53 @@ function claudeEntryToLiveChunks(entry) {
   return chunks;
 }
 
+function geminiEntryToLiveChunks(entry) {
+  const d = entry && entry.data && typeof entry.data === "object" ? entry.data : {};
+  const type = String(d.type || d.event || "")
+    .trim()
+    .toLowerCase();
+  const chunks = [];
+
+  const pushText = (kind, value) => {
+    const raw = stripAnsi(normalizeNewlines(String(value || "")));
+    if (!raw.trim()) return;
+    for (const ln of raw.split("\n")) chunks.push({ kind, stream: entry.stream, text: ln });
+  };
+
+  if (type === "init") {
+    const bits = [];
+    const sessionId = d.session_id || d.sessionId || (d.session && typeof d.session === "object" ? d.session.id : "");
+    if (sessionId) bits.push(`session ${sessionId}`);
+    if (d.model) bits.push(`model ${d.model}`);
+    chunks.push({ kind: "meta", stream: entry.stream, text: bits.length > 0 ? `[init] ${bits.join(" ")}` : "[init]" });
+    return chunks;
+  }
+
+  pushText("assistant", d.text);
+  pushText("assistant", d.message);
+  pushText("assistant", d.output);
+  if (typeof d.content === "string") pushText("assistant", d.content);
+  if (d.content && typeof d.content === "object") {
+    pushText("assistant", d.content.text);
+    const parts = Array.isArray(d.content.parts) ? d.content.parts : [];
+    for (const p of parts) {
+      if (!p || typeof p !== "object") continue;
+      pushText("assistant", p.text);
+    }
+  }
+
+  if (type === "chatcomplete" || type === "result") {
+    const u = d.usage && typeof d.usage === "object" ? d.usage : {};
+    const inTok = u.input_tokens ?? "?";
+    const outTok = u.output_tokens ?? "?";
+    chunks.push({ kind: "meta", stream: entry.stream, text: `[${type}] tokens in=${inTok} out=${outTok}` });
+  }
+
+  if (chunks.length > 0) return chunks;
+  if (type) chunks.push({ kind: "meta", stream: entry.stream, text: `[${type}]` });
+  return chunks;
+}
+
 function logEntryToLiveChunks(entry) {
   if (!entry) return [];
   const entryMs = isoMs(entry && typeof entry.ts === "string" ? entry.ts : "");
@@ -3454,6 +3550,7 @@ function logEntryToLiveChunks(entry) {
 
   if (entry.kind === "codex") return codexEntryToLiveChunks(entry).map((c) => ({ ...c, ms: c.ms ?? entryMs }));
   if (entry.kind === "claude") return claudeEntryToLiveChunks(entry).map((c) => ({ ...c, ms: c.ms ?? entryMs }));
+  if (entry.kind === "gemini") return geminiEntryToLiveChunks(entry).map((c) => ({ ...c, ms: c.ms ?? entryMs }));
 
   return [];
 }
@@ -3713,6 +3810,35 @@ function localJobHasToken(job, tokenLower) {
             if (localIncludesToken(b.text, tokenLower)) return true;
             if (localIncludesToken(b.name, tokenLower)) return true;
           }
+        }
+      }
+    }
+    if (l.kind === "gemini") {
+      const d = l.data && typeof l.data === "object" ? l.data : {};
+      if (localIncludesToken(d.type || d.event, tokenLower)) return true;
+      if (localIncludesToken(d.subtype, tokenLower)) return true;
+      if (localIncludesToken(d.session_id, tokenLower)) return true;
+      if (localIncludesToken(d.sessionId, tokenLower)) return true;
+      if (localIncludesToken(d.model, tokenLower)) return true;
+      if (localIncludesToken(d.text, tokenLower)) return true;
+      if (localIncludesToken(d.message, tokenLower)) return true;
+      if (localIncludesToken(d.output, tokenLower)) return true;
+      if (typeof d.content === "string") {
+        if (localIncludesToken(d.content, tokenLower)) return true;
+      } else if (Array.isArray(d.content)) {
+        for (const b of d.content) {
+          if (!b || typeof b !== "object") continue;
+          if (localIncludesToken(b.type, tokenLower)) return true;
+          if (localIncludesToken(b.text, tokenLower)) return true;
+          if (localIncludesToken(b.name, tokenLower)) return true;
+        }
+      } else if (d.content && typeof d.content === "object") {
+        if (localIncludesToken(d.content.text, tokenLower)) return true;
+        const parts = Array.isArray(d.content.parts) ? d.content.parts : [];
+        for (const p of parts) {
+          if (!p || typeof p !== "object") continue;
+          if (localIncludesToken(p.type, tokenLower)) return true;
+          if (localIncludesToken(p.text, tokenLower)) return true;
         }
       }
     }
@@ -8146,6 +8272,15 @@ function logKey(l) {
     const parent = typeof d.parent_tool_use_id === "string" ? d.parent_tool_use_id : "";
     return `a|${ts}|${stream}|${type}|${subtype}|${sessionId}|${parent}`;
   }
+  if (kind === "gemini") {
+    const d = l.data && typeof l.data === "object" ? l.data : {};
+    const type = typeof d.type === "string" ? d.type : typeof d.event === "string" ? d.event : "";
+    const subtype = typeof d.subtype === "string" ? d.subtype : "";
+    const sessionId = typeof d.session_id === "string" ? d.session_id : typeof d.sessionId === "string" ? d.sessionId : "";
+    const model = typeof d.model === "string" ? d.model : "";
+    const text = typeof d.text === "string" ? d.text : typeof d.message === "string" ? d.message : "";
+    return `g|${ts}|${stream}|${type}|${subtype}|${sessionId}|${model}|${truncateText(oneLine(text), 120)}`;
+  }
   return `x|${ts}|${stream}|${kind}`;
 }
 
@@ -8819,6 +8954,53 @@ function claudeEventToLogLines(data) {
   return [`[${type}${subtype ? `.${subtype}` : ""}]`];
 }
 
+function geminiEventToLogLines(data) {
+  if (!data || typeof data !== "object") return [String(data)];
+  const d = data;
+  const type = String(d.type || d.event || "gemini")
+    .trim()
+    .toLowerCase();
+
+  if (type === "init") {
+    const bits = [];
+    const sessionId = d.session_id || d.sessionId || (d.session && typeof d.session === "object" ? d.session.id : "");
+    if (sessionId) bits.push(`session=${sessionId}`);
+    if (d.model) bits.push(`model=${d.model}`);
+    return [`[init] ${bits.join(" ")}`.trim()];
+  }
+
+  const textLines = [];
+  const pushText = (value) => {
+    const raw = String(value || "").trimEnd();
+    if (!raw) return;
+    textLines.push(raw);
+  };
+
+  pushText(d.text);
+  pushText(d.message);
+  pushText(d.output);
+  if (typeof d.content === "string") pushText(d.content);
+  if (d.content && typeof d.content === "object") {
+    pushText(d.content.text);
+    const parts = Array.isArray(d.content.parts) ? d.content.parts : [];
+    for (const p of parts) {
+      if (!p || typeof p !== "object") continue;
+      pushText(p.text);
+    }
+  }
+
+  if (textLines.length > 0) return [`[${type || "gemini"}]`, ...textLines];
+
+  if (type === "chatcomplete" || type === "result") {
+    const u = d.usage && typeof d.usage === "object" ? d.usage : {};
+    const inTok = u.input_tokens ?? "?";
+    const outTok = u.output_tokens ?? "?";
+    return [`[${type}] tokens in=${inTok} out=${outTok}`];
+  }
+
+  return [`[${type || "gemini"}]`];
+}
+
 function renderJobLogsHtml(logs) {
   const out = [];
   const arr = Array.isArray(logs) ? logs : [];
@@ -8845,6 +9027,14 @@ function renderJobLogsHtml(logs) {
     if (l.kind === "claude") {
       const cls = l.stream === "stderr" ? "logline logline--stderr" : "logline";
       for (const line of claudeEventToLogLines(l.data)) {
+        out.push(`<div class="${cls}">${escapeHtml(line)}</div>`);
+      }
+      continue;
+    }
+
+    if (l.kind === "gemini") {
+      const cls = l.stream === "stderr" ? "logline logline--stderr" : "logline";
+      for (const line of geminiEventToLogLines(l.data)) {
         out.push(`<div class="${cls}">${escapeHtml(line)}</div>`);
       }
     }
@@ -9843,12 +10033,20 @@ function isHelperClaudeFamilyModel(value) {
   return low === "opus" || low === "sonnet" || low === "haiku";
 }
 
+function isHelperGeminiFamilyModel(value) {
+  const low = String(value || "")
+    .trim()
+    .toLowerCase();
+  return low.startsWith("gemini");
+}
+
 function helperCurrentModelPref() {
   const selectedAgent = helperCurrentAgentPref();
   const configured = normalizeHelperModelValue(state.settings && state.settings.helperDefaultModel ? state.settings.helperDefaultModel : "");
 
-  if (selectedAgent === "claude") return configured || "opus";
-  if (selectedAgent === "codex") return isHelperClaudeFamilyModel(configured) ? "" : configured;
+  if (selectedAgent === "claude") return isHelperGeminiFamilyModel(configured) ? "opus" : configured || "opus";
+  if (selectedAgent === "codex") return isHelperClaudeFamilyModel(configured) || isHelperGeminiFamilyModel(configured) ? "" : configured;
+  if (selectedAgent === "gemini") return isHelperClaudeFamilyModel(configured) ? "" : configured;
   if (configured) return configured;
   return helperDefaultModelFromSettings(state.settings);
 }
@@ -10657,6 +10855,10 @@ function rerunAgentUiSync() {
     if (hasCombobox) cmb.setEnabled(false);
     else els.rerunModelInput.removeAttribute("list");
     els.rerunModelInput.placeholder = "Model override (optional, e.g. sonnet)";
+  } else if (agent === "gemini") {
+    if (hasCombobox) cmb.setEnabled(false);
+    else els.rerunModelInput.removeAttribute("list");
+    els.rerunModelInput.placeholder = "Model override (optional, e.g. gemini-2.5-pro)";
   } else {
     if (hasCombobox) cmb.setEnabled(true);
     else els.rerunModelInput.setAttribute("list", "codexModelsList");
@@ -11740,6 +11942,10 @@ function wireUi() {
       if (hasCombobox) cmb.setEnabled(false);
       else els.modelInput.removeAttribute("list");
       els.modelInput.placeholder = "Model override (optional, e.g. sonnet)";
+    } else if (agent === "gemini") {
+      if (hasCombobox) cmb.setEnabled(false);
+      else els.modelInput.removeAttribute("list");
+      els.modelInput.placeholder = "Model override (optional, e.g. gemini-2.5-pro)";
     } else {
       if (hasCombobox) cmb.setEnabled(true);
       else els.modelInput.setAttribute("list", "codexModelsList");
@@ -12431,11 +12637,11 @@ function wireUi() {
     els.rerunAgentSelect.addEventListener("change", () => rerunAgentUiSync());
   }
 
-  const saveSettings = async () => {
+	  const saveSettings = async () => {
 								    const patch = {
 							      uiModel: getUiModelFromControls(),
-						      uiTheme: els.settingsTheme.value,
-						      uiColorScheme: els.settingsColorScheme.value,
+						      uiTheme: "heaven",
+						      uiColorScheme: normalizeColorScheme(els.settingsColorScheme ? els.settingsColorScheme.value : ""),
 					      editorCommand: els.settingsEditorCommand ? els.settingsEditorCommand.value.trim() : "",
 					      menuBarMode: !!els.settingsMenuBarMode.checked,
 					      startAtLogin: !!els.settingsStartAtLogin.checked,
@@ -12549,14 +12755,19 @@ function wireUi() {
 		          bypassApprovalsAndSandbox: !!els.settingsCodexBypass.checked,
 		          color: els.settingsCodexColor.value
 		        },
-		        claude: {
-		          path: els.settingsClaudePath.value.trim(),
-		          model: els.settingsClaudeModel.value.trim(),
-		          permissionMode: els.settingsClaudePermissionMode ? els.settingsClaudePermissionMode.value : "acceptEdits",
-		          dangerouslySkipPermissions: !!(els.settingsClaudeSkipPermissions && els.settingsClaudeSkipPermissions.checked)
-		        }
-		      }
-		    };
+			        claude: {
+			          path: els.settingsClaudePath.value.trim(),
+			          model: els.settingsClaudeModel.value.trim(),
+			          permissionMode: els.settingsClaudePermissionMode ? els.settingsClaudePermissionMode.value : "acceptEdits",
+			          dangerouslySkipPermissions: !!(els.settingsClaudeSkipPermissions && els.settingsClaudeSkipPermissions.checked)
+			        },
+			        gemini: {
+			          path: els.settingsGeminiPath ? els.settingsGeminiPath.value.trim() : "",
+			          model: els.settingsGeminiModel ? els.settingsGeminiModel.value.trim() : "",
+			          sandboxMode: els.settingsGeminiSandboxMode ? els.settingsGeminiSandboxMode.value : "workspace-write"
+			        }
+			      }
+			    };
         state.settings = await api.settingsUpdate(patch);
         applyThemeFromSettings(state.settings);
         applyHelperDefaultsToPanel(state.settings, { force: true });
@@ -13439,8 +13650,10 @@ function agentBinaryMissingAgents(res) {
   const out = [];
   const codex = res && typeof res === "object" ? res.codex : null;
   const claude = res && typeof res === "object" ? res.claude : null;
+  const gemini = res && typeof res === "object" ? res.gemini : null;
   if (codex && codex.found === false) out.push("Codex");
   if (claude && claude.found === false) out.push("Claude");
+  if (gemini && gemini.found === false) out.push("Gemini");
   return out;
 }
 
@@ -13462,12 +13675,16 @@ function maybeShowMissingAgentBinariesToast(res) {
   try {
     const codex = res && typeof res === "object" ? res.codex : null;
     const claude = res && typeof res === "object" ? res.claude : null;
+    const gemini = res && typeof res === "object" ? res.gemini : null;
     const hints = [];
     if (codex && codex.found === false && Array.isArray(codex.candidates) && codex.candidates[0]) {
       hints.push(`Codex candidate: ${String(codex.candidates[0])}`);
     }
     if (claude && claude.found === false && Array.isArray(claude.candidates) && claude.candidates[0]) {
       hints.push(`Claude candidate: ${String(claude.candidates[0])}`);
+    }
+    if (gemini && gemini.found === false && Array.isArray(gemini.candidates) && gemini.candidates[0]) {
+      hints.push(`Gemini candidate: ${String(gemini.candidates[0])}`);
     }
     if (hints.length > 0) msg += ` (${hints.join(" · ")})`;
   } catch {
@@ -13499,160 +13716,191 @@ function closeSettings() {
   setView(fallback === "settings" ? "board" : fallback);
 }
 
-			function openSettingsDialog() {
-			  const s = state.settings || {};
-			  const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
-			  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
-			  const claude = agents.claude && typeof agents.claude === "object" ? agents.claude : {};
+function openSettingsDialog() {
+  const s = state.settings || {};
+  const agents = s.agents && typeof s.agents === "object" ? s.agents : {};
+  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
+  const claude = agents.claude && typeof agents.claude === "object" ? agents.claude : {};
+  const gemini = agents.gemini && typeof agents.gemini === "object" ? agents.gemini : {};
 
-		  els.settingsCodexPath.value = codex.path || "";
-		  els.settingsCodexModel.value = codex.model || "";
-	  if (els.settingsCodexTransport) els.settingsCodexTransport.value = codex.transport || "exec_json";
-		  setUiModelControls(s.uiModel || "");
-		  els.settingsTheme.value = normalizeTheme(s.uiTheme);
-		  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
-	  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
-	  syncEditorPresetFromCommandInput();
-		  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
-				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
-	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
-	  els.settingsCodexColor.value = codex.color || "auto";
-	  els.settingsClaudePath.value = claude.path || "";
-	  els.settingsClaudeModel.value = claude.model || "";
-	  if (els.settingsClaudePermissionMode) els.settingsClaudePermissionMode.value = claude.permissionMode || "acceptEdits";
-	  if (els.settingsClaudeSkipPermissions) els.settingsClaudeSkipPermissions.checked = !!claude.dangerouslySkipPermissions;
-	  els.settingsMenuBarMode.checked = !!s.menuBarMode;
-	  els.settingsStartAtLogin.checked = !!s.startAtLogin;
-	  els.settingsOpenOnAllDisplays.checked = !!s.openOnAllDisplays;
-	  els.settingsGlobalHotkeyEnabled.checked = !!s.globalHotkeyEnabled;
-		  els.settingsGlobalHotkeyAccelerator.value = s.globalHotkeyAccelerator || "";
-		  els.settingsGlobalHotkeyUseClipboard.checked = !!s.globalHotkeyUseClipboard;
-		  els.settingsGlobalHotkeyStartWisprHandsFree.checked = !!s.globalHotkeyStartWisprHandsFree;
-			  els.settingsSoundNeedsAttention.checked = !!s.soundOnNeedsAttention;
-			  els.settingsSoundDone.checked = !!s.soundOnDone;
-			  if (els.settingsSoundPreset) {
-			    const preset = normalizeSoundPreset(s.soundPreset);
-			    if (preset === "goat") ensureSelectOption(els.settingsSoundPreset, "goat", "Goat");
-			    els.settingsSoundPreset.value = preset;
-			  }
-					  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
-					  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
-					  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
-					  els.settingsIntegrateAutoArchive.checked = s.integrateAutoArchive !== false;
-					  if (els.settingsIntegrateToDefaultMode) {
-					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
-					  }
-	            {
-	              const integrations = normalizeIntegrationSettingsForUi(s.integrations);
-	              if (els.settingsIntegrationsEnabled) {
-	                els.settingsIntegrationsEnabled.checked = integrations.enabled;
-	              }
-	              if (els.settingsIntegrationsAutoEnrichPrompt) {
-	                els.settingsIntegrationsAutoEnrichPrompt.checked = integrations.autoEnrichPrompt;
-	              }
-	              if (els.settingsIntegrationsAutoCommentOnComplete) {
-	                els.settingsIntegrationsAutoCommentOnComplete.checked = integrations.autoCommentOnComplete;
-	              }
-	              if (els.settingsIntegrationsRequestTimeoutMs) {
-	                els.settingsIntegrationsRequestTimeoutMs.value = String(integrations.requestTimeoutMs);
-	              }
-	              if (els.settingsIntegrationsLinearEnabled) {
-	                els.settingsIntegrationsLinearEnabled.checked = integrations.providers.linear.enabled;
-	              }
-	              if (els.settingsIntegrationsLinearApiBaseUrl) {
-	                els.settingsIntegrationsLinearApiBaseUrl.value = integrations.providers.linear.apiBaseUrl;
-	              }
-	              if (els.settingsIntegrationsLinearToken) {
-	                els.settingsIntegrationsLinearToken.value = integrations.providers.linear.token;
-	              }
-	              if (els.settingsIntegrationsLinearTokenEnvVar) {
-	                els.settingsIntegrationsLinearTokenEnvVar.value = integrations.providers.linear.tokenEnvVar;
-	              }
-	              if (els.settingsIntegrationsLinearMaxIssuesPerPrompt) {
-	                els.settingsIntegrationsLinearMaxIssuesPerPrompt.value = String(
-	                  integrations.providers.linear.maxIssuesPerPrompt
-	                );
-	              }
-	              if (els.settingsIntegrationsLinearIncludeDescription) {
-	                els.settingsIntegrationsLinearIncludeDescription.checked = integrations.providers.linear.includeDescription;
-	              }
-	              if (els.settingsIntegrationsGithubEnabled) {
-	                els.settingsIntegrationsGithubEnabled.checked = integrations.providers.github.enabled;
-	              }
-	              if (els.settingsIntegrationsGithubApiBaseUrl) {
-	                els.settingsIntegrationsGithubApiBaseUrl.value = integrations.providers.github.apiBaseUrl;
-	              }
-	              if (els.settingsIntegrationsGithubToken) {
-	                els.settingsIntegrationsGithubToken.value = integrations.providers.github.token;
-	              }
-	              if (els.settingsIntegrationsGithubTokenEnvVar) {
-	                els.settingsIntegrationsGithubTokenEnvVar.value = integrations.providers.github.tokenEnvVar;
-	              }
-	              if (els.settingsIntegrationsGithubMaxIssuesPerPrompt) {
-	                els.settingsIntegrationsGithubMaxIssuesPerPrompt.value = String(
-	                  integrations.providers.github.maxIssuesPerPrompt
-	                );
-	              }
-	              if (els.settingsIntegrationsNotionEnabled) {
-	                els.settingsIntegrationsNotionEnabled.checked = integrations.providers.notion.enabled;
-	              }
-	              if (els.settingsIntegrationsNotionApiBaseUrl) {
-	                els.settingsIntegrationsNotionApiBaseUrl.value = integrations.providers.notion.apiBaseUrl;
-	              }
-	              if (els.settingsIntegrationsNotionToken) {
-	                els.settingsIntegrationsNotionToken.value = integrations.providers.notion.token;
-	              }
-	              if (els.settingsIntegrationsNotionTokenEnvVar) {
-	                els.settingsIntegrationsNotionTokenEnvVar.value = integrations.providers.notion.tokenEnvVar;
-	              }
-	              if (els.settingsIntegrationsNotionVersion) {
-	                els.settingsIntegrationsNotionVersion.value = integrations.providers.notion.notionVersion;
-	              }
-	              if (els.settingsIntegrationsNotionMaxPagesPerPrompt) {
-	                els.settingsIntegrationsNotionMaxPagesPerPrompt.value = String(
-	                  integrations.providers.notion.maxPagesPerPrompt
-	                );
-	              }
-	            }
-	            if (els.settingsHelperDefaultAgent) {
-	              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
-	            }
-	            if (els.settingsHelperDefaultModel) {
-              els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
-            }
-            if (els.settingsHelperPersistHistory) {
-              els.settingsHelperPersistHistory.checked = helperPersistHistoryFromSettings(s);
-            }
+  els.settingsCodexPath.value = codex.path || "";
+  els.settingsCodexModel.value = codex.model || "";
+  if (els.settingsCodexTransport) els.settingsCodexTransport.value = codex.transport || "exec_json";
+  setUiModelControls(s.uiModel || "");
+  if (els.settingsColorScheme) els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
+  syncEditorPresetFromCommandInput();
+  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
+  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
+  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
+  els.settingsCodexColor.value = codex.color || "auto";
+  els.settingsClaudePath.value = claude.path || "";
+  els.settingsClaudeModel.value = claude.model || "";
+  if (els.settingsClaudePermissionMode) els.settingsClaudePermissionMode.value = claude.permissionMode || "acceptEdits";
+  if (els.settingsClaudeSkipPermissions) els.settingsClaudeSkipPermissions.checked = !!claude.dangerouslySkipPermissions;
+  if (els.settingsGeminiPath) els.settingsGeminiPath.value = gemini.path || "";
+  if (els.settingsGeminiModel) els.settingsGeminiModel.value = gemini.model || "";
+  if (els.settingsGeminiSandboxMode) els.settingsGeminiSandboxMode.value = gemini.sandboxMode || "workspace-write";
+  els.settingsMenuBarMode.checked = !!s.menuBarMode;
+  els.settingsStartAtLogin.checked = !!s.startAtLogin;
+  els.settingsOpenOnAllDisplays.checked = !!s.openOnAllDisplays;
+  els.settingsGlobalHotkeyEnabled.checked = !!s.globalHotkeyEnabled;
+  els.settingsGlobalHotkeyAccelerator.value = s.globalHotkeyAccelerator || "";
+  els.settingsGlobalHotkeyUseClipboard.checked = !!s.globalHotkeyUseClipboard;
+  els.settingsGlobalHotkeyStartWisprHandsFree.checked = !!s.globalHotkeyStartWisprHandsFree;
+  els.settingsSoundNeedsAttention.checked = !!s.soundOnNeedsAttention;
+  els.settingsSoundDone.checked = !!s.soundOnDone;
+  if (els.settingsSoundPreset) {
+    const preset = normalizeSoundPreset(s.soundPreset);
+    if (preset === "goat") ensureSelectOption(els.settingsSoundPreset, "goat", "Goat");
+    els.settingsSoundPreset.value = preset;
+  }
+  els.settingsSoundVolume.value = String(clampNumber(s.soundVolume, 0, 100, 35));
+  els.settingsBoardDoneLimit.value = String(clampNumber(s.boardDoneLimit, 0, 5000, 250));
+  els.settingsAttentionOnQuestionPrompts.checked = !!s.attentionOnQuestionPrompts;
+  els.settingsIntegrateAutoArchive.checked = s.integrateAutoArchive !== false;
+  if (els.settingsIntegrateToDefaultMode) {
+    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
+  }
+  {
+    const integrations = normalizeIntegrationSettingsForUi(s.integrations);
+    if (els.settingsIntegrationsEnabled) {
+      els.settingsIntegrationsEnabled.checked = integrations.enabled;
+    }
+    if (els.settingsIntegrationsAutoEnrichPrompt) {
+      els.settingsIntegrationsAutoEnrichPrompt.checked = integrations.autoEnrichPrompt;
+    }
+    if (els.settingsIntegrationsAutoCommentOnComplete) {
+      els.settingsIntegrationsAutoCommentOnComplete.checked = integrations.autoCommentOnComplete;
+    }
+    if (els.settingsIntegrationsRequestTimeoutMs) {
+      els.settingsIntegrationsRequestTimeoutMs.value = String(integrations.requestTimeoutMs);
+    }
+    if (els.settingsIntegrationsLinearEnabled) {
+      els.settingsIntegrationsLinearEnabled.checked = integrations.providers.linear.enabled;
+    }
+    if (els.settingsIntegrationsLinearApiBaseUrl) {
+      els.settingsIntegrationsLinearApiBaseUrl.value = integrations.providers.linear.apiBaseUrl;
+    }
+    if (els.settingsIntegrationsLinearToken) {
+      els.settingsIntegrationsLinearToken.value = integrations.providers.linear.token;
+    }
+    if (els.settingsIntegrationsLinearTokenEnvVar) {
+      els.settingsIntegrationsLinearTokenEnvVar.value = integrations.providers.linear.tokenEnvVar;
+    }
+    if (els.settingsIntegrationsLinearMaxIssuesPerPrompt) {
+      els.settingsIntegrationsLinearMaxIssuesPerPrompt.value = String(integrations.providers.linear.maxIssuesPerPrompt);
+    }
+    if (els.settingsIntegrationsLinearIncludeDescription) {
+      els.settingsIntegrationsLinearIncludeDescription.checked = integrations.providers.linear.includeDescription;
+    }
+    if (els.settingsIntegrationsGithubEnabled) {
+      els.settingsIntegrationsGithubEnabled.checked = integrations.providers.github.enabled;
+    }
+    if (els.settingsIntegrationsGithubApiBaseUrl) {
+      els.settingsIntegrationsGithubApiBaseUrl.value = integrations.providers.github.apiBaseUrl;
+    }
+    if (els.settingsIntegrationsGithubToken) {
+      els.settingsIntegrationsGithubToken.value = integrations.providers.github.token;
+    }
+    if (els.settingsIntegrationsGithubTokenEnvVar) {
+      els.settingsIntegrationsGithubTokenEnvVar.value = integrations.providers.github.tokenEnvVar;
+    }
+    if (els.settingsIntegrationsGithubMaxIssuesPerPrompt) {
+      els.settingsIntegrationsGithubMaxIssuesPerPrompt.value = String(integrations.providers.github.maxIssuesPerPrompt);
+    }
+    if (els.settingsIntegrationsNotionEnabled) {
+      els.settingsIntegrationsNotionEnabled.checked = integrations.providers.notion.enabled;
+    }
+    if (els.settingsIntegrationsNotionApiBaseUrl) {
+      els.settingsIntegrationsNotionApiBaseUrl.value = integrations.providers.notion.apiBaseUrl;
+    }
+    if (els.settingsIntegrationsNotionToken) {
+      els.settingsIntegrationsNotionToken.value = integrations.providers.notion.token;
+    }
+    if (els.settingsIntegrationsNotionTokenEnvVar) {
+      els.settingsIntegrationsNotionTokenEnvVar.value = integrations.providers.notion.tokenEnvVar;
+    }
+    if (els.settingsIntegrationsNotionVersion) {
+      els.settingsIntegrationsNotionVersion.value = integrations.providers.notion.notionVersion;
+    }
+    if (els.settingsIntegrationsNotionMaxPagesPerPrompt) {
+      els.settingsIntegrationsNotionMaxPagesPerPrompt.value = String(integrations.providers.notion.maxPagesPerPrompt);
+    }
+  }
+  if (els.settingsHelperDefaultAgent) {
+    els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
+  }
+  if (els.settingsHelperDefaultModel) {
+    els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
+  }
+  if (els.settingsHelperPersistHistory) {
+    els.settingsHelperPersistHistory.checked = helperPersistHistoryFromSettings(s);
+  }
 
-		  refreshCodexModelsDatalist({ showErrors: true });
+  setSettingsTab("general");
+  setAgentsSettingsSubTab("codex");
 
-		  if (els.settingsDialog && typeof els.settingsDialog.showModal === "function") {
-		    els.settingsDialog.showModal();
-		  }
+  refreshCodexModelsDatalist({ showErrors: true });
 
-		  refreshMcpStatus();
-		}
+  if (els.settingsDialog && typeof els.settingsDialog.showModal === "function") {
+    els.settingsDialog.showModal();
+  }
 
-		// ── Settings page: tab switching ──────────────────────────
-		function setSettingsTab(tab) {
-		  document.querySelectorAll(".settingsPage__tab").forEach((btn) => {
-		    const t = btn.getAttribute("data-settings-tab") || "";
-		    btn.classList.toggle("settingsPage__tab--active", t === tab);
-		  });
-		  document.querySelectorAll(".settingsPage__panel").forEach((panel) => {
-		    const p = panel.getAttribute("data-settings-panel") || "";
-		    panel.hidden = p !== tab;
-		  });
-		  if (tab === "integrations") refreshMcpStatus();
-		}
+  refreshMcpStatus();
+}
 
-		// Wire up settings tab buttons
-		document.querySelectorAll(".settingsPage__tab").forEach((btn) => {
-		  btn.addEventListener("click", () => {
-		    const tab = btn.getAttribute("data-settings-tab") || "general";
-		    setSettingsTab(tab);
-		  });
-		});
+// ── Settings page: tab switching ──────────────────────────
+function setSettingsTab(tab) {
+  document.querySelectorAll(".settingsPage__tab").forEach((btn) => {
+    const t = btn.getAttribute("data-settings-tab") || "";
+    btn.classList.toggle("settingsPage__tab--active", t === tab);
+  });
+  document.querySelectorAll(".settingsPage__panel").forEach((panel) => {
+    const p = panel.getAttribute("data-settings-panel") || "";
+    panel.hidden = p !== tab;
+  });
+  if (tab === "agents") setAgentsSettingsSubTab(activeSettingsAgentsTab);
+  if (tab === "integrations") refreshMcpStatus();
+}
+
+function normalizeSettingsAgentsTab(tab) {
+  const t = String(tab || "")
+    .trim()
+    .toLowerCase();
+  if (t === "claude") return "claude";
+  if (t === "gemini") return "gemini";
+  return "codex";
+}
+
+let activeSettingsAgentsTab = "codex";
+function setAgentsSettingsSubTab(tab) {
+  const next = normalizeSettingsAgentsTab(tab);
+  activeSettingsAgentsTab = next;
+  document.querySelectorAll(".settingsAgents__subtab").forEach((btn) => {
+    const t = btn.getAttribute("data-settings-agents-tab") || "";
+    btn.classList.toggle("settingsAgents__subtab--active", t === next);
+  });
+  document.querySelectorAll(".settingsAgents__panel").forEach((panel) => {
+    const p = panel.getAttribute("data-settings-agents-panel") || "";
+    panel.hidden = p !== next;
+  });
+}
+
+// Wire up settings tab buttons
+document.querySelectorAll(".settingsPage__tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tab = btn.getAttribute("data-settings-tab") || "general";
+    setSettingsTab(tab);
+  });
+});
+
+document.querySelectorAll(".settingsAgents__subtab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tab = btn.getAttribute("data-settings-agents-tab") || "codex";
+    setAgentsSettingsSubTab(tab);
+  });
+});
 
 		// ── MCP server status ─────────────────────────────────────
 		async function refreshMcpStatus() {
@@ -13700,6 +13948,7 @@ function installCommandPreview(agent, method) {
   const m = typeof method === "string" ? method.trim() : "";
 
   if (a === "codex") return "npm i -g @openai/codex";
+  if (a === "gemini") return "npm install -g @google/gemini-cli";
 
   if (a === "claude") {
     if (m === "npm") return "npm install -g @anthropic-ai/claude-code";
@@ -13717,6 +13966,7 @@ function renderAgentsInstallDialog() {
   const checkedAt = res && res.checkedAt ? String(res.checkedAt) : "";
   const codex = res && res.codex && typeof res.codex === "object" ? res.codex : null;
   const claude = res && res.claude && typeof res.claude === "object" ? res.claude : null;
+  const gemini = res && res.gemini && typeof res.gemini === "object" ? res.gemini : null;
 
   const metaBits = [];
   metaBits.push("Runs install commands in a non-interactive shell on your machine.");
@@ -13783,12 +14033,12 @@ function renderAgentsInstallDialog() {
     const installing = state.agentInstallInFlight === agentKey;
     const disabled = installing ? " disabled" : "";
 
-    const cmdPrimary = installCommandPreview(agentKey, agentKey === "codex" ? "npm" : "native");
+    const cmdPrimary = installCommandPreview(agentKey, agentKey === "claude" ? "native" : "npm");
     const cmdAlt = agentKey === "claude" ? installCommandPreview(agentKey, "npm") : "";
 
     const hintLines = [];
-    if (agentKey === "codex") hintLines.push(`Install (npm): ${cmdPrimary}`);
-    else hintLines.push(`Install (native): ${cmdPrimary}`);
+    if (agentKey === "claude") hintLines.push(`Install (native): ${cmdPrimary}`);
+    else hintLines.push(`Install (npm): ${cmdPrimary}`);
     if (cmdAlt) hintLines.push(`Alt (npm): ${cmdAlt}`);
 
     const installBtns = [];
@@ -13797,6 +14047,12 @@ function renderAgentsInstallDialog() {
         installBtns.push(
           `<button type="button" class="btn btn--primary" data-agent-install="${agentKey}" data-agent-install-method="npm"${disabled}>${
             installing ? "Installing..." : "Install Codex"
+          }</button>`
+        );
+      } else if (agentKey === "gemini") {
+        installBtns.push(
+          `<button type="button" class="btn btn--primary" data-agent-install="${agentKey}" data-agent-install-method="npm"${disabled}>${
+            installing ? "Installing..." : "Install Gemini"
           }</button>`
         );
       } else {
@@ -13836,6 +14092,7 @@ function renderAgentsInstallDialog() {
   const body = [];
   body.push(renderAgentSection("codex", "Codex CLI", codex, state.agentInstallResults.codex));
   body.push(renderAgentSection("claude", "Claude CLI", claude, state.agentInstallResults.claude));
+  body.push(renderAgentSection("gemini", "Gemini CLI", gemini, state.agentInstallResults.gemini));
 
   els.agentsInstallDialogBody.innerHTML = body.join("");
 }
@@ -13854,7 +14111,7 @@ async function openAgentsInstallDialog() {
 
 async function runAgentInstallFromUi(agent, method) {
   const a = normalizeAgentKey(agent);
-  if (a !== "codex" && a !== "claude") return;
+  if (a !== "codex" && a !== "claude" && a !== "gemini") return;
   const m = typeof method === "string" ? method.trim() : "auto";
 
   if (!api || typeof api.agentsInstall !== "function") {
@@ -13878,7 +14135,8 @@ async function runAgentInstallFromUi(agent, method) {
   try {
     const res = await api.agentsInstall({ agent: a, method: m, timeoutMs: 10 * 60_000 });
     if (a === "codex") state.agentInstallResults.codex = res;
-    else state.agentInstallResults.claude = res;
+    else if (a === "claude") state.agentInstallResults.claude = res;
+    else state.agentInstallResults.gemini = res;
 
     const detectedPath = res && typeof res === "object" && typeof res.detectedPath === "string" ? res.detectedPath.trim() : "";
     if (detectedPath) {
@@ -13900,7 +14158,7 @@ async function runAgentInstallFromUi(agent, method) {
 
     const err = res && typeof res === "object" && res.error ? String(res.error) : "";
     if (err) showToast(err);
-    else showToast(`${a === "codex" ? "Codex" : "Claude"} installed.`);
+    else showToast(`${a === "codex" ? "Codex" : a === "claude" ? "Claude" : "Gemini"} installed.`);
   } catch (err) {
     showToast(String(err && err.message ? err.message : err));
   } finally {
@@ -13948,6 +14206,7 @@ function renderStatusDialog() {
     const checkedAt = res && res.checkedAt ? String(res.checkedAt) : "";
     const codex = res && res.codex && typeof res.codex === "object" ? res.codex : null;
     const claude = res && res.claude && typeof res.claude === "object" ? res.claude : null;
+    const gemini = res && res.gemini && typeof res.gemini === "object" ? res.gemini : null;
     const err = res && res.error ? String(res.error) : "";
 
     const hintBits = [];
@@ -13968,17 +14227,19 @@ function renderStatusDialog() {
     const lines = [];
     if (!res) {
       lines.push(`<div class="logline">Not checked yet.</div>`);
-    } else if (err && !codex && !claude) {
+    } else if (err && !codex && !claude && !gemini) {
       lines.push(`<div class="logline logline--stderr">${escapeHtml(err)}</div>`);
     } else {
       lines.push(renderRow("Codex", codex));
       lines.push(renderRow("Claude", claude));
+      lines.push(renderRow("Gemini", gemini));
       if (err) lines.push(`<div class="logline logline--stderr">${escapeHtml(err)}</div>`);
     }
 
     const missing = [];
     if (codex && codex.found === false) missing.push("codex");
     if (claude && claude.found === false) missing.push("claude");
+    if (gemini && gemini.found === false) missing.push("gemini");
     const installBtn =
       missing.length > 0 ? `<button type="button" class="btn btn--primary" data-status-install-agents>Install...</button>` : "";
 
@@ -14435,6 +14696,11 @@ async function init() {
     }
 
     if (kind === "claude" && payload.entry) {
+      appendJobLog(jobId, payload.entry);
+      return;
+    }
+
+    if (kind === "gemini" && payload.entry) {
       appendJobLog(jobId, payload.entry);
       return;
     }
