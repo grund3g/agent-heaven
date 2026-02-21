@@ -237,7 +237,8 @@ export class JobsManager {
     overrideMode?: "" | "inplace" | "worktree" | "clone"
   ): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
     const configured = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
-    const mode = overrideMode ? this.normalizeCheckoutMode(overrideMode) : configured;
+    const override = this.normalizeCheckoutModeOverride(overrideMode);
+    const mode = override ? this.normalizeCheckoutMode(override) : configured;
     const projectPath = project && typeof project.path === "string" ? project.path : "";
     if (!projectPath) throw new Error("Project path is missing");
 
@@ -256,7 +257,9 @@ export class JobsManager {
       }
     }
 
-    if (mode === "worktree" && this.shouldDeferWorktreeForPrompt(promptText)) {
+    // Prompt heuristics are only for implicit project defaults.
+    // An explicit per-run override must be honored as selected by the user.
+    if (mode === "worktree" && !override && this.shouldDeferWorktreeForPrompt(promptText)) {
       return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
     }
 

@@ -2495,11 +2495,18 @@ export async function startApp(): Promise<void> {
     const marked = jobsManager.setIntegratingToDefault(jobId, true);
     if (!marked || typeof marked !== "object" || (marked as any).ok !== true) return marked;
 
-    const withAutoArchiveResult = (result: any) => {
+    const withAutoArchiveResult = async (result: any) => {
       if (!autoArchive) return result;
       const archived = jobsManager.archive({ jobId, reason: "integrated_after_default_branch" });
       const archivedOk = !!(archived && typeof archived === "object" && (archived as any).ok === true);
-      if (archivedOk) return { ...result, autoArchived: true, autoArchiveError: "" };
+      if (archivedOk) {
+        try {
+          await maybeAutoRemoveCleanCheckoutForJob(jobId);
+        } catch {
+          // Best-effort cleanup only; integration+archive should still succeed.
+        }
+        return { ...result, autoArchived: true, autoArchiveError: "" };
+      }
       const err = archived && typeof archived === "object" ? String((archived as any).error || "").trim() : "";
       return { ...result, autoArchived: false, autoArchiveError: err || "Failed to archive." };
     };
@@ -2641,7 +2648,7 @@ export async function startApp(): Promise<void> {
       if (committed) {
         jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
       }
-      return withAutoArchiveResult({
+      return await withAutoArchiveResult({
         ok: true,
         targetPath: targetDir,
         targetBranch,
@@ -2733,7 +2740,7 @@ export async function startApp(): Promise<void> {
 
         if (parsed && parsed.ok) {
           jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
-          return withAutoArchiveResult({
+          return await withAutoArchiveResult({
             ok: true,
             targetPath: targetDir,
             targetBranch,
@@ -2803,7 +2810,7 @@ export async function startApp(): Promise<void> {
     try {
       await cherryPick(targetDir, commits);
       jobsManager.setIntegratedToDefault(jobId, { at: new Date().toISOString(), branch: targetBranch });
-      return withAutoArchiveResult({
+      return await withAutoArchiveResult({
         ok: true,
         targetPath: targetDir,
         targetBranch,
