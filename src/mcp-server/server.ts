@@ -11,6 +11,7 @@ export class McpServerManager {
   private mcpServer: McpServer;
   private transports = new Map<string, StreamableHTTPServerTransport>();
   private bearerToken: string;
+  private startPromise: Promise<void> | null = null;
 
   port = 0;
 
@@ -32,19 +33,58 @@ export class McpServerManager {
   }
 
   async start(): Promise<void> {
-    const srv = http.createServer((req, res) => this.handleRequest(req, res));
-    this.httpServer = srv;
+    if (this.httpServer && this.port > 0) return;
+    if (this.startPromise) return this.startPromise;
 
-    return new Promise<void>((resolve, reject) => {
-      srv.on("error", reject);
-      srv.listen(0, "127.0.0.1", () => {
-        const addr = srv.address();
-        if (addr && typeof addr === "object") {
-          this.port = addr.port;
-        }
-        resolve();
+    this.startPromise = (async () => {
+      const srv = http.createServer((req, res) => {
+        void this.handleRequest(req, res).catch((err: any) => {
+          const msg = String(err && err.message ? err.message : err || "Unhandled MCP server error");
+          console.error("[mcp-server] Request handling failed:", msg);
+          if (!res.headersSent) {
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end("Internal Server Error");
+            return;
+          }
+          try {
+            res.end();
+          } catch {
+            // ignore
+          }
+        });
       });
-    });
+      this.httpServer = srv;
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          srv.on("error", reject);
+          srv.listen(0, "127.0.0.1", () => {
+            const addr = srv.address();
+            if (addr && typeof addr === "object") {
+              this.port = addr.port;
+            }
+            resolve();
+          });
+        });
+      } catch (err) {
+        try {
+          await new Promise<void>((resolve) => {
+            srv.close(() => resolve());
+          });
+        } catch {
+          // ignore
+        }
+        if (this.httpServer === srv) this.httpServer = null;
+        this.port = 0;
+        throw err;
+      }
+    })();
+
+    try {
+      await this.startPromise;
+    } finally {
+      this.startPromise = null;
+    }
   }
 
   async shutdown(): Promise<void> {

@@ -131,6 +131,39 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.prompts.length).toBe(2);
   });
 
+  it("injects explicit Agent Heaven Linear MCP tool hints for ticket IDs", async () => {
+    let capturedPrompt = "";
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const runCodexExec = (opts: any) => {
+      capturedPrompt = String(opts && opts.prompt ? opts.prompt : "");
+      return new FakeChild() as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "check mal Linear ticket DEV-1106", projectId: "p1", images: [] })).toEqual({
+      ok: true,
+      jobId: "job1"
+    });
+
+    expect(capturedPrompt).toContain("Detected issue identifiers: DEV-1106.");
+    expect(capturedPrompt).toContain("mcp__agent_heaven__linear_get_issue");
+    expect(capturedPrompt).toContain("Do not use `read_mcp_resource` / `list_mcp_resources` / `list_mcp_resource_templates`");
+  });
+
   it("queues follow-ups while running and drains them after a successful run", async () => {
     const store = {
       getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
