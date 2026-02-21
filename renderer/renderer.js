@@ -2158,6 +2158,45 @@ function imagePathsFromDroppedEntries(entries) {
 
 function nonImagePathsFromDroppedEntries(entries) {
   const arr = Array.isArray(entries) ? entries : [];
+  return normalizePathList(
+    arr
+      .filter((f) => f && !f.isImage)
+      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
+  );
+}
+
+function appendPathsToTextarea(inputEl, paths) {
+  if (!inputEl || typeof inputEl.value !== "string") return;
+  const arr = normalizePathList(paths);
+  if (arr.length === 0) return;
+
+  const block = `Files:\n${arr.join("\n")}`;
+  const prev = inputEl.value || "";
+  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
+  inputEl.value = next;
+
+  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
+  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
+
+  try {
+    inputEl.focus();
+    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
+  } catch {
+    // ignore
+  }
+}
+
+function imagePathsFromDroppedEntries(entries) {
+  const arr = Array.isArray(entries) ? entries : [];
+  return normalizeImageList(
+    arr
+      .filter((f) => f && f.isImage)
+      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
+  );
+}
+
+function nonImagePathsFromDroppedEntries(entries) {
+  const arr = Array.isArray(entries) ? entries : [];
   return normalizeFileList(
     arr
       .filter((f) => f && !f.isImage)
