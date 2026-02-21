@@ -23,7 +23,7 @@ export const DEFAULT_STATE = {
   settings: {
     uiModel: "",
     uiTheme: "heaven", // fixed
-    uiColorScheme: "dark", // dark | light
+    uiColorScheme: "dark", // dark | light | system
     uiDesignVersion: "v1", // v1 | v2
     editorCommand: "", // command/binary for "Open in editor" (e.g. code, cursor, zed)
 
@@ -232,6 +232,7 @@ function normalizeUiTheme(value) {
 
 function normalizeUiColorScheme(value) {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "system") return "system";
   if (raw === "light") return "light";
   return "dark";
 }

@@ -1,5 +1,5 @@
 export type UiTheme = "heaven";
-export type UiColorScheme = "dark" | "light";
+export type UiColorScheme = "dark" | "light" | "system";
 export type EffectiveColorScheme = "dark" | "light";
 
 export function normalizeTheme(value: unknown): UiTheme {
@@ -19,7 +19,7 @@ export function normalizeColorScheme(value: unknown): UiColorScheme {
   const v = String(value || "")
     .trim()
     .toLowerCase();
-  if (v === "light" || v === "dark") return v as UiColorScheme;
+  if (v === "light" || v === "dark" || v === "system") return v as UiColorScheme;
   return "dark";
 }
 
@@ -28,7 +28,7 @@ export function effectiveColorScheme(
   opts?: { systemScheme?: EffectiveColorScheme }
 ): EffectiveColorScheme {
   const pref = normalizeColorScheme(value);
-  void opts;
+  if (pref === "system") return opts && opts.systemScheme === "light" ? "light" : "dark";
   return pref;
 }
 

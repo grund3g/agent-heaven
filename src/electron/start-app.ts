@@ -3196,7 +3196,7 @@ export async function startApp(): Promise<void> {
 
   applyRuntimeSettings(store.getSettings());
 
-  // Legacy compatibility: only react to OS theme changes if an old setting still says "system".
+  // React to OS theme changes only when the user preference is "system".
   nativeTheme.on("updated", () => {
     const s = store.getSettings();
     const rawScheme =

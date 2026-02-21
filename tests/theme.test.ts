@@ -11,11 +11,14 @@ describe("core/theme", () => {
 
     expect(normalizeColorScheme("LIGHT")).toBe("light");
     expect(normalizeColorScheme("")).toBe("dark");
-    expect(normalizeColorScheme("system")).toBe("dark");
+    expect(normalizeColorScheme("system")).toBe("system");
 
     expect(effectiveColorScheme("light", { systemScheme: "dark" })).toBe("light");
+    expect(effectiveColorScheme("system", { systemScheme: "light" })).toBe("light");
+    expect(effectiveColorScheme("system", { systemScheme: "dark" })).toBe("dark");
 
     expect(windowBgForSettings({ uiColorScheme: "light", uiTheme: "nord" })).toBe("#eef2f6");
     expect(windowBgForSettings({ uiColorScheme: "dark", uiTheme: "nord" })).toBe("#0f1417");
+    expect(windowBgForSettings({ uiColorScheme: "system", uiTheme: "nord" }, { systemScheme: "light" })).toBe("#eef2f6");
   });
 });

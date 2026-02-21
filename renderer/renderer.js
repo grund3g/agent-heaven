@@ -520,7 +520,7 @@ const TOUR_STEPS = [
 applySidebarCollapsed(getStoredSidebarCollapsed());
 
 const THEMES = ["heaven"];
-const COLOR_SCHEMES = ["dark", "light"];
+const COLOR_SCHEMES = ["dark", "light", "system"];
 const SOUND_PRESETS = ["classic", "chime", "pop", "bell", "arcade", "cucaracha", "fun_drum", "pipe", "sergei", "pop_wow", "goat"];
 const GRID_SVG = `
   <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
