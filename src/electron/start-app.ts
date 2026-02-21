@@ -1913,7 +1913,7 @@ export async function startApp(): Promise<void> {
         targetCommitMessage,
         integrationMethod,
         agentFallbackReason
-      });
+      };
     } catch (err: any) {
       const msg = String(err && err.message ? err.message : err);
       return {
