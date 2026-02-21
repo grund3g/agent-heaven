@@ -28,6 +28,13 @@ export function linearAuthToken(token: string, envVar: string): string {
   return String(process.env[name] || "").trim();
 }
 
+function linearAuthorizationHeaderValue(token: string): string {
+  const raw = String(token || "").trim();
+  if (!raw) return "";
+  // Linear API keys must be sent directly, not as "Bearer <token>".
+  return raw.replace(/^Bearer\s+/i, "").trim();
+}
+
 function linearMissingTokenHint(envVar: string): string {
   const name = String(envVar || "").trim();
   if (name) return `no token configured (token field empty and env var ${name} not set).`;
@@ -35,13 +42,14 @@ function linearMissingTokenHint(envVar: string): string {
 }
 
 export async function linearGraphql(url: string, token: string, query: string, variables: Record<string, any>): Promise<any> {
+  const authorization = linearAuthorizationHeaderValue(token);
   const payload = await fetchJson(
     url,
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`
+        Authorization: authorization
       },
       body: JSON.stringify({ query, variables })
     },
