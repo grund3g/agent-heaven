@@ -179,22 +179,28 @@ async function detectCliOnPath(name: string): Promise<string> {
 }
 
 async function detectCodexPathViaNpmPrefix(): Promise<string> {
+  return detectCliPathViaNpmPrefix("codex");
+}
+
+async function detectCliPathViaNpmPrefix(name: string): Promise<string> {
+  const cmd = String(name || "").trim();
+  if (!cmd) return "";
   try {
     const res = await runShell("npm prefix -g", { timeoutMs: 12_000, maxOutputChars: 50_000 });
     const prefix = String(res.stdout || "").trim().split("\n")[0].trim();
     if (!prefix) return "";
 
     if (process.platform === "win32") {
-      const cmdShim = path.join(prefix, "codex.cmd");
+      const cmdShim = path.join(prefix, `${cmd}.cmd`);
       if (fs.existsSync(cmdShim)) return cmdShim;
-      const exeShim = path.join(prefix, "codex.exe");
+      const exeShim = path.join(prefix, `${cmd}.exe`);
       if (fs.existsSync(exeShim)) return exeShim;
-      const plain = path.join(prefix, "codex");
+      const plain = path.join(prefix, cmd);
       if (fs.existsSync(plain)) return plain;
       return "";
     }
 
-    const binPath = path.join(prefix, "bin", "codex");
+    const binPath = path.join(prefix, "bin", cmd);
     if (fs.existsSync(binPath)) return binPath;
     return "";
   } catch {
@@ -208,6 +214,7 @@ function normalizeMethod(agent: AgentBinaryKey, rawMethod: unknown): AgentInstal
 
   if (m !== "auto") return m;
   if (agent === "codex") return "npm";
+  if (agent === "gemini") return "npm";
   // Claude: prefer native installers by default.
   return "native";
 }
@@ -216,6 +223,11 @@ function commandFor(agent: AgentBinaryKey, method: AgentInstallMethod): { method
   if (agent === "codex") {
     // Official: https://openai.com/index/codex-is-now-generally-available/
     return { method: "npm", command: "npm i -g @openai/codex" };
+  }
+
+  if (agent === "gemini") {
+    // Gemini CLI (Google): https://github.com/google-gemini/gemini-cli
+    return { method: "npm", command: "npm install -g @google/gemini-cli" };
   }
 
   // Claude Code: https://docs.anthropic.com/en/docs/claude-code/setup
@@ -228,7 +240,7 @@ function commandFor(agent: AgentBinaryKey, method: AgentInstallMethod): { method
 
 export async function installAgentCli(agent: unknown, opts?: { method?: unknown; timeoutMs?: unknown }): Promise<AgentInstallResult> {
   const startedAt = new Date().toISOString();
-  const key: AgentBinaryKey | "" = agent === "codex" || agent === "claude" ? agent : "";
+  const key: AgentBinaryKey | "" = agent === "codex" || agent === "claude" || agent === "gemini" ? agent : "";
 
   if (!key) {
     return {
@@ -284,6 +296,8 @@ export async function installAgentCli(agent: unknown, opts?: { method?: unknown;
     try {
       if (key === "claude") {
         detectedPath = claudeLocalInstallerPath() || (await detectCliOnPath("claude"));
+      } else if (key === "gemini") {
+        detectedPath = (await detectCliOnPath("gemini")) || (await detectCliPathViaNpmPrefix("gemini"));
       } else {
         detectedPath = (await detectCliOnPath("codex")) || (await detectCodexPathViaNpmPrefix());
       }

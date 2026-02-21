@@ -9,7 +9,8 @@ export type JobMessage = { ts: string; role: "assistant" | "user" | string; text
 export type JobLogEntry =
   | { ts: string; stream: "stdout" | "stderr"; kind: "log"; text: string }
   | { ts: string; stream: "stdout" | "stderr"; kind: "codex"; data: any }
-  | { ts: string; stream: "stdout" | "stderr"; kind: "claude"; data: any };
+  | { ts: string; stream: "stdout" | "stderr"; kind: "claude"; data: any }
+  | { ts: string; stream: "stdout" | "stderr"; kind: "gemini"; data: any };
 export type JobProcessBinding = {
   connectorId: string;
   capability: string;

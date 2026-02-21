@@ -83,6 +83,25 @@ describe("core/job-search", () => {
     expect(searchJobs(jobs, "confirm").jobIds).toEqual(["j1"]);
   });
 
+  it("searches structured gemini events in logs", () => {
+    const jobs = [
+      mkJob({
+        id: "j1",
+        logs: [
+          {
+            ts: "t1",
+            stream: "stdout",
+            kind: "gemini",
+            data: { type: "chatcomplete", session_id: "g123", text: "Need confirmation before merge." }
+          }
+        ] as any
+      })
+    ];
+
+    expect(searchJobs(jobs, "g123").jobIds).toEqual(["j1"]);
+    expect(searchJobs(jobs, "confirmation").jobIds).toEqual(["j1"]);
+  });
+
   it("sorts newest first and enforces limit/truncation", () => {
     const jobs = [
       mkJob({ id: "j_old", createdAt: "2020-01-01T00:00:00.000Z", title: "match" }),

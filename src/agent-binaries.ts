@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { spawnPlatform } from "./platform-spawn";
 
-export type AgentBinaryKey = "codex" | "claude";
+export type AgentBinaryKey = "codex" | "claude" | "gemini";
 
 export type AgentBinaryCheck = {
   agent: AgentBinaryKey;
@@ -101,6 +101,17 @@ export function resolveClaudeCliPathFromSettings(settings: any): string {
 
   const detected = firstExistingCandidateCliPath("claude");
   return detected || "claude";
+}
+
+export function resolveGeminiCliPathFromSettings(settings: any): string {
+  const s = isPlainObject(settings) ? settings : {};
+  const agents = getAgentsFromSettings(s);
+  const gemini = isPlainObject((agents as any).gemini) ? (agents as any).gemini : {};
+  const p = normalizeCliPath((gemini as any).path || "");
+  if (p) return p;
+
+  const detected = firstExistingCandidateCliPath("gemini");
+  return detected || "gemini";
 }
 
 function safeErrorString(err: any): string {
@@ -220,15 +231,17 @@ function isBareCommand(p: string): boolean {
 export async function checkAgentBinaries(
   settings: any,
   opts?: { timeoutMs?: number }
-): Promise<{ checkedAt: string; codex: AgentBinaryCheck; claude: AgentBinaryCheck }> {
+): Promise<{ checkedAt: string; codex: AgentBinaryCheck; claude: AgentBinaryCheck; gemini: AgentBinaryCheck }> {
   const timeoutMs = typeof opts?.timeoutMs === "number" ? opts!.timeoutMs : 2500;
 
   const codexPath = resolveCodexCliPathFromSettings(settings);
   const claudePath = resolveClaudeCliPathFromSettings(settings);
+  const geminiPath = resolveGeminiCliPathFromSettings(settings);
 
-  const [codexRes, claudeRes] = await Promise.all([
+  const [codexRes, claudeRes, geminiRes] = await Promise.all([
     checkSpawnableBinary(codexPath, ["--version"], timeoutMs),
-    checkSpawnableBinary(claudePath, ["--version"], timeoutMs)
+    checkSpawnableBinary(claudePath, ["--version"], timeoutMs),
+    checkSpawnableBinary(geminiPath, ["--version"], timeoutMs)
   ]);
 
   const codexCandidates: string[] = [];
@@ -253,9 +266,21 @@ export async function checkAgentBinaries(
     }
   }
 
+  const geminiCandidates: string[] = [];
+  if (!geminiRes.found && isBareCommand(geminiPath)) {
+    for (const c of candidateCliPaths("gemini")) {
+      try {
+        if (fs.existsSync(c)) geminiCandidates.push(c);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   return {
     checkedAt: new Date().toISOString(),
     codex: { agent: "codex", ...codexRes, candidates: codexCandidates },
-    claude: { agent: "claude", ...claudeRes, candidates: claudeCandidates }
+    claude: { agent: "claude", ...claudeRes, candidates: claudeCandidates },
+    gemini: { agent: "gemini", ...geminiRes, candidates: geminiCandidates }
   };
 }

@@ -12,7 +12,7 @@ import { searchJobs, type JobSearchOpts } from "../core/job-search";
 import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as normalizeGitCheckoutMode } from "../core/git-normalize";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
-import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
+import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings, resolveGeminiCliPathFromSettings } from "../agent-binaries";
 import type { IntegrationRuntime } from "../integrations";
 import type { McpServerManager } from "../mcp-server";
 import { writeMcpConfig, cleanupMcpConfig } from "../mcp-server";
@@ -32,6 +32,8 @@ type RunCodexExec = (opts: any) => ChildProcess;
 type RunCodexResume = (opts: any) => ChildProcess;
 type RunClaudeExec = (opts: any) => ChildProcess;
 type RunClaudeResume = (opts: any) => ChildProcess;
+type RunGeminiExec = (opts: any) => ChildProcess;
+type RunGeminiResume = (opts: any) => ChildProcess;
 type NeedsAttentionHeuristic = (text: unknown) => boolean;
 
 const WRITE_INTENT_PATTERNS = [
@@ -100,6 +102,8 @@ export class JobsManager {
   private runCodexResume: RunCodexResume;
   private runClaudeExec: RunClaudeExec | null;
   private runClaudeResume: RunClaudeResume | null;
+  private runGeminiExec: RunGeminiExec | null;
+  private runGeminiResume: RunGeminiResume | null;
   private needsAttentionHeuristic: NeedsAttentionHeuristic;
   private createId: () => string;
   private integrationRuntime: IntegrationRuntime | null;
@@ -111,10 +115,11 @@ export class JobsManager {
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
   private pendingTitleSummaryByJobId = new Map<
     string,
-    { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
+    { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any; geminiSettings: any }
   >(); // keep latest requested title refresh while one is in flight
   private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
   private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
+  private geminiStreamingTextByJobId = new Map<string, string>(); // jobId -> aggregated partial "content" chunks
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
   // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
@@ -136,6 +141,8 @@ export class JobsManager {
     runCodexResume: RunCodexResume;
     runClaudeExec?: RunClaudeExec;
     runClaudeResume?: RunClaudeResume;
+    runGeminiExec?: RunGeminiExec;
+    runGeminiResume?: RunGeminiResume;
     needsAttentionHeuristic: NeedsAttentionHeuristic;
     integrationRuntime?: IntegrationRuntime | null;
     mcpServerManager?: McpServerManager | null;
@@ -149,6 +156,8 @@ export class JobsManager {
     this.runCodexResume = opts.runCodexResume;
     this.runClaudeExec = typeof opts.runClaudeExec === "function" ? opts.runClaudeExec : null;
     this.runClaudeResume = typeof opts.runClaudeResume === "function" ? opts.runClaudeResume : null;
+    this.runGeminiExec = typeof opts.runGeminiExec === "function" ? opts.runGeminiExec : null;
+    this.runGeminiResume = typeof opts.runGeminiResume === "function" ? opts.runGeminiResume : null;
     this.needsAttentionHeuristic = opts.needsAttentionHeuristic;
     this.integrationRuntime = opts.integrationRuntime || null;
     this.mcpServerManager = opts.mcpServerManager || null;
@@ -344,6 +353,7 @@ export class JobsManager {
     }
     this.attentionLlmProcs.clear();
     this.integratingToDefaultJobIds.clear();
+    this.geminiStreamingTextByJobId.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -607,6 +617,9 @@ export class JobsManager {
     const settings = this.store.getSettings();
     const claudeSettings = this.getClaudeSettingsFrom(settings);
     const claudeConfiguredModel = typeof (claudeSettings as any).model === "string" ? String((claudeSettings as any).model || "").trim() : "";
+    const geminiSettings = this.getGeminiSettingsFrom(settings);
+    const geminiConfiguredModel =
+      typeof (geminiSettings as any).model === "string" ? String((geminiSettings as any).model || "").trim() : "";
     const loaded = this.history.loadAll();
     for (const raw of loaded) {
       const j = normalizeLoadedJob(raw, now);
@@ -617,6 +630,10 @@ export class JobsManager {
         const fromLogs = this.extractClaudeModelFromLogEntries(Array.isArray(j.logs) ? j.logs : []);
         if (fromLogs) j.model = fromLogs;
         else if (claudeConfiguredModel) j.model = claudeConfiguredModel;
+      } else if (!j.model && j.agent === "gemini") {
+        const fromLogs = this.extractGeminiModelFromLogEntries(Array.isArray(j.logs) ? j.logs : []);
+        if (fromLogs) j.model = fromLogs;
+        else if (geminiConfiguredModel) j.model = geminiConfiguredModel;
       }
       this.jobs.set(j.id, j);
       // If we normalized a running job -> cancelled, persist the change.
@@ -762,21 +779,34 @@ export class JobsManager {
     return resolveClaudeCliPathFromSettings(this.store.getSettings());
   }
 
-  private normalizeAgentKey(value: unknown): "codex" | "claude" {
+  private getGeminiSettingsFrom(settings: any) {
+    const s = settings && typeof settings === "object" ? settings : {};
+    const agents = s.agents && typeof s.agents === "object" ? s.agents : null;
+    const gemini = agents && (agents as any).gemini && typeof (agents as any).gemini === "object" ? (agents as any).gemini : null;
+    return gemini && typeof gemini === "object" ? gemini : {};
+  }
+
+  private getGeminiPath() {
+    return resolveGeminiCliPathFromSettings(this.store.getSettings());
+  }
+
+  private normalizeAgentKey(value: unknown): "codex" | "claude" | "gemini" {
     const s = String(value || "")
       .trim()
       .toLowerCase();
     if (s === "claude" || s === "anthropic") return "claude";
+    if (s === "gemini" || s === "google") return "gemini";
     return "codex";
   }
 
-  private pickTitleSummarizer(settings: any, fallback: { agent: "codex" | "claude"; model: string }) {
+  private pickTitleSummarizer(settings: any, fallback: { agent: "codex" | "claude" | "gemini"; model: string }) {
     const s = settings && typeof settings === "object" ? settings : {};
     const uiModel = typeof (s as any).uiModel === "string" ? String((s as any).uiModel).trim() : "";
     if (uiModel) {
       const low = uiModel.toLowerCase();
       const isClaude = low === "opus" || low === "sonnet" || low === "haiku";
-      return { agent: isClaude ? ("claude" as const) : ("codex" as const), model: uiModel };
+      const isGemini = low.startsWith("gemini");
+      return { agent: isClaude ? ("claude" as const) : isGemini ? ("gemini" as const) : ("codex" as const), model: uiModel };
     }
     return { agent: fallback.agent, model: fallback.model };
   }
@@ -1055,6 +1085,85 @@ export class JobsManager {
     });
   }
 
+  private runGeminiTitleSummary(opts: {
+    jobId: string;
+    geminiPath: string;
+    settings: any;
+    projectPath: string;
+    model: string;
+    prompt: string;
+  }): Promise<string> {
+    const { jobId, geminiPath, settings, projectPath, model, prompt } = opts;
+    return new Promise((resolve) => {
+      if (!this.runGeminiExec) return resolve("");
+
+      let out = "";
+      let partial = "";
+      let resolved = false;
+
+      const child = this.runGeminiExec({
+        geminiPath,
+        settings,
+        projectPath,
+        model,
+        prompt,
+        onEvent: (ev: any) => {
+          if (!ev || ev.kind !== "gemini") return;
+          const data = ev.data || {};
+          const type = this.geminiEventType(data);
+          if (type === "content" || type === "message") {
+            const chunks = this.geminiDataToTextChunks(data);
+            if (chunks.length > 0) partial += chunks.join("");
+            return;
+          }
+          if (type === "chatcomplete" || type === "result") {
+            const chunks = this.geminiDataToTextChunks(data);
+            const finalText = `${partial}${chunks.join("\n")}`.trim();
+            if (finalText) out += (out ? "\n" : "") + finalText;
+            partial = "";
+            return;
+          }
+          if (!out.trim()) {
+            const chunks = this.geminiDataToTextChunks(data);
+            if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
+          }
+        }
+      });
+
+      this.titleLlmProcs.set(jobId, child);
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.titleLlmProcs.delete(jobId);
+        if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+        resolve(out);
+      }, 20_000);
+
+      child.once("error", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.titleLlmProcs.delete(jobId);
+        if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+        resolve(out);
+      });
+      child.once("close", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.titleLlmProcs.delete(jobId);
+        if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+        resolve(out);
+      });
+    });
+  }
+
   private runPendingTitleSummary(jobId: string) {
     if (this.titleLlmProcs.has(jobId)) return;
     const queued = this.pendingTitleSummaryByJobId.get(jobId);
@@ -1064,7 +1173,7 @@ export class JobsManager {
     const job = this.jobs.get(jobId);
     if (!job) return;
 
-    const { rev, userPrompt, settings, codexSettings, claudeSettings } = queued;
+    const { rev, userPrompt, settings, codexSettings, claudeSettings, geminiSettings } = queued;
     const fallbackAgent = this.normalizeAgentKey(job.agent);
     const fallbackModel = String(job.model || "").trim();
     const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
@@ -1085,6 +1194,18 @@ export class JobsManager {
             jobId,
             claudePath,
             settings: safeClaudeSettings,
+            projectPath: job.projectPath || process.cwd(),
+            model: picked.model,
+            prompt
+          });
+        } else if (picked.agent === "gemini") {
+          if (!this.runGeminiExec) return;
+          const geminiPath = this.getGeminiPath();
+          const safeGeminiSettings = { ...(geminiSettings || {}), sandboxMode: "read-only" };
+          raw = await this.runGeminiTitleSummary({
+            jobId,
+            geminiPath,
+            settings: safeGeminiSettings,
             projectPath: job.projectPath || process.cwd(),
             model: picked.model,
             prompt
@@ -1143,6 +1264,7 @@ export class JobsManager {
     const settings = opts && typeof opts === "object" ? opts.settings : this.store.getSettings();
     const codexSettings = opts && typeof opts === "object" ? opts.codexSettings : this.getCodexSettingsFrom(settings);
     const claudeSettings = opts && typeof opts === "object" ? opts.claudeSettings : this.getClaudeSettingsFrom(settings);
+    const geminiSettings = opts && typeof opts === "object" ? opts.geminiSettings : this.getGeminiSettingsFrom(settings);
     const rev = (this.titleSummaryRevByJobId.get(jobId) || 0) + 1;
 
     this.titleSummaryRevByJobId.set(jobId, rev);
@@ -1151,7 +1273,8 @@ export class JobsManager {
       userPrompt: promptText,
       settings,
       codexSettings,
-      claudeSettings
+      claudeSettings,
+      geminiSettings
     });
 
     if (this.titleLlmProcs.has(jobId)) return;
@@ -1468,6 +1591,119 @@ export class JobsManager {
     return "";
   }
 
+  private geminiEventType(data: any): string {
+    const d = data && typeof data === "object" ? data : {};
+    const raw = typeof d.type === "string" ? d.type : typeof d.event === "string" ? d.event : "";
+    return String(raw || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  private geminiDataToTextChunks(data: any): string[] {
+    const d = data && typeof data === "object" ? data : {};
+    const out: string[] = [];
+    const push = (value: unknown) => {
+      if (typeof value !== "string") return;
+      const t = value.trim();
+      if (!t) return;
+      out.push(t);
+    };
+
+    push((d as any).text);
+    push((d as any).message);
+    push((d as any).delta);
+    push((d as any).content);
+    push((d as any).output);
+
+    const delta = (d as any).delta && typeof (d as any).delta === "object" ? (d as any).delta : null;
+    if (delta) {
+      push((delta as any).text);
+      push((delta as any).content);
+    }
+
+    const content = (d as any).content && typeof (d as any).content === "object" ? (d as any).content : null;
+    if (content) {
+      push((content as any).text);
+      const parts = Array.isArray((content as any).parts) ? (content as any).parts : [];
+      for (const p of parts) {
+        if (!p || typeof p !== "object") continue;
+        push((p as any).text);
+      }
+    }
+
+    const response = (d as any).response && typeof (d as any).response === "object" ? (d as any).response : null;
+    if (response) {
+      push((response as any).text);
+      push((response as any).content);
+      const candidates = Array.isArray((response as any).candidates) ? (response as any).candidates : [];
+      for (const c of candidates) {
+        if (!c || typeof c !== "object") continue;
+        push((c as any).text);
+        const cContent = (c as any).content && typeof (c as any).content === "object" ? (c as any).content : null;
+        if (!cContent) continue;
+        push((cContent as any).text);
+        const parts = Array.isArray((cContent as any).parts) ? (cContent as any).parts : [];
+        for (const p of parts) {
+          if (!p || typeof p !== "object") continue;
+          push((p as any).text);
+        }
+      }
+    }
+
+    return out;
+  }
+
+  private extractGeminiSessionIdFromData(data: any): string {
+    const d = data && typeof data === "object" ? data : {};
+    const session = (d as any).session && typeof (d as any).session === "object" ? (d as any).session : {};
+    const candidates = [
+      (d as any).session_id,
+      (d as any).sessionId,
+      (d as any).session,
+      (d as any).id,
+      (session as any).id,
+      (session as any).session_id,
+      (session as any).sessionId
+    ];
+    for (const c of candidates) {
+      const normalized = this.normalizeModelLabel(c);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+
+  private extractGeminiModelFromData(data: any): string {
+    const d = data && typeof data === "object" ? data : {};
+    const response = (d as any).response && typeof (d as any).response === "object" ? (d as any).response : {};
+    const candidates = [
+      (d as any).model,
+      (d as any).model_name,
+      (d as any).modelName,
+      (d as any).model_id,
+      (d as any).modelId,
+      (response as any).model,
+      (response as any).model_name,
+      (response as any).modelName
+    ];
+    for (const c of candidates) {
+      const normalized = this.normalizeModelLabel(c);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+
+  private extractGeminiModelFromLogEntries(entries: any[]): string {
+    const arr = Array.isArray(entries) ? entries : [];
+    for (let i = arr.length - 1; i >= 0; i -= 1) {
+      const entry = arr[i];
+      if (!entry || typeof entry !== "object") continue;
+      if ((entry as any).kind !== "gemini") continue;
+      const detected = this.extractGeminiModelFromData((entry as any).data);
+      if (detected) return detected;
+    }
+    return "";
+  }
+
   private onClaudeEvent(jobId: string, ev: any) {
     const job = this.jobs.get(jobId);
     if (!job) return;
@@ -1524,6 +1760,75 @@ export class JobsManager {
     }
   }
 
+  private onGeminiEvent(jobId: string, ev: any) {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    if (ev.kind === "log") {
+      this.appendLog(job, ev);
+      this.sendJobEvent({ jobId, kind: "log", entry: ev });
+      return;
+    }
+
+    if (ev.kind === "gemini") {
+      const data = ev.data || {};
+      this.appendLog(job, ev);
+      this.sendJobEvent({ jobId, kind: "gemini", entry: ev });
+
+      const modelFromEvent = this.extractGeminiModelFromData(data);
+      if (modelFromEvent && job.model !== modelFromEvent) {
+        job.model = modelFromEvent;
+        this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
+        this.markJobDirty(jobId);
+      }
+
+      const type = this.geminiEventType(data);
+
+      if (type === "init") {
+        const sessionId = this.extractGeminiSessionIdFromData(data);
+        if (sessionId && job.threadId !== sessionId) {
+          job.threadId = sessionId;
+          this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
+          this.markJobDirty(jobId);
+          try {
+            this.history.save(snapshotJob(job));
+            this.dirtyJobIds.delete(jobId);
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      if (type === "content" || type === "message") {
+        const chunks = this.geminiDataToTextChunks(data);
+        if (chunks.length > 0) {
+          const cur = this.geminiStreamingTextByJobId.get(jobId) || "";
+          this.geminiStreamingTextByJobId.set(jobId, cur + chunks.join(""));
+        }
+      } else if (type === "chatcomplete" || type === "result") {
+        const partial = this.geminiStreamingTextByJobId.get(jobId) || "";
+        const chunks = this.geminiDataToTextChunks(data);
+        const combined = `${partial}${chunks.join("\n")}`.trim();
+        this.geminiStreamingTextByJobId.delete(jobId);
+        const extracted = this.extractStatusHint(combined);
+        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
+        if (hint) this.attentionHintByJobId.set(jobId, hint);
+        const text = extracted.cleanText;
+        if (text) {
+          this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
+        }
+      }
+
+      if ((data as any).usage && typeof (data as any).usage === "object") {
+        job.usage = (data as any).usage;
+        job.usageTotal = addUsageTotals(job.usageTotal, (data as any).usage);
+        this.sendJobEvent({ jobId, kind: "meta", patch: { usage: job.usage, usageTotal: job.usageTotal } });
+        this.markJobDirty(jobId);
+      }
+    }
+  }
+
   private setJobStatus(jobId: string, status: any, extraPatch: any = {}) {
     const job = this.jobs.get(jobId);
     if (!job) return;
@@ -1531,6 +1836,7 @@ export class JobsManager {
     if (status === "running") {
       this.attentionHintByJobId.delete(jobId);
       this.finishedRunKeyByJobId.delete(jobId);
+      this.geminiStreamingTextByJobId.delete(jobId);
       const classifier = this.attentionLlmProcs.get(jobId);
       if (classifier) {
         try {
@@ -1547,6 +1853,7 @@ export class JobsManager {
 
     // Apply a queued LLM title once the run is finished, to avoid mid-run title changes.
     if (status !== "running") {
+      this.geminiStreamingTextByJobId.delete(jobId);
       const meta = snapshotJobMeta(job);
       this.sendJobEvent({ jobId, kind: "meta", patch: { title: meta.title } });
       this.maybeAutoRenameTemporaryProject(jobId);
@@ -1808,6 +2115,85 @@ export class JobsManager {
     });
   }
 
+  private runGeminiAttentionSummary(opts: {
+    jobId: string;
+    geminiPath: string;
+    settings: any;
+    projectPath: string;
+    model: string;
+    prompt: string;
+  }): Promise<string> {
+    const { jobId, geminiPath, settings, projectPath, model, prompt } = opts;
+    return new Promise((resolve) => {
+      if (!this.runGeminiExec) return resolve("");
+
+      let out = "";
+      let partial = "";
+      let resolved = false;
+
+      const child = this.runGeminiExec({
+        geminiPath,
+        settings,
+        projectPath,
+        model,
+        prompt,
+        onEvent: (ev: any) => {
+          if (!ev || ev.kind !== "gemini") return;
+          const data = ev.data || {};
+          const type = this.geminiEventType(data);
+          if (type === "content" || type === "message") {
+            const chunks = this.geminiDataToTextChunks(data);
+            if (chunks.length > 0) partial += chunks.join("");
+            return;
+          }
+          if (type === "chatcomplete" || type === "result") {
+            const chunks = this.geminiDataToTextChunks(data);
+            const finalText = `${partial}${chunks.join("\n")}`.trim();
+            if (finalText) out += (out ? "\n" : "") + finalText;
+            partial = "";
+            return;
+          }
+          if (!out.trim()) {
+            const chunks = this.geminiDataToTextChunks(data);
+            if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
+          }
+        }
+      });
+
+      this.attentionLlmProcs.set(jobId, child);
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // ignore
+        }
+        this.attentionLlmProcs.delete(jobId);
+        if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+        resolve(out);
+      }, 20_000);
+
+      child.once("error", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.attentionLlmProcs.delete(jobId);
+        if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+        resolve(out);
+      });
+      child.once("close", () => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        this.attentionLlmProcs.delete(jobId);
+        if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+        resolve(out);
+      });
+    });
+  }
+
   private async classifyAttentionOnSuccess(job: Job): Promise<"done" | "needs_attention" | null> {
     const lastAssistant = [...job.messages]
       .reverse()
@@ -1822,6 +2208,7 @@ export class JobsManager {
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
     const claudeSettings = this.getClaudeSettingsFrom(settings);
+    const geminiSettings = this.getGeminiSettingsFrom(settings);
 
     const fallbackAgent = this.normalizeAgentKey(job.agent);
     const fallbackModel = String(job.model || "").trim();
@@ -1837,6 +2224,18 @@ export class JobsManager {
           jobId: job.id,
           claudePath,
           settings: safeClaudeSettings,
+          projectPath: job.projectPath || process.cwd(),
+          model: picked.model,
+          prompt: llmPrompt
+        });
+      } else if (picked.agent === "gemini") {
+        if (!this.runGeminiExec) return null;
+        const geminiPath = this.getGeminiPath();
+        const safeGeminiSettings = { ...(geminiSettings || {}), sandboxMode: "read-only" };
+        raw = await this.runGeminiAttentionSummary({
+          jobId: job.id,
+          geminiPath,
+          settings: safeGeminiSettings,
           projectPath: job.projectPath || process.cwd(),
           model: picked.model,
           prompt: llmPrompt
@@ -1938,6 +2337,7 @@ export class JobsManager {
     if (!job.threadId) return { ok: false, error: "No thread id for this job yet" };
     const agent = this.normalizeAgentKey(job.agent);
     if (agent === "claude" && !this.runClaudeResume) return { ok: false, error: "Claude runner not configured" };
+    if (agent === "gemini" && !this.runGeminiResume) return { ok: false, error: "Gemini runner not configured" };
     return { ok: true };
   }
 
@@ -1955,11 +2355,16 @@ export class JobsManager {
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
     const claudeSettings = this.getClaudeSettingsFrom(settings);
+    const geminiSettings = this.getGeminiSettingsFrom(settings);
     const agent = this.normalizeAgentKey(job.agent);
 
     let model =
       (job.model ||
-        (agent === "claude" ? String((claudeSettings as any).model || "") : String(codexSettings.model || settings.agentModel || "")) ||
+        (agent === "claude"
+          ? String((claudeSettings as any).model || "")
+          : agent === "gemini"
+            ? String((geminiSettings as any).model || "")
+            : String(codexSettings.model || settings.agentModel || "")) ||
         "").trim();
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
     const runProjectPath = this.ensureRunnableProjectPath(job);
@@ -1987,6 +2392,17 @@ export class JobsManager {
           model,
           prompt: runPrompt,
           onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
+        });
+      } else if (agent === "gemini") {
+        const geminiPath = this.getGeminiPath();
+        child = this.runGeminiResume!({
+          geminiPath,
+          settings: geminiSettings,
+          cwd: runProjectPath,
+          sessionId: job.threadId,
+          model,
+          prompt: runPrompt,
+          onEvent: (ev: any) => this.onGeminiEvent(jobId, ev)
         });
       } else {
         const codexPath = this.getCodexPath();
@@ -2047,10 +2463,14 @@ export class JobsManager {
       err && err.code === "ENOENT"
         ? agent === "claude"
           ? "claude binary not found. Set Settings -> Claude path (or launch the app from a shell with claude on PATH)."
-          : "codex binary not found. Set Settings -> Codex path (or launch the app from a shell with codex on PATH)."
+          : agent === "gemini"
+            ? "gemini binary not found. Set Settings -> Gemini path (or launch the app from a shell with gemini on PATH)."
+            : "codex binary not found. Set Settings -> Codex path (or launch the app from a shell with codex on PATH)."
         : agent === "claude"
           ? "failed to start claude process."
-          : "failed to start codex process.";
+          : agent === "gemini"
+            ? "failed to start gemini process."
+            : "failed to start codex process.";
 
     this.appendLog(job, {
       ts: finishedAt,
@@ -2122,6 +2542,7 @@ export class JobsManager {
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
     const claudeSettings = this.getClaudeSettingsFrom(settings);
+    const geminiSettings = this.getGeminiSettingsFrom(settings);
     const projects = this.store.listProjects();
     const agent = this.normalizeAgentKey(params && params.agent ? params.agent : "");
 
@@ -2218,6 +2639,7 @@ export class JobsManager {
     let model = modelOverride;
     if (!model) {
       if (agent === "claude") model = String((claudeSettings as any).model || "").trim();
+      else if (agent === "gemini") model = String((geminiSettings as any).model || "").trim();
       else model = String(codexSettings.model || settings.agentModel || "").trim();
     }
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
@@ -2279,7 +2701,7 @@ export class JobsManager {
     }
 
     // Title summaries are best-effort and should not block job start.
-    this.kickoffTitleSummary(jobId, prompt, { settings, codexSettings, claudeSettings });
+    this.kickoffTitleSummary(jobId, prompt, { settings, codexSettings, claudeSettings, geminiSettings });
 
     let child: ChildProcess;
     try {
@@ -2294,6 +2716,17 @@ export class JobsManager {
           sessionId: threadId,
           prompt: runPrompt,
           onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
+        });
+      } else if (agent === "gemini") {
+        if (!this.runGeminiExec) throw new Error("Gemini runner not configured");
+        const geminiPath = this.getGeminiPath();
+        child = this.runGeminiExec({
+          geminiPath,
+          settings: geminiSettings,
+          projectPath: run.projectPath || project.path,
+          model,
+          prompt: runPrompt,
+          onEvent: (ev: any) => this.onGeminiEvent(jobId, ev)
         });
       } else {
         const codexPath = this.getCodexPath();
@@ -2525,6 +2958,7 @@ export class JobsManager {
     this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
     this.finishedRunKeyByJobId.delete(id);
+    this.geminiStreamingTextByJobId.delete(id);
     this.integratingToDefaultJobIds.delete(id);
     this.dirtyJobIds.delete(id);
     try {

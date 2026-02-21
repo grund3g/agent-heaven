@@ -8,6 +8,7 @@ import { Store } from "../store";
 import { JobHistory } from "../job-history";
 import { runCodexExec, runCodexResume } from "../codex-runner";
 import { runClaudeExec, runClaudeResume } from "../claude-runner";
+import { runGeminiExec, runGeminiResume } from "../gemini-runner";
 import { needsAttentionHeuristic } from "../needs-attention";
 import { newId } from "../core/id";
 import { normalizeColorScheme, windowBgForSettings } from "../core/theme";
@@ -20,7 +21,12 @@ import { TrayManager } from "./tray-manager";
 import { WindowManager } from "./window-manager";
 import { ensureMacAppMenu } from "./mac-app-menu";
 import { listCodexModels } from "./codex-models";
-import { checkAgentBinaries, resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
+import {
+  checkAgentBinaries,
+  resolveClaudeCliPathFromSettings,
+  resolveCodexCliPathFromSettings,
+  resolveGeminiCliPathFromSettings
+} from "../agent-binaries";
 import { installAgentCli } from "../agent-install";
 import { inferCommitMessageStyleFromSubjects, suggestCommitMessage } from "../core/commit-message";
 import { buildEditorLaunchCommand } from "../core/command-line";
@@ -185,10 +191,11 @@ function normalizeGeneratedAction(parsed: any): { name: string; command: string 
 
 type UiTextGenPlan = {
   ok: true;
-  agent: "codex" | "claude";
+  agent: "codex" | "claude" | "gemini";
   model: string;
   codexSettings: any;
   claudeSettings: any;
+  geminiSettings: any;
 };
 
 async function pickUiTextGenPlan(settings: any): Promise<UiTextGenPlan | { ok: false; error: string }> {
@@ -198,6 +205,7 @@ async function pickUiTextGenPlan(settings: any): Promise<UiTextGenPlan | { ok: f
       : {};
   const codexSettings = agents && typeof agents.codex === "object" ? agents.codex : {};
   const claudeSettings = agents && typeof agents.claude === "object" ? agents.claude : {};
+  const geminiSettings = agents && typeof agents.gemini === "object" ? agents.gemini : {};
 
   let binaries: any = null;
   try {
@@ -207,46 +215,73 @@ async function pickUiTextGenPlan(settings: any): Promise<UiTextGenPlan | { ok: f
   }
   const codexFound = !!(binaries && binaries.codex && binaries.codex.found);
   const claudeFound = !!(binaries && binaries.claude && binaries.claude.found);
+  const geminiFound = !!(binaries && binaries.gemini && binaries.gemini.found);
 
   const uiModelRaw = settings && typeof settings === "object" ? String((settings as any).uiModel || "").trim() : "";
   const uiModelLow = uiModelRaw.toLowerCase();
-  const uiAgent = uiModelRaw ? (uiModelLow === "opus" || uiModelLow === "sonnet" || uiModelLow === "haiku" ? "claude" : "codex") : "";
+  const uiAgent = uiModelRaw
+    ? uiModelLow === "opus" || uiModelLow === "sonnet" || uiModelLow === "haiku"
+      ? "claude"
+      : uiModelLow.startsWith("gemini")
+        ? "gemini"
+        : "codex"
+    : "";
   const preferredAgent = uiAgent || "codex";
 
-  let agent: "codex" | "claude" = "codex";
+  let agent: "codex" | "claude" | "gemini" = "codex";
   if (preferredAgent === "claude" && claudeFound) agent = "claude";
+  else if (preferredAgent === "gemini" && geminiFound) agent = "gemini";
   else if (preferredAgent === "codex" && codexFound) agent = "codex";
   else if (codexFound) agent = "codex";
   else if (claudeFound) agent = "claude";
-  else return { ok: false, error: "No agent CLI found (install Codex and/or Claude, or set the binary path in Settings)." };
+  else if (geminiFound) agent = "gemini";
+  else return { ok: false, error: "No agent CLI found (install Codex, Claude and/or Gemini, or set the binary path in Settings)." };
 
   let model = "";
   if (uiAgent === agent && uiModelRaw) {
     model = uiModelRaw;
   } else if (agent === "claude") {
     model = typeof claudeSettings.model === "string" ? String(claudeSettings.model || "").trim() : "";
+  } else if (agent === "gemini") {
+    model = typeof geminiSettings.model === "string" ? String(geminiSettings.model || "").trim() : "";
   } else {
     model = typeof codexSettings.model === "string" ? String(codexSettings.model || "").trim() : "";
   }
 
-  return { ok: true, agent, model, codexSettings, claudeSettings };
+  return { ok: true, agent, model, codexSettings, claudeSettings, geminiSettings };
 }
 
 async function runUiTextPrompt(opts: {
   settings: any;
   codexSettings: any;
   claudeSettings: any;
-  agent: "codex" | "claude";
+  geminiSettings: any;
+  agent: "codex" | "claude" | "gemini";
   model: string;
   prompt: string;
 }): Promise<string> {
-  const { settings, codexSettings, claudeSettings, agent, model, prompt } = opts;
+  const { settings, codexSettings, claudeSettings, geminiSettings, agent, model, prompt } = opts;
   if (agent === "claude") {
     const claudePath = resolveClaudeCliPathFromSettings(settings);
     const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
     return await runClaudeUiPrompt({
       claudePath,
       settings: safeClaudeSettings,
+      projectPath: process.cwd(),
+      model,
+      prompt
+    });
+  }
+
+  if (agent === "gemini") {
+    const geminiPath = resolveGeminiCliPathFromSettings(settings);
+    const safeGeminiSettings = {
+      ...(geminiSettings || {}),
+      sandboxMode: "read-only"
+    };
+    return await runGeminiUiPrompt({
+      geminiPath,
+      settings: safeGeminiSettings,
       projectPath: process.cwd(),
       model,
       prompt
@@ -269,12 +304,13 @@ async function runUiTextPrompt(opts: {
   });
 }
 
-function normalizeHelperAgentPreference(value: unknown): "" | "codex" | "claude" {
+function normalizeHelperAgentPreference(value: unknown): "" | "codex" | "claude" | "gemini" {
   const s = String(value || "")
     .trim()
     .toLowerCase();
   if (s === "claude" || s === "anthropic") return "claude";
   if (s === "codex" || s === "openai") return "codex";
+  if (s === "gemini" || s === "google") return "gemini";
   return "";
 }
 
@@ -485,6 +521,7 @@ async function pickHelperTextGenPlan(opts: {
       : {};
   const codexSettings = agents && typeof agents.codex === "object" ? agents.codex : {};
   const claudeSettings = agents && typeof agents.claude === "object" ? agents.claude : {};
+  const geminiSettings = agents && typeof agents.gemini === "object" ? agents.gemini : {};
 
   let binaries: any = null;
   try {
@@ -495,35 +532,43 @@ async function pickHelperTextGenPlan(opts: {
 
   const codexFound = !!(binaries && binaries.codex && binaries.codex.found);
   const claudeFound = !!(binaries && binaries.claude && binaries.claude.found);
-  if (!codexFound && !claudeFound) {
-    return { ok: false, error: "No agent CLI found (install Codex and/or Claude, or set the binary path in Settings)." };
+  const geminiFound = !!(binaries && binaries.gemini && binaries.gemini.found);
+  if (!codexFound && !claudeFound && !geminiFound) {
+    return { ok: false, error: "No agent CLI found (install Codex, Claude and/or Gemini, or set the binary path in Settings)." };
   }
 
   const preferModelLow = preferModel.toLowerCase();
   const preferModelLooksClaude = preferModelLow === "opus" || preferModelLow === "sonnet" || preferModelLow === "haiku";
-  const preferModelAgent = preferModelLooksClaude ? "claude" : preferModel ? "codex" : "";
+  const preferModelLooksGemini = preferModelLow.startsWith("gemini");
+  const preferModelAgent = preferModelLooksClaude ? "claude" : preferModelLooksGemini ? "gemini" : preferModel ? "codex" : "";
 
-  let agent: "codex" | "claude" = "codex";
+  let agent: "codex" | "claude" | "gemini" = "codex";
   if (preferAgent === "claude" && claudeFound) agent = "claude";
+  else if (preferAgent === "gemini" && geminiFound) agent = "gemini";
   else if (preferAgent === "codex" && codexFound) agent = "codex";
   else if (!preferAgent && preferModelAgent === "claude" && claudeFound) agent = "claude";
+  else if (!preferAgent && preferModelAgent === "gemini" && geminiFound) agent = "gemini";
   else if (!preferAgent && preferModelAgent === "codex" && codexFound) agent = "codex";
   else if (!preferAgent && claudeFound) agent = "claude";
   else if (codexFound) agent = "codex";
+  else if (geminiFound) agent = "gemini";
   else agent = "claude";
 
   let model = preferModel;
-  if (agent === "codex" && preferModelLooksClaude) model = "";
+  if (agent === "codex" && (preferModelLooksClaude || preferModelLooksGemini)) model = "";
+  if (agent === "gemini" && preferModelLooksClaude) model = "";
   if (!model) {
     if (agent === "claude") {
       const configured = typeof claudeSettings.model === "string" ? String(claudeSettings.model || "").trim() : "";
       model = configured || "opus";
+    } else if (agent === "gemini") {
+      model = typeof geminiSettings.model === "string" ? String(geminiSettings.model || "").trim() : "";
     } else {
       model = typeof codexSettings.model === "string" ? String(codexSettings.model || "").trim() : "";
     }
   }
 
-  return { ok: true, agent, model, codexSettings, claudeSettings };
+  return { ok: true, agent, model, codexSettings, claudeSettings, geminiSettings };
 }
 
 function truncateCommitSubjectLine(s: string, max = 72): string {
@@ -695,6 +740,7 @@ async function suggestCommitMessageForRepo(opts: {
         settings,
         codexSettings: plan.codexSettings,
         claudeSettings: plan.claudeSettings,
+        geminiSettings: plan.geminiSettings,
         agent: plan.agent,
         model: plan.model,
         prompt
@@ -863,6 +909,140 @@ function runClaudeUiPrompt(opts: {
   });
 }
 
+function geminiEventType(data: any): string {
+  const d = data && typeof data === "object" ? data : {};
+  const raw = typeof d.type === "string" ? d.type : typeof d.event === "string" ? d.event : "";
+  return String(raw || "")
+    .trim()
+    .toLowerCase();
+}
+
+function geminiEventTextChunks(data: any): string[] {
+  const d = data && typeof data === "object" ? data : {};
+  const out: string[] = [];
+
+  const push = (value: unknown) => {
+    if (typeof value !== "string") return;
+    const t = value.trim();
+    if (!t) return;
+    out.push(t);
+  };
+
+  push(d.text);
+  push(d.message);
+  push(d.delta);
+  push(d.content);
+  push(d.output);
+  push(d.response);
+
+  if (d.delta && typeof d.delta === "object") {
+    push((d.delta as any).text);
+    push((d.delta as any).content);
+  }
+  if (d.content && typeof d.content === "object") {
+    push((d.content as any).text);
+    const parts = Array.isArray((d.content as any).parts) ? (d.content as any).parts : [];
+    for (const p of parts) {
+      if (!p || typeof p !== "object") continue;
+      push((p as any).text);
+    }
+  }
+  if (d.response && typeof d.response === "object") {
+    push((d.response as any).text);
+    push((d.response as any).content);
+    const candidates = Array.isArray((d.response as any).candidates) ? (d.response as any).candidates : [];
+    for (const c of candidates) {
+      if (!c || typeof c !== "object") continue;
+      push((c as any).text);
+      const cContent = (c as any).content;
+      if (cContent && typeof cContent === "object") {
+        push((cContent as any).text);
+        const parts = Array.isArray((cContent as any).parts) ? (cContent as any).parts : [];
+        for (const p of parts) {
+          if (!p || typeof p !== "object") continue;
+          push((p as any).text);
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+function runGeminiUiPrompt(opts: {
+  geminiPath: string;
+  settings: any;
+  projectPath: string;
+  model: string;
+  prompt: string;
+}): Promise<string> {
+  const { geminiPath, settings, projectPath, model, prompt } = opts;
+  return new Promise((resolve) => {
+    let out = "";
+    let partial = "";
+    let resolved = false;
+
+    const child = runGeminiExec({
+      geminiPath,
+      settings,
+      projectPath,
+      model,
+      prompt,
+      onEvent: (ev: any) => {
+        if (!ev || ev.kind !== "gemini") return;
+        const data = ev.data || {};
+        const t = geminiEventType(data);
+
+        if (t === "content" || t === "message") {
+          const chunks = geminiEventTextChunks(data);
+          if (chunks.length > 0) partial += chunks.join("");
+          return;
+        }
+
+        if (t === "chatcomplete" || t === "result") {
+          const chunks = geminiEventTextChunks(data);
+          const finalText = `${partial}${chunks.join("\n")}`.trim();
+          if (finalText) out += (out ? "\n" : "") + finalText;
+          partial = "";
+          return;
+        }
+
+        if (!out.trim()) {
+          const chunks = geminiEventTextChunks(data);
+          if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
+        }
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      if (resolved) return;
+      resolved = true;
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore
+      }
+      if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+      resolve(out);
+    }, 25_000);
+
+    child.once("error", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+      resolve(out);
+    });
+    child.once("close", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      if (partial.trim()) out += (out ? "\n" : "") + partial.trim();
+      resolve(out);
+    });
+  });
+}
+
 function truncateText(raw: unknown, max = 2000): string {
   const s = String(raw || "").trim();
   if (!s) return "";
@@ -1016,7 +1196,8 @@ async function runUiAgentExecPrompt(opts: {
   settings: any;
   codexSettings: any;
   claudeSettings: any;
-  agent: "codex" | "claude";
+  geminiSettings: any;
+  agent: "codex" | "claude" | "gemini";
   model: string;
   projectPath: string;
   prompt: string;
@@ -1025,7 +1206,9 @@ async function runUiAgentExecPrompt(opts: {
   const settings = opts && typeof opts === "object" ? opts.settings : {};
   const codexSettings = opts && typeof opts === "object" ? opts.codexSettings : {};
   const claudeSettings = opts && typeof opts === "object" ? opts.claudeSettings : {};
-  const agent = opts && opts.agent === "claude" ? "claude" : "codex";
+  const geminiSettings = opts && typeof opts === "object" ? opts.geminiSettings : {};
+  const agent =
+    opts && opts.agent === "claude" ? "claude" : opts && opts.agent === "gemini" ? "gemini" : ("codex" as const);
   const model = opts && typeof opts.model === "string" ? opts.model : "";
   const projectPath = opts && typeof opts.projectPath === "string" ? opts.projectPath : process.cwd();
   const prompt = opts && typeof opts.prompt === "string" ? opts.prompt : "";
@@ -1037,6 +1220,7 @@ async function runUiAgentExecPrompt(opts: {
     let resolved = false;
     let timedOut = false;
     let child: any = null;
+    let geminiPartial = "";
 
     const finish = () => {
       if (resolved) return;
@@ -1073,6 +1257,35 @@ async function runUiAgentExecPrompt(opts: {
             }
           }
         });
+      } else if (agent === "gemini") {
+        child = runGeminiExec({
+          geminiPath: resolveGeminiCliPathFromSettings(settings),
+          settings: geminiSettings || {},
+          projectPath,
+          model,
+          prompt,
+          onEvent: (ev: any) => {
+            if (!ev || ev.kind !== "gemini") return;
+            const data = ev.data || {};
+            const t = geminiEventType(data);
+            if (t === "content" || t === "message") {
+              const chunks = geminiEventTextChunks(data);
+              if (chunks.length > 0) geminiPartial += chunks.join("");
+              return;
+            }
+            if (t === "chatcomplete" || t === "result") {
+              const chunks = geminiEventTextChunks(data);
+              const finalText = `${geminiPartial}${chunks.join("\n")}`.trim();
+              if (finalText) out += (out ? "\n" : "") + finalText;
+              geminiPartial = "";
+              return;
+            }
+            if (!out.trim()) {
+              const chunks = geminiEventTextChunks(data);
+              if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
+            }
+          }
+        });
       } else {
         child = runCodexExec({
           codexPath: resolveCodexCliPathFromSettings(settings),
@@ -1099,9 +1312,13 @@ async function runUiAgentExecPrompt(opts: {
 
     child.once("error", (err: any) => {
       if (!out.trim()) out = safeErrorMessage(err);
+      if (geminiPartial.trim()) out += (out ? "\n" : "") + geminiPartial.trim();
       finish();
     });
-    child.once("close", () => finish());
+    child.once("close", () => {
+      if (geminiPartial.trim()) out += (out ? "\n" : "") + geminiPartial.trim();
+      finish();
+    });
   });
 }
 
@@ -1336,6 +1553,8 @@ export async function startApp(): Promise<void> {
     runCodexResume,
     runClaudeExec,
     runClaudeResume,
+    runGeminiExec,
+    runGeminiResume,
     needsAttentionHeuristic,
     integrationRuntime,
     mcpServerManager
@@ -1611,7 +1830,7 @@ export async function startApp(): Promise<void> {
     const settings = store.getSettings();
     const plan = await pickUiTextGenPlan(settings);
     if (!plan.ok) return plan;
-    const { agent, model, codexSettings, claudeSettings } = plan;
+    const { agent, model, codexSettings, claudeSettings, geminiSettings } = plan;
 
     const shellPath =
       process.platform === "win32"
@@ -1626,6 +1845,7 @@ export async function startApp(): Promise<void> {
         settings,
         codexSettings,
         claudeSettings,
+        geminiSettings,
         agent,
         model,
         prompt
@@ -1676,6 +1896,10 @@ export async function startApp(): Promise<void> {
       bypassApprovalsAndSandbox: false,
       skipGitRepoCheck: true
     } as any;
+    const safeGeminiSettings = {
+      ...(plan.geminiSettings || {}),
+      sandboxMode: "read-only"
+    } as any;
 
     let projectPath = resolveHelperProjectPath({
       context,
@@ -1690,7 +1914,7 @@ export async function startApp(): Promise<void> {
           url: `http://127.0.0.1:${mcpServerManager.port}/mcp`,
           token: mcpServerManager.token
         };
-      } else {
+      } else if (plan.agent === "claude") {
         try {
           helperMcpFiles = writeMcpConfig({
             projectPath,
@@ -1729,6 +1953,7 @@ export async function startApp(): Promise<void> {
         settings,
         codexSettings: safeCodexSettings,
         claudeSettings: safeClaudeSettings,
+        geminiSettings: safeGeminiSettings,
         agent: plan.agent,
         model: plan.model,
         projectPath,
@@ -2712,6 +2937,7 @@ export async function startApp(): Promise<void> {
             settings,
             codexSettings: plan.codexSettings,
             claudeSettings: plan.claudeSettings,
+            geminiSettings: plan.geminiSettings,
             agent: plan.agent,
             model: plan.model,
             projectPath: targetDir,
@@ -2949,10 +3175,12 @@ export async function startApp(): Promise<void> {
 
   applyRuntimeSettings(store.getSettings());
 
-  // If the user selected "system", keep window backgrounds in sync with OS theme changes.
+  // Legacy compatibility: only react to OS theme changes if an old setting still says "system".
   nativeTheme.on("updated", () => {
     const s = store.getSettings();
-    if (normalizeColorScheme(s && typeof s === "object" ? (s as any).uiColorScheme : "") !== "system") return;
+    const rawScheme =
+      s && typeof s === "object" ? String((s as any).uiColorScheme || "").trim().toLowerCase() : "";
+    if (rawScheme !== "system") return;
     const bg = windowBgForSettings(s, { systemScheme: nativeTheme.shouldUseDarkColors ? "dark" : "light" });
     for (const win of windowManager.liveWindows()) {
       try {

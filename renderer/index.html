@@ -98,6 +98,7 @@
 			            <select id="agentSelect" class="select" title="Agent">
 			              <option value="codex">Codex</option>
 			              <option value="claude">Claude</option>
+                    <option value="gemini">Gemini</option>
 			            </select>
 			            <select id="checkoutModeSelect" class="select" title="Checkout strategy">
 			              <option value="inplace">In-place</option>
@@ -299,6 +300,7 @@
           </div>
           <nav class="settingsPage__nav">
             <button type="button" class="settingsPage__tab settingsPage__tab--active" data-settings-tab="general">General</button>
+            <button type="button" class="settingsPage__tab" data-settings-tab="chat">Chat</button>
             <button type="button" class="settingsPage__tab" data-settings-tab="agents">Agents</button>
             <button type="button" class="settingsPage__tab" data-settings-tab="integrations">Integrations</button>
             <button type="button" class="settingsPage__tab" data-settings-tab="shortcuts">Shortcuts</button>
@@ -331,20 +333,8 @@
                   <input id="settingsUiModelCustom" class="input" placeholder="Custom model..." hidden />
                 </label>
                 <label class="field">
-                  <div class="field__label">Theme</div>
-                  <select id="settingsTheme" class="select">
-                    <option value="heaven">Heaven</option>
-                    <option value="nord">Nord</option>
-                    <option value="gruvbox">Gruvbox</option>
-                    <option value="solarized">Solarized</option>
-                    <option value="dracula">Dracula</option>
-                    <option value="ocean">Ocean</option>
-                  </select>
-                </label>
-                <label class="field">
                   <div class="field__label">Color scheme</div>
                   <select id="settingsColorScheme" class="select">
-                    <option value="system">System</option>
                     <option value="dark">Dark</option>
                     <option value="light">Light</option>
                   </select>
@@ -408,20 +398,24 @@
                 </label>
                 <div class="settings__note">Agent mode tries LLM-driven integration first and can fall back to CLI when safe.</div>
               </div>
+            </div>
 
+            <!-- Tab: Chat -->
+            <div class="settingsPage__panel" data-settings-panel="chat" hidden>
               <div class="settings__section">
                 <div class="settings__sectionTitle">Chat</div>
                 <label class="field">
                   <div class="field__label">Default chat runner</div>
                   <select id="settingsHelperDefaultAgent" class="select">
-                    <option value="">Auto (prefer Opus)</option>
+                    <option value="">Auto (Settings)</option>
                     <option value="claude">Claude</option>
                     <option value="codex">Codex</option>
+                    <option value="gemini">Gemini</option>
                   </select>
                 </label>
                 <label class="field">
                   <div class="field__label">Default chat model override</div>
-                  <input id="settingsHelperDefaultModel" class="input" placeholder="e.g. opus, sonnet, gpt-5" />
+                  <input id="settingsHelperDefaultModel" class="input" placeholder="e.g. opus, gemini-2.5-pro, gpt-5" />
                 </label>
                 <label class="field field--row">
                   <input id="settingsHelperPersistHistory" type="checkbox" />
@@ -435,71 +429,104 @@
 
             <!-- Tab: Agents -->
             <div class="settingsPage__panel" data-settings-panel="agents" hidden>
-              <div class="settings__section">
-                <div class="settings__sectionTitle">Agents</div>
-                <div class="settings__groupTitle">Codex</div>
-                <label class="field">
-                  <div class="field__label">Codex path</div>
-                  <input id="settingsCodexPath" class="input" placeholder="Leave empty to use PATH (codex)" />
-                </label>
-                <label class="field">
-                  <div class="field__label">Default model</div>
-                  <input id="settingsCodexModel" class="input" placeholder="e.g. gpt-5.3-codex, ..." />
-                </label>
-                <label class="field">
-                  <div class="field__label">Transport</div>
-                  <select id="settingsCodexTransport" class="select">
-                    <option value="exec_json">exec --json (stable)</option>
-                    <option value="app_server">app-server (experimental)</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <div class="field__label">Sandbox mode</div>
-                  <select id="settingsCodexSandboxMode" class="select">
-                    <option value="read-only">read-only</option>
-                    <option value="workspace-write">workspace-write</option>
-                    <option value="danger-full-access">danger-full-access</option>
-                  </select>
-                </label>
-                <label class="field field--row">
-                  <input id="settingsCodexSkipGitRepoCheck" type="checkbox" />
-                  <div class="field__label field__label--inline">Allow running outside git repo (--skip-git-repo-check)</div>
-                </label>
-                <label class="field field--row">
-                  <input id="settingsCodexBypass" type="checkbox" />
-                  <div class="field__label field__label--inline">Danger: bypass approvals + sandbox</div>
-                </label>
-                <label class="field">
-                  <div class="field__label">Codex color (--color)</div>
-                  <select id="settingsCodexColor" class="select">
-                    <option value="auto">auto</option>
-                    <option value="always">always</option>
-                    <option value="never">never</option>
-                  </select>
-                </label>
-                <div class="settings__divider"></div>
-                <div class="settings__groupTitle">Claude</div>
-                <label class="field">
-                  <div class="field__label">Claude path</div>
-                  <input id="settingsClaudePath" class="input" placeholder="Leave empty to use PATH (claude)" />
-                </label>
-                <label class="field">
-                  <div class="field__label">Default model</div>
-                  <input id="settingsClaudeModel" class="input" placeholder="e.g. opus, sonnet, ..." />
-                </label>
-                <label class="field">
-                  <div class="field__label">Permission mode</div>
-                  <select id="settingsClaudePermissionMode" class="select">
-                    <option value="acceptEdits">acceptEdits (recommended)</option>
-                    <option value="default">default</option>
-                    <option value="plan">plan</option>
-                    <option value="bypassPermissions">bypassPermissions</option>
-                  </select>
-                </label>
-                <label class="field field--row">
-                  <input id="settingsClaudeSkipPermissions" type="checkbox" />
-                  <div class="field__label field__label--inline">Danger: skip permissions (--dangerously-skip-permissions)</div>
-                </label>
+              <nav class="settingsAgents__subnav" aria-label="Agent settings">
+                <button type="button" class="settingsAgents__subtab settingsAgents__subtab--active" data-settings-agents-tab="codex">Codex</button>
+                <button type="button" class="settingsAgents__subtab" data-settings-agents-tab="claude">Claude</button>
+                <button type="button" class="settingsAgents__subtab" data-settings-agents-tab="gemini">Gemini</button>
+              </nav>
+
+              <div class="settingsAgents__panel" data-settings-agents-panel="codex">
+                <div class="settings__section">
+                  <div class="settings__sectionTitle">Codex</div>
+                  <label class="field">
+                    <div class="field__label">Codex path</div>
+                    <input id="settingsCodexPath" class="input" placeholder="Leave empty to use PATH (codex)" />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Default model</div>
+                    <input id="settingsCodexModel" class="input" placeholder="e.g. gpt-5.3-codex, ..." />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Transport</div>
+                    <select id="settingsCodexTransport" class="select">
+                      <option value="exec_json">exec --json (stable)</option>
+                      <option value="app_server">app-server (experimental)</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Sandbox mode</div>
+                    <select id="settingsCodexSandboxMode" class="select">
+                      <option value="read-only">read-only</option>
+                      <option value="workspace-write">workspace-write</option>
+                      <option value="danger-full-access">danger-full-access</option>
+                    </select>
+                  </label>
+                  <label class="field field--row">
+                    <input id="settingsCodexSkipGitRepoCheck" type="checkbox" />
+                    <div class="field__label field__label--inline">Allow running outside git repo (--skip-git-repo-check)</div>
+                  </label>
+                  <label class="field field--row">
+                    <input id="settingsCodexBypass" type="checkbox" />
+                    <div class="field__label field__label--inline">Danger: bypass approvals + sandbox</div>
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Codex color (--color)</div>
+                    <select id="settingsCodexColor" class="select">
+                      <option value="auto">auto</option>
+                      <option value="always">always</option>
+                      <option value="never">never</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="settingsAgents__panel" data-settings-agents-panel="claude" hidden>
+                <div class="settings__section">
+                  <div class="settings__sectionTitle">Claude</div>
+                  <label class="field">
+                    <div class="field__label">Claude path</div>
+                    <input id="settingsClaudePath" class="input" placeholder="Leave empty to use PATH (claude)" />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Default model</div>
+                    <input id="settingsClaudeModel" class="input" placeholder="e.g. opus, sonnet, ..." />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Permission mode</div>
+                    <select id="settingsClaudePermissionMode" class="select">
+                      <option value="acceptEdits">acceptEdits (recommended)</option>
+                      <option value="default">default</option>
+                      <option value="plan">plan</option>
+                      <option value="bypassPermissions">bypassPermissions</option>
+                    </select>
+                  </label>
+                  <label class="field field--row">
+                    <input id="settingsClaudeSkipPermissions" type="checkbox" />
+                    <div class="field__label field__label--inline">Danger: skip permissions (--dangerously-skip-permissions)</div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="settingsAgents__panel" data-settings-agents-panel="gemini" hidden>
+                <div class="settings__section">
+                  <div class="settings__sectionTitle">Gemini</div>
+                  <label class="field">
+                    <div class="field__label">Gemini path</div>
+                    <input id="settingsGeminiPath" class="input" placeholder="Leave empty to use PATH (gemini)" />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Default model</div>
+                    <input id="settingsGeminiModel" class="input" placeholder="e.g. gemini-2.5-pro" />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Sandbox mode</div>
+                    <select id="settingsGeminiSandboxMode" class="select">
+                      <option value="read-only">read-only</option>
+                      <option value="workspace-write">workspace-write</option>
+                      <option value="danger-full-access">danger-full-access</option>
+                    </select>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -832,6 +859,7 @@
 	              <select id="rerunAgentSelect" class="select" title="Agent">
 	                <option value="codex">Codex</option>
 	                <option value="claude">Claude</option>
+                  <option value="gemini">Gemini</option>
 	              </select>
 	            </label>
 	            <label class="field">
@@ -1160,6 +1188,7 @@
           <option value="">Auto (Settings)</option>
           <option value="claude">Claude</option>
           <option value="codex">Codex</option>
+          <option value="gemini">Gemini</option>
         </select>
         <select id="helperContextScopeSelect" class="select" title="Chat context scope">
           <option value="project">Context: Project</option>
