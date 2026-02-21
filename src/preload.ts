@@ -21,9 +21,21 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   settingsGet: () => ipcRenderer.invoke("settings:get"),
   settingsUpdate: (patch) => ipcRenderer.invoke("settings:update", patch),
 
+  mcpStatus: () => ipcRenderer.invoke("mcp:status"),
+
   actionsGenerate: async (prompt) => {
     const res = await invokeOk("actions:generate", { prompt });
     return res && typeof res === "object" ? (res as any).action : null;
+  },
+  helperAsk: async (payload) => {
+    const p = payload && typeof payload === "object" ? payload : {};
+    const res = await invokeOk("helper:ask", p);
+    return {
+      answer: typeof (res as any).answer === "string" ? (res as any).answer : "",
+      agent: typeof (res as any).agent === "string" ? (res as any).agent : "",
+      model: typeof (res as any).model === "string" ? (res as any).model : "",
+      timedOut: !!((res as any).timedOut === true)
+    };
   },
 
   shellOpenExternal: async (url) => {
@@ -32,6 +44,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
   },
   shellOpenPath: async (filePath) => {
     await invokeOk("shell:openPath", filePath);
+    return true;
+  },
+  editorOpenPath: async (filePath) => {
+    await invokeOk("editor:openPath", filePath);
     return true;
   },
 
@@ -77,6 +93,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     return ipcRenderer.invoke("projects:remove", { id, deleteFolder: !!o.deleteFolder });
   },
   projectsUpdate: (id, patch) => ipcRenderer.invoke("projects:update", { id, patch }),
+  projectsSuggestPaths: async (projectId, query, limit) => {
+    const res = await invokeOk("projects:suggestPaths", { projectId, query, limit });
+    return Array.isArray(res.items) ? res.items : [];
+  },
   projectsGitInfo: async (projectId) => {
     const res = await invokeOk("projects:gitInfo", projectId);
     return res.info;
@@ -94,10 +114,37 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     await invokeOk("checkouts:remove", { projectId, kind, jobId });
     return true;
   },
+  checkoutsGetDiff: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:getDiff", {
+      jobId,
+      maxChars: p.maxChars,
+      maxUntrackedFiles: p.maxUntrackedFiles
+    });
+    return res;
+  },
   checkoutsIntegrateToDefault: async (jobId, opts) => {
     const p = opts && typeof opts === "object" ? opts : {};
-    const res = await invokeOk("checkouts:integrateToDefault", { jobId, commitMessage: p.commitMessage });
+    const res = await invokeOk("checkouts:integrateToDefault", {
+      jobId,
+      commitMessage: p.commitMessage,
+      autoArchive: p.autoArchive === true
+    });
     return res;
+  },
+  checkoutsCommit: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:commit", {
+      jobId,
+      commitMessage: p.commitMessage,
+      push: !!p.push
+    });
+    return res;
+  },
+  checkoutsSuggestCommitMessage: async (jobId, opts) => {
+    const p = opts && typeof opts === "object" ? opts : {};
+    const res = await invokeOk("checkouts:suggestCommitMessage", { jobId, forceEnglish: !!p.forceEnglish });
+    return res && typeof res.suggestion === "string" ? res.suggestion : "";
   },
 
   jobsList: () => ipcRenderer.invoke("jobs:list"),

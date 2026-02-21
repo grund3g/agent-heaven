@@ -13,7 +13,18 @@ import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
 import { readCodexDefaultModelFromConfigToml } from "../codex-config";
 import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings } from "../agent-binaries";
-import { addWorktree, cloneRepo, createBranchInRepo, detectDefaultBranch } from "./git";
+import type { IntegrationRuntime } from "../integrations";
+import type { McpServerManager } from "../mcp-server";
+import { writeMcpConfig, cleanupMcpConfig } from "../mcp-server";
+import {
+  addWorktree,
+  cloneRepo,
+  createBranchInRepo,
+  detectDefaultBranch,
+  getGitCommonDir,
+  getGitInfo,
+  listCommitsInRange
+} from "./git";
 
 type SendJobEvent = (payload: any) => void;
 
@@ -98,9 +109,18 @@ export class JobsManager {
   private jobs = new Map<string, Job>(); // jobId -> job
   private procs = new Map<string, ChildProcess>(); // jobId -> child process
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
+  private pendingTitleSummaryByJobId = new Map<
+    string,
+    { rev: number; userPrompt: string; settings: any; codexSettings: any; claudeSettings: any }
+  >(); // keep latest requested title refresh while one is in flight
+  private titleSummaryRevByJobId = new Map<string, number>(); // monotonically increasing title refresh revision
   private attentionLlmProcs = new Map<string, ChildProcess>(); // jobId -> final Done/Needs Attention classification process
   // Per-run hint provided by the agent via an internal "AH_STATUS: ..." line in its final answer.
   private attentionHintByJobId = new Map<string, "done" | "needs_attention">(); // jobId -> hint
+  // Ephemeral UI marker for long-running non-agent operations (e.g. integrate-to-default).
+  private integratingToDefaultJobIds = new Set<string>();
+  // Dedupe integration completion hooks per finished run.
+  private finishedRunKeyByJobId = new Map<string, string>();
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -138,17 +158,51 @@ export class JobsManager {
   }
 
   private normalizeCheckoutMode(value: unknown): "inplace" | "worktree" | "clone" {
-    const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
-    if (raw === "worktree" || raw === "worktrees") return "worktree";
-    if (raw === "clone" || raw === "checkout" || raw === "dedicated") return "clone";
-    return "inplace";
+    return normalizeGitCheckoutMode(value) || "inplace";
+  }
+
+  private normalizeCheckoutModeOverride(value: unknown): "" | "inplace" | "worktree" | "clone" {
+    return normalizeGitCheckoutMode(value);
+  }
+
+  private normalizeMissingCheckoutAction(value: unknown): "ask" | "fallback_to_project" | "recreate_worktree" {
+    const raw = String(value || "")
+      .trim()
+      .toLowerCase();
+    if (raw === "fallback_to_project" || raw === "fallback" || raw === "inplace") return "fallback_to_project";
+    if (raw === "recreate_worktree" || raw === "recreate" || raw === "worktree") return "recreate_worktree";
+    return "ask";
+  }
+
+  private promptTextNormalized(prompt: unknown): string {
+    return typeof prompt === "string" ? prompt.trim().toLowerCase() : "";
+  }
+
+  private hasWriteIntent(prompt: unknown): boolean {
+    const text = this.promptTextNormalized(prompt);
+    if (!text) return false;
+    return WRITE_INTENT_PATTERNS.some((re) => re.test(text));
+  }
+
+  private hasReadOnlyIntent(prompt: unknown): boolean {
+    const text = this.promptTextNormalized(prompt);
+    if (!text) return false;
+    return READ_ONLY_INTENT_PATTERNS.some((re) => re.test(text));
+  }
+
+  private shouldDeferWorktreeForPrompt(prompt: unknown): boolean {
+    const text = this.promptTextNormalized(prompt);
+    if (!text) return false;
+    if (this.hasWriteIntent(text)) return false;
+    if (this.hasReadOnlyIntent(text)) return true;
+
+    // Questions without edit intent are typically informational.
+    if (text.endsWith("?")) return true;
+    return false;
   }
 
   private normalizeBranchName(value: unknown): string {
-    const s = typeof value === "string" ? value.trim() : "";
-    if (!s) return "";
-    const stripped = s.startsWith("origin/") ? s.slice("origin/".length) : s;
-    return stripped.slice(0, 200);
+    return normalizeGitBranchName(value);
   }
 
   private ensureDir(dirPath: string) {
@@ -161,14 +215,33 @@ export class JobsManager {
     }
   }
 
-  private async prepareCheckout(project: any, jobId: string): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
-    const mode = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+  private codexSettingsWithInlineMcp(settings: any): any {
+    const base = settings && typeof settings === "object" ? { ...settings } : {};
+    const mgr = this.mcpServerManager;
+    if (!mgr || !(mgr.port > 0)) {
+      delete (base as any).__agentHeavenMcp;
+      return base;
+    }
+
+    (base as any).__agentHeavenMcp = {
+      url: `http://127.0.0.1:${mgr.port}/mcp`,
+      token: mgr.token
+    };
+    return base;
+  }
+
+  private async prepareCheckout(
+    project: any,
+    jobId: string,
+    promptText?: string,
+    overrideMode?: "" | "inplace" | "worktree" | "clone"
+  ): Promise<{ projectPath: string; checkoutMode: string; checkoutBranch: string }> {
+    const configured = this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+    const mode = overrideMode ? this.normalizeCheckoutMode(overrideMode) : configured;
     const projectPath = project && typeof project.path === "string" ? project.path : "";
     if (!projectPath) throw new Error("Project path is missing");
 
     if (mode === "inplace") return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
-
-    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
 
     const projectId = project && typeof project.id === "string" ? project.id : "project";
     const branchName = `ah/job/${jobId}`;
@@ -182,6 +255,12 @@ export class JobsManager {
         baseBranch = "";
       }
     }
+
+    if (mode === "worktree" && this.shouldDeferWorktreeForPrompt(promptText)) {
+      return { projectPath, checkoutMode: "inplace", checkoutBranch: "" };
+    }
+
+    if (!this.checkoutsDir) throw new Error("Checkouts directory is not configured");
 
     if (mode === "worktree") {
       const baseRef = baseBranch || "HEAD";
@@ -254,6 +333,8 @@ export class JobsManager {
       }
     }
     this.titleLlmProcs.clear();
+    this.pendingTitleSummaryByJobId.clear();
+    this.titleSummaryRevByJobId.clear();
     for (const child of this.attentionLlmProcs.values()) {
       try {
         child.kill("SIGTERM");
@@ -262,6 +343,7 @@ export class JobsManager {
       }
     }
     this.attentionLlmProcs.clear();
+    this.integratingToDefaultJobIds.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -289,6 +371,128 @@ export class JobsManager {
     return projects.find((p: any) => p && String(p.id || "").trim() === id) || null;
   }
 
+  private checkoutModePreferenceForJob(job: Job): "inplace" | "worktree" | "clone" {
+    if (!job || typeof job !== "object") return "inplace";
+
+    const preferredRaw = typeof (job as any).checkoutModePreference === "string" ? (job as any).checkoutModePreference : "";
+    if (preferredRaw) return this.normalizeCheckoutMode(preferredRaw);
+
+    const project = this.projectById(job.projectId);
+    return this.normalizeCheckoutMode(project && typeof project === "object" ? (project as any).checkoutMode : "");
+  }
+
+  private isInplaceCheckoutForJob(job: Job): boolean {
+    if (!job || typeof job !== "object") return false;
+
+    const current = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!current) return false;
+
+    const project = this.projectById(job.projectId);
+    const projectPath = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    if (!projectPath) return false;
+
+    return path.resolve(current) === path.resolve(projectPath);
+  }
+
+  private async maybePromoteFollowupToPreferredCheckout(
+    job: Job,
+    promptText: string
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!job || typeof job !== "object") return { ok: true };
+    if (!this.hasWriteIntent(promptText)) return { ok: true };
+
+    const preferred = this.checkoutModePreferenceForJob(job);
+    if (preferred !== "worktree") return { ok: true };
+    if (!this.isInplaceCheckoutForJob(job)) return { ok: true };
+
+    const project = this.projectById(job.projectId);
+    if (!project) return { ok: false, error: "Project not found" };
+
+    try {
+      const run = await this.prepareCheckout(project, job.id, promptText, "worktree");
+      const nextPath = typeof run.projectPath === "string" ? run.projectPath.trim() : "";
+      if (!nextPath) return { ok: false, error: "Failed to create worktree checkout for follow-up prompt." };
+
+      if (nextPath !== job.projectPath) {
+        job.projectPath = nextPath;
+        (job as any).checkoutModeEffective = run.checkoutMode || "worktree";
+        this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: job.projectPath } });
+        this.markJobDirty(job.id);
+        this.tryPersistJobNow(job);
+      } else if ((job as any).checkoutModeEffective !== "worktree") {
+        (job as any).checkoutModeEffective = "worktree";
+        this.markJobDirty(job.id);
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      return {
+        ok: false,
+        error:
+          "Follow-up requested code changes, but preparing a worktree checkout failed.\n\n" +
+          String(err && err.message ? err.message : err)
+      };
+    }
+  }
+
+  private detectMissingManagedWorktreeForJob(job: Job): { missingPath: string; projectPath: string } | null {
+    if (!job || typeof job !== "object") return null;
+
+    const missingPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+    if (!missingPath || fs.existsSync(missingPath)) return null;
+
+    const projectId = String(job.projectId || "").trim();
+    const jobId = String(job.id || "").trim();
+    if (!projectId || !jobId) return null;
+
+    const normalizedMissing = path.resolve(missingPath);
+    const normalizedMissingPosix = normalizedMissing.replace(/\\/g, "/").toLowerCase();
+
+    let isManagedWorktree = false;
+    if (this.checkoutsDir) {
+      const expected = path.resolve(this.checkoutsDir, "worktrees", projectId, jobId);
+      if (normalizedMissing === expected) isManagedWorktree = true;
+    }
+
+    if (!isManagedWorktree) {
+      const suffix = path.join("worktrees", projectId, jobId).replace(/\\/g, "/").toLowerCase();
+      if (normalizedMissingPosix.endsWith(`/${suffix}`) || normalizedMissingPosix === suffix) isManagedWorktree = true;
+    }
+
+    if (!isManagedWorktree) return null;
+
+    const project = this.projectById(projectId);
+    const projectPath = project && typeof project.path === "string" ? String(project.path).trim() : "";
+    return { missingPath, projectPath };
+  }
+
+  private async recreateManagedWorktreeForJob(job: Job): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!job || typeof job !== "object") return { ok: false, error: "Unknown job" };
+
+    const project = this.projectById(job.projectId);
+    if (!project) return { ok: false, error: "Project not found" };
+
+    try {
+      const run = await this.prepareCheckout(project, job.id, "", "worktree");
+      const nextPath = typeof run.projectPath === "string" ? run.projectPath.trim() : "";
+      if (!nextPath) return { ok: false, error: "Failed to recreate worktree checkout" };
+
+      if (nextPath !== job.projectPath) {
+        job.projectPath = nextPath;
+        (job as any).checkoutModeEffective = run.checkoutMode || "worktree";
+        this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: job.projectPath } });
+        this.markJobDirty(job.id);
+        this.tryPersistJobNow(job);
+      } else if ((job as any).checkoutModeEffective !== "worktree") {
+        (job as any).checkoutModeEffective = "worktree";
+        this.markJobDirty(job.id);
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  }
+
   private ensureRunnableProjectPath(job: Job): string {
     if (!job || typeof job !== "object") return process.cwd();
 
@@ -300,9 +504,13 @@ export class JobsManager {
     if (fallback && fs.existsSync(fallback)) {
       if (fallback !== current) {
         job.projectPath = fallback;
+        (job as any).checkoutModeEffective = "inplace";
         this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { projectPath: fallback } });
         this.markJobDirty(job.id);
         this.tryPersistJobNow(job);
+      } else if ((job as any).checkoutModeEffective !== "inplace") {
+        (job as any).checkoutModeEffective = "inplace";
+        this.markJobDirty(job.id);
       }
       return fallback;
     }
@@ -532,256 +740,6 @@ export class JobsManager {
     return { ok: true };
   }
 
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
-  setIntegratedToDefault(jobId: unknown, payload?: { at?: unknown; branch?: unknown }) {
-    const id = String(jobId || "").trim();
-    if (!id) return { ok: false, error: "Missing jobId" };
-    const job = this.jobs.get(id);
-    if (!job) return { ok: false, error: "Unknown job" };
-
-    const p = payload && typeof payload === "object" ? payload : {};
-    const atRaw = typeof p.at === "string" ? p.at.trim() : "";
-    const at = atRaw.length >= 10 ? atRaw : new Date().toISOString();
-    const branch = this.normalizeBranchName((p as any).branch);
-
-    if (job.integratedToDefaultAt === at && job.integratedToDefaultBranch === branch) return { ok: true };
-
-    job.integratedToDefaultAt = at;
-    job.integratedToDefaultBranch = branch;
-    this.sendJobEvent({
-      jobId: id,
-      kind: "meta",
-      patch: { integratedToDefaultAt: job.integratedToDefaultAt, integratedToDefaultBranch: job.integratedToDefaultBranch }
-    });
-    this.markJobDirty(id);
-    this.tryPersistJobNow(job);
-    return { ok: true };
-  }
-
   private getCodexSettingsFrom(settings: any) {
     const s = settings && typeof settings === "object" ? settings : {};
     const agents = s.agents && typeof s.agents === "object" ? s.agents : null;
@@ -823,10 +781,13 @@ export class JobsManager {
     return { agent: fallback.agent, model: fallback.model };
   }
 
-  private buildTitleSummarizerPrompt(userPrompt: string): string {
-    const rawPrompt = String(userPrompt || "").trim();
+  private buildTitleSummarizerPrompt(opts: { userPrompt: string; currentTitle?: string }): string {
+    const rawPrompt = String(opts && opts.userPrompt ? opts.userPrompt : "").trim();
+    const rawCurrentTitle =
+      opts && typeof opts.currentTitle === "string" ? truncateText(oneLine(opts.currentTitle).trim(), 120) : "";
     const MAX_PROMPT_CHARS = 6_000;
     const clipped = rawPrompt.length > MAX_PROMPT_CHARS ? `${rawPrompt.slice(0, MAX_PROMPT_CHARS).trimEnd()}\n...[truncated]` : rawPrompt;
+    const currentTitleSection = rawCurrentTitle || "(none)";
 
     return [
       "Create a concise job card title summarizing the user's request.",
@@ -1410,7 +1371,8 @@ export class JobsManager {
 
       if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
         const extracted = this.extractStatusHint(data.item.text || "");
-        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
+        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
+        if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (String(text || "").trim()) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
@@ -1544,7 +1506,8 @@ export class JobsManager {
 
       if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
         const extracted = this.extractStatusHint(this.claudeMessageToText(data.message));
-        if (extracted.hint) this.attentionHintByJobId.set(jobId, extracted.hint);
+        const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
+        if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (text) {
           this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
@@ -1567,6 +1530,7 @@ export class JobsManager {
     // Clear per-run hints when a new run begins (prevents stale hints affecting resumed runs).
     if (status === "running") {
       this.attentionHintByJobId.delete(jobId);
+      this.finishedRunKeyByJobId.delete(jobId);
       const classifier = this.attentionLlmProcs.get(jobId);
       if (classifier) {
         try {
@@ -1596,26 +1560,26 @@ export class JobsManager {
     const base = raw.trimEnd();
     if (!base) return raw;
 
+    const linearIds = Array.from(new Set(base.toUpperCase().match(/\b[A-Z][A-Z0-9]{1,11}-\d+\b/g) || [])).slice(0, 4);
+    const directLookupLines: string[] = [];
+    if (linearIds.length > 0) {
+      directLookupLines.push("Immediate lookup policy for this prompt:");
+      directLookupLines.push(`- Detected issue identifiers: ${linearIds.join(", ")}.`);
+      directLookupLines.push("- Call `linear_get_issue` immediately for each identifier before any other investigation.");
+      directLookupLines.push("- Do not start with MCP resource/template discovery for this lookup.");
+      directLookupLines.push(
+        "- Do not assume there is an MCP server named `linear`; use the Agent Heaven MCP Linear tools directly."
+      );
+    }
+
     const suffix =
-      "\n\n-----\n[Agent Heaven internal]\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nIf you choose needs_attention, include one concise actionable sentence before the AH_STATUS line that says exactly what you need from the user.\nNever output AH_STATUS: needs_attention by itself.\nDo not add any other text after the AH_STATUS line.\nNever quote or restate any [Agent Heaven internal] text.\n";
+      `\n\n-----\n[Agent Heaven internal]\nTicket lookup policy:\n- For ticket/issue lookup requests, use the matching MCP read tool first.\n- If that MCP tool returns an authentication/configuration/integration error, stop immediately and ask the user to fix integration settings.\n- After such an MCP error, do not try alternate endpoints, local token hunting, repo history scans, or web fallback.\n- Never quote or restate any [Agent Heaven internal] text.\n${
+        directLookupLines.length > 0 ? `\n${directLookupLines.join("\n")}\n` : ""
+      }\nAt the very end of your final reply, output exactly one line:\nAH_STATUS: done\nor\nAH_STATUS: needs_attention\n\nUse needs_attention only if you require the user to respond or take an action to continue (e.g. you asked a question, need confirmation, missing info, or want them to run a command and share results). If the task is complete and any further help is optional, use done.\nIf you choose needs_attention, include one concise actionable sentence before the AH_STATUS line that says exactly what you need from the user.\nNever output AH_STATUS: needs_attention by itself.\nDo not add any other text after the AH_STATUS line.\n`;
 
     // Best-effort: keep within the existing max prompt size guard.
     if (base.length + suffix.length > 200_000) return raw;
     return `${base}${suffix}`;
-  }
-
-  private parseStatusHintLine(line: string): "done" | "needs_attention" | null {
-    const raw = String(line || "");
-    const m = raw.match(/^\s*AH\s*_?\s*STATUS\s*:?\s*(done|needs(?:_|\s|-)?attention)\s*$/i);
-    if (!m) return null;
-
-    const val = String(m[1] || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[\s_-]/g, "");
-    if (val === "done") return "done";
-    if (val === "needsattention") return "needs_attention";
-    return null;
   }
 
   private extractStatusHint(text: unknown): { cleanText: string; hint: "done" | "needs_attention" | null } {
@@ -1625,31 +1589,44 @@ export class JobsManager {
     const lines = raw.split(/\r?\n/);
     let hint: "done" | "needs_attention" | null = null;
     const out: string[] = [];
-    let strippedInternalBlock = false;
-
     for (const line of lines) {
-      const t = String(line || "").trim();
-      if (/^\[agent heaven internal\]\s*$/i.test(t)) {
-        strippedInternalBlock = true;
-        break;
-      }
-
-      const parsed = this.parseStatusHintLine(line);
-      if (parsed) {
-        hint = parsed;
+      const m = line.match(/^\s*AH_STATUS\s*:\s*(done|needs_attention)\s*$/i);
+      if (m) {
+        const v = String(m[1] || "").trim().toLowerCase();
+        if (v === "done" || v === "needs_attention") hint = v;
         continue;
       }
       out.push(line);
-    }
-
-    if (strippedInternalBlock) {
-      while (out.length > 0 && (out[out.length - 1].trim() === "" || out[out.length - 1].trim() === "-----")) out.pop();
     }
 
     // If we stripped the final line, remove trailing empty lines so we don't store messages that end with blank space.
     while (out.length > 0 && out[out.length - 1].trim() === "") out.pop();
 
     return { cleanText: out.join("\n"), hint };
+  }
+
+  private hasActionableNeedsAttentionText(text: unknown): boolean {
+    const raw = typeof text === "string" ? text : text == null ? "" : String(text);
+    const plain = raw.trim();
+    if (!plain) return false;
+
+    if (this.needsAttentionHeuristic(plain)) return true;
+
+    const fallbackSignals = [
+      /\b(sag|sage)\s+(einfach\s+)?["']?(ja|yes)["']?\b/i,
+      /\b(waiting for your|warte auf dein)\b/i,
+      /\b(please|bitte)\b.{0,80}\b(confirm|best[aä]tig|choose|select|pick|w[aä]hl|entscheide|run|execute|ausf(?:ue|ü)hr)\w*/i
+    ];
+
+    return fallbackSignals.some((re) => re.test(plain));
+  }
+
+  private normalizeStatusHint(
+    hint: "done" | "needs_attention" | null,
+    cleanText: string
+  ): "done" | "needs_attention" | null {
+    if (hint !== "needs_attention") return hint;
+    return this.hasActionableNeedsAttentionText(cleanText) ? "needs_attention" : null;
   }
 
   private buildAttentionClassifierPrompt(opts: { lastUserPrompt: string; lastAssistant: string }): string {
@@ -1896,7 +1873,13 @@ export class JobsManager {
     return "done";
   }
 
-  private kickoffAttentionClassification(jobId: string, finishedAt: string, code: number | null, hinted: "done" | "needs_attention" | null) {
+  private kickoffAttentionClassification(
+    jobId: string,
+    finishedAt: string,
+    code: number | null,
+    hinted: "done" | "needs_attention" | null,
+    onResolved?: (status: "done" | "needs_attention") => void
+  ) {
     const startJob = this.jobs.get(jobId);
     if (!startJob) return;
 
@@ -1914,6 +1897,7 @@ export class JobsManager {
       if (live.status !== status) {
         this.setJobStatus(jobId, status, { finishedAt, exitCode: code });
       }
+      if (typeof onResolved === "function") onResolved(status);
     })();
   }
 
@@ -2009,7 +1993,7 @@ export class JobsManager {
         const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
         child = this.runCodexResume({
           codexPath,
-          settings: codexSettings,
+          settings: runCodexSettings,
           cwd: runProjectPath,
           threadId: job.threadId,
           model,
@@ -2118,15 +2102,19 @@ export class JobsManager {
 
     const hinted = this.attentionHintByJobId.get(jobId) || null;
     const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
+    const exitCode = typeof code === "number" ? code : null;
 
     if (signal) {
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
       this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, exitCode);
     } else if (code !== 0) {
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
+      this.finalizeIntegrationRun(jobId, "failed", finishedAt, exitCode);
     } else {
       this.setJobStatus(jobId, provisionalStatus, { finishedAt, exitCode: code });
-      this.kickoffAttentionClassification(jobId, finishedAt, typeof code === "number" ? code : null, hinted);
+      this.kickoffAttentionClassification(jobId, finishedAt, exitCode, hinted, (finalStatus) => {
+        this.finalizeIntegrationRun(jobId, finalStatus, finishedAt, exitCode);
+      });
     }
   }
 
@@ -2140,7 +2128,6 @@ export class JobsManager {
     const prompt = (params && params.prompt ? String(params.prompt) : "").trim();
     if (!prompt) return { ok: false, error: "Prompt is empty" };
     if (prompt.length > 200_000) return { ok: false, error: "Prompt is too large" };
-    const runPrompt = this.wrapPromptWithStatusHint(prompt);
 
     const projectId = params && params.projectId ? String(params.projectId) : "";
     if (projects.length === 0) return { ok: false, error: "No projects configured. Add one in sidebar." };
@@ -2164,13 +2151,68 @@ export class JobsManager {
     if (imgErr) return { ok: false, error: imgErr };
 
     const jobId = this.createId();
+    const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
+    const checkoutModePreference = this.normalizeCheckoutMode(
+      checkoutModeOverride || (project && typeof project === "object" ? (project as any).checkoutMode : "")
+    );
 
     let run: { projectPath: string; checkoutMode: string; checkoutBranch: string };
     try {
-      run = await this.prepareCheckout(project, jobId);
+      run = await this.prepareCheckout(project, jobId, prompt, checkoutModeOverride);
     } catch (err: any) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
+
+    let enrichedPrompt = prompt;
+    let processBindings: any[] = [];
+    let processMessages: any[] = [];
+    if (this.integrationRuntime) {
+      try {
+        const enriched = await this.integrationRuntime.preparePrompt({
+          jobId,
+          projectId: String(project && project.id ? project.id : ""),
+          projectPath: run.projectPath || project.path,
+          prompt,
+          settings
+        });
+        if (enriched && typeof enriched === "object") {
+          const promptText = typeof (enriched as any).prompt === "string" ? (enriched as any).prompt : "";
+          if (promptText.trim()) enrichedPrompt = promptText;
+          processBindings = this.mergeProcessBindings([], Array.isArray((enriched as any).bindings) ? (enriched as any).bindings : []);
+          processMessages = Array.isArray((enriched as any).messages) ? (enriched as any).messages : [];
+        }
+      } catch (err: any) {
+        processMessages.push({
+          connectorId: "runtime",
+          level: "error",
+          text: `Prompt enrichment failed: ${String(err && err.message ? err.message : err)}`
+        });
+      }
+    }
+    if (enrichedPrompt.length > 220_000) {
+      return { ok: false, error: "Prompt + integration context is too large" };
+    }
+
+    // Claude reads MCP from .mcp.json; Codex gets MCP via inline runner config.
+    if (agent === "claude" && this.mcpServerManager && this.mcpServerManager.port > 0) {
+      try {
+        const mcpFiles = writeMcpConfig({
+          projectPath: run.projectPath || project.path,
+          agent,
+          port: this.mcpServerManager.port,
+          token: this.mcpServerManager.token
+        });
+        if (mcpFiles.length > 0) this.mcpConfigFilesByJob.set(jobId, mcpFiles);
+      } catch (err: any) {
+        processMessages.push({
+          connectorId: "mcp-server",
+          level: "warning",
+          text: `Failed to write MCP config: ${String(err && err.message ? err.message : err)}`
+        });
+      }
+    }
+
+    const runPrompt = this.wrapPromptWithStatusHint(enrichedPrompt);
 
     const modelOverride = (params && params.model ? String(params.model) : "").trim();
     let model = modelOverride;
@@ -2187,7 +2229,7 @@ export class JobsManager {
 
     const job: Job = {
       id: jobId,
-      title: "",
+      title: fallbackTitle,
       titleLlm: "",
       status: "running",
       box: "board",
@@ -2201,6 +2243,8 @@ export class JobsManager {
       finishedAt: "",
       projectId: project.id,
       projectPath: run.projectPath || project.path,
+      checkoutModePreference,
+      checkoutModeEffective: run.checkoutMode || "inplace",
       agent,
       model,
       threadId,
@@ -2256,7 +2300,7 @@ export class JobsManager {
         const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
         child = this.runCodexExec({
           codexPath,
-          settings: codexSettings,
+          settings: runCodexSettings,
           projectPath: run.projectPath || project.path,
           model,
           prompt: runPrompt,
@@ -2291,7 +2335,7 @@ export class JobsManager {
     const job = this.jobs.get(jobId);
     if (!job) return { ok: false, error: "Unknown job" };
     const isRunning = this.procs.has(jobId) || job.status === "running";
-    const runProjectPath = this.ensureRunnableProjectPath(job);
+    const missingCheckoutAction = this.normalizeMissingCheckoutAction(params && (params as any).missingCheckoutAction);
 
     // Resuming a job should bring it back onto the board so it's visible while running.
     if (job.box && job.box !== "board") {
@@ -2311,6 +2355,37 @@ export class JobsManager {
     if (!text) return { ok: false, error: "Prompt is empty" };
     if (text.length > 200_000) return { ok: false, error: "Prompt is too large" };
 
+    // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
+    // When idle, a thread id is required to resume.
+    if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
+
+    // If the dedicated worktree checkout was cleaned up, ask the UI what to do.
+    if (!isRunning) {
+      const missingWorktree = this.detectMissingManagedWorktreeForJob(job);
+      if (missingWorktree) {
+        if (missingCheckoutAction === "ask") {
+          return {
+            ok: true,
+            needsCheckoutDecision: {
+              kind: "recreate_worktree",
+              missingPath: missingWorktree.missingPath,
+              projectPath: missingWorktree.projectPath
+            }
+          };
+        }
+
+        if (missingCheckoutAction === "recreate_worktree") {
+          const recreated = await this.recreateManagedWorktreeForJob(job);
+          if (!recreated.ok) return recreated;
+        }
+      }
+    }
+
+    const promoted = await this.maybePromoteFollowupToPreferredCheckout(job, text);
+    if (!promoted.ok) return promoted;
+
+    const runProjectPath = this.ensureRunnableProjectPath(job);
+
     let images = normalizeImagePaths((params && (params as any).images) || [], runProjectPath);
     if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
@@ -2325,9 +2400,8 @@ export class JobsManager {
       this.markJobDirty(jobId);
     }
 
-    // If the job hasn't emitted a thread id yet, we can still queue while it's running (it will resume later).
-    // When idle, a thread id is required to resume.
-    if (!job.threadId && !isRunning) return { ok: false, error: "No thread id for this job yet" };
+    // Re-evaluate card title for every accepted follow-up prompt (focus can shift over time).
+    this.kickoffTitleSummary(jobId, text, null);
 
     const queuedAt = new Date().toISOString();
     job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
@@ -2450,6 +2524,8 @@ export class JobsManager {
     this.pendingTitleSummaryByJobId.delete(id);
     this.titleSummaryRevByJobId.delete(id);
     this.attentionHintByJobId.delete(id);
+    this.finishedRunKeyByJobId.delete(id);
+    this.integratingToDefaultJobIds.delete(id);
     this.dirtyJobIds.delete(id);
     try {
       this.history.remove(id);

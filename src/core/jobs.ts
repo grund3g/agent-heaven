@@ -105,6 +105,8 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   out.queuedPrompts = Array.isArray(out.queuedPrompts) ? out.queuedPrompts : [];
   out.messages = Array.isArray(out.messages) ? out.messages : [];
   out.logs = Array.isArray(out.logs) ? out.logs : [];
+  out.processBindings = Array.isArray(out.processBindings) ? out.processBindings : [];
+  out.processEvents = Array.isArray(out.processEvents) ? out.processEvents : [];
   if (!out.title) out.title = jobTitleFromPrompts(out.prompts);
 
   out.usage = out.usage && typeof out.usage === "object" ? out.usage : null;

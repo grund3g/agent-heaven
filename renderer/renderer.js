@@ -10,6 +10,7 @@ const api = window.agentHeaven;
 	  openStatusBtn: document.getElementById("openStatusBtn"),
 	  openStatusSidebarBtn: document.getElementById("openStatusSidebarBtn"),
 	  toggleSidebarBtn: document.getElementById("toggleSidebarBtn"),
+	  toggleSidebarCollapsedBtn: document.getElementById("toggleSidebarCollapsedBtn"),
   tableScopeCtl: document.getElementById("tableScopeCtl"),
   tableScopeSelect: document.getElementById("tableScopeSelect"),
   sortSelect: document.getElementById("sortSelect"),
@@ -81,20 +82,38 @@ const api = window.agentHeaven;
   projectShortNameInput: document.getElementById("projectShortNameInput"),
   projectDefaultBranchInput: document.getElementById("projectDefaultBranchInput"),
   projectCheckoutModeSelect: document.getElementById("projectCheckoutModeSelect"),
+  projectDialogOpenFinderBtn: document.getElementById("projectDialogOpenFinderBtn"),
   projectDialogSave: document.getElementById("projectDialogSave"),
+  projectDialogRemoveBtn: document.getElementById("projectDialogRemoveBtn"),
 
   branchDialog: document.getElementById("branchDialog"),
   branchDialogClose: document.getElementById("branchDialogClose"),
   branchDialogMeta: document.getElementById("branchDialogMeta"),
-  branchDialogText: document.getElementById("branchDialogText"),
-  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
-  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
-  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
+	  branchDialogText: document.getElementById("branchDialogText"),
+	  branchDialogCheckoutBtn: document.getElementById("branchDialogCheckoutBtn"),
+	  branchDialogRunBtn: document.getElementById("branchDialogRunBtn"),
+	  branchDialogRunNoAskBtn: document.getElementById("branchDialogRunNoAskBtn"),
+	  branchDialogCancelBtn: document.getElementById("branchDialogCancelBtn"),
 
-  checkoutsDialog: document.getElementById("checkoutsDialog"),
-  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
-  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
-  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
+	  integrateDialog: document.getElementById("integrateDialog"),
+	  integrateDialogTitle: document.getElementById("integrateDialogTitle"),
+	  integrateDialogMeta: document.getElementById("integrateDialogMeta"),
+	  integrateDialogClose: document.getElementById("integrateDialogClose"),
+	  integrateDialogIcon: document.getElementById("integrateDialogIcon"),
+	  integrateDialogStatus: document.getElementById("integrateDialogStatus"),
+	  integrateDialogMessage: document.getElementById("integrateDialogMessage"),
+	  integrateDialogResultWrap: document.getElementById("integrateDialogResultWrap"),
+	  integrateDialogResult: document.getElementById("integrateDialogResult"),
+	  integrateDialogRevealBtn: document.getElementById("integrateDialogRevealBtn"),
+	  integrateDialogDetailsBtn: document.getElementById("integrateDialogDetailsBtn"),
+	  integrateDialogCancelBtn: document.getElementById("integrateDialogCancelBtn"),
+	  integrateDialogStartBtn: document.getElementById("integrateDialogStartBtn"),
+	  integrateDialogArchiveBtn: document.getElementById("integrateDialogArchiveBtn"),
+
+	  checkoutsDialog: document.getElementById("checkoutsDialog"),
+	  checkoutsDialogClose: document.getElementById("checkoutsDialogClose"),
+	  checkoutsDialogClose2: document.getElementById("checkoutsDialogClose2"),
+	  checkoutsDialogMeta: document.getElementById("checkoutsDialogMeta"),
   checkoutsDialogBody: document.getElementById("checkoutsDialogBody"),
   checkoutsDialogRefresh: document.getElementById("checkoutsDialogRefresh"),
 
@@ -102,14 +121,20 @@ const api = window.agentHeaven;
 
 	  settingsDialog: document.getElementById("settingsDialog"),
 	  settingsDialogClose: document.getElementById("settingsDialogClose"),
-		  settingsCodexPath: document.getElementById("settingsCodexPath"),
-		  settingsCodexModel: document.getElementById("settingsCodexModel"),
-		  settingsUiModel: document.getElementById("settingsUiModel"),
-			  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
-			  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
-		  settingsTheme: document.getElementById("settingsTheme"),
-		  settingsColorScheme: document.getElementById("settingsColorScheme"),
-		  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
+	  settingsSection: document.getElementById("settingsSection"),
+	  closeSettingsPageBtn: document.getElementById("closeSettingsPageBtn"),
+	  saveSettingsPageBtn: document.getElementById("saveSettingsPageBtn"),
+	  mcpStatusBadge: document.getElementById("mcpStatusBadge"),
+	  settingsCodexPath: document.getElementById("settingsCodexPath"),
+	  settingsCodexModel: document.getElementById("settingsCodexModel"),
+	  settingsCodexTransport: document.getElementById("settingsCodexTransport"),
+	  settingsUiModel: document.getElementById("settingsUiModel"),
+	  settingsUiModelCustom: document.getElementById("settingsUiModelCustom"),
+	  settingsUiModelCodexGroup: document.getElementById("settingsUiModelCodexGroup"),
+	  settingsTheme: document.getElementById("settingsTheme"),
+	  settingsColorScheme: document.getElementById("settingsColorScheme"),
+	  settingsEditorPreset: document.getElementById("settingsEditorPreset"),
+	  settingsEditorCommand: document.getElementById("settingsEditorCommand"),
 		  settingsCodexSandboxMode: document.getElementById("settingsCodexSandboxMode"),
 		  settingsCodexSkipGitRepoCheck: document.getElementById("settingsCodexSkipGitRepoCheck"),
 		  settingsCodexBypass: document.getElementById("settingsCodexBypass"),
@@ -131,14 +156,35 @@ const api = window.agentHeaven;
 	  settingsSoundVolume: document.getElementById("settingsSoundVolume"),
 			  settingsTestSoundAttention: document.getElementById("settingsTestSoundAttention"),
 			  settingsTestSoundDone: document.getElementById("settingsTestSoundDone"),
-	  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
-	  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
-	  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
-	  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
-  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
-  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
-  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
-  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
+		  settingsBoardDoneLimit: document.getElementById("settingsBoardDoneLimit"),
+		  settingsAttentionOnQuestionPrompts: document.getElementById("settingsAttentionOnQuestionPrompts"),
+		  settingsIntegrateAutoArchive: document.getElementById("settingsIntegrateAutoArchive"),
+		  settingsIntegrateToDefaultMode: document.getElementById("settingsIntegrateToDefaultMode"),
+	  settingsIntegrationsEnabled: document.getElementById("settingsIntegrationsEnabled"),
+	  settingsIntegrationsAutoEnrichPrompt: document.getElementById("settingsIntegrationsAutoEnrichPrompt"),
+	  settingsIntegrationsAutoCommentOnComplete: document.getElementById("settingsIntegrationsAutoCommentOnComplete"),
+	  settingsIntegrationsRequestTimeoutMs: document.getElementById("settingsIntegrationsRequestTimeoutMs"),
+	  settingsIntegrationsLinearEnabled: document.getElementById("settingsIntegrationsLinearEnabled"),
+	  settingsIntegrationsLinearApiBaseUrl: document.getElementById("settingsIntegrationsLinearApiBaseUrl"),
+	  settingsIntegrationsLinearToken: document.getElementById("settingsIntegrationsLinearToken"),
+	  settingsIntegrationsLinearTokenEnvVar: document.getElementById("settingsIntegrationsLinearTokenEnvVar"),
+	  settingsIntegrationsLinearMaxIssuesPerPrompt: document.getElementById("settingsIntegrationsLinearMaxIssuesPerPrompt"),
+	  settingsIntegrationsLinearIncludeDescription: document.getElementById("settingsIntegrationsLinearIncludeDescription"),
+	  settingsIntegrationsGithubEnabled: document.getElementById("settingsIntegrationsGithubEnabled"),
+	  settingsIntegrationsGithubApiBaseUrl: document.getElementById("settingsIntegrationsGithubApiBaseUrl"),
+	  settingsIntegrationsGithubToken: document.getElementById("settingsIntegrationsGithubToken"),
+	  settingsIntegrationsGithubTokenEnvVar: document.getElementById("settingsIntegrationsGithubTokenEnvVar"),
+	  settingsIntegrationsGithubMaxIssuesPerPrompt: document.getElementById("settingsIntegrationsGithubMaxIssuesPerPrompt"),
+	  settingsIntegrationsNotionEnabled: document.getElementById("settingsIntegrationsNotionEnabled"),
+	  settingsIntegrationsNotionApiBaseUrl: document.getElementById("settingsIntegrationsNotionApiBaseUrl"),
+	  settingsIntegrationsNotionToken: document.getElementById("settingsIntegrationsNotionToken"),
+	  settingsIntegrationsNotionTokenEnvVar: document.getElementById("settingsIntegrationsNotionTokenEnvVar"),
+	  settingsIntegrationsNotionVersion: document.getElementById("settingsIntegrationsNotionVersion"),
+	  settingsIntegrationsNotionMaxPagesPerPrompt: document.getElementById("settingsIntegrationsNotionMaxPagesPerPrompt"),
+	  settingsHelperDefaultAgent: document.getElementById("settingsHelperDefaultAgent"),
+	  settingsHelperDefaultModel: document.getElementById("settingsHelperDefaultModel"),
+	  settingsHelperPersistHistory: document.getElementById("settingsHelperPersistHistory"),
+	  settingsHelperClearHistoryBtn: document.getElementById("settingsHelperClearHistoryBtn"),
 
 	  settingsActionsList: document.getElementById("settingsActionsList"),
 	  settingsActionsAddBtn: document.getElementById("settingsActionsAddBtn"),
@@ -197,17 +243,20 @@ const api = window.agentHeaven;
   imageDialogClose: document.getElementById("imageDialogClose"),
   imageDialogImg: document.getElementById("imageDialogImg"),
 
+  helperThinkingIndicator: document.getElementById("helperThinkingIndicator"),
   helperBubbleBtn: document.getElementById("helperBubbleBtn"),
   helperPanel: document.getElementById("helperPanel"),
   helperPanelClose: document.getElementById("helperPanelClose"),
   helperMeta: document.getElementById("helperMeta"),
   helperAgentSelect: document.getElementById("helperAgentSelect"),
-  helperModelInput: document.getElementById("helperModelInput"),
+  helperContextScopeSelect: document.getElementById("helperContextScopeSelect"),
+  helperSessionSelect: document.getElementById("helperSessionSelect"),
+  helperNewSessionBtn: document.getElementById("helperNewSessionBtn"),
+  helperClearSessionBtn: document.getElementById("helperClearSessionBtn"),
   helperMessages: document.getElementById("helperMessages"),
   helperInput: document.getElementById("helperInput"),
   helperSendBtn: document.getElementById("helperSendBtn"),
-  helperToPromptBtn: document.getElementById("helperToPromptBtn"),
-  helperCreateTaskBtn: document.getElementById("helperCreateTaskBtn")
+  helperToPromptBtn: document.getElementById("helperToPromptBtn")
 };
 
 const state = {
@@ -220,6 +269,7 @@ const state = {
   activeTab: "chat",
   cardEls: new Map(), // jobId -> HTMLElement
   view: "board", // board | archive | trash
+  lastMainView: "board", // last non-settings view
   displayMode: "cards", // cards | table
   tableScope: "view", // view | all (table mode only)
   focusLane: "", // running | attention | done (popout window)
@@ -236,12 +286,8 @@ const state = {
   statusRenderTimer: null,
   durationTimer: null,
   projectRefreshTimer: null,
-
-  editingProjectId: "",
-  branchDialogResolver: null,
-  checkoutsProjectId: "",
-  checkoutsEntries: [],
-  checkoutsLoading: false,
+  projectRefreshInFlight: false,
+  composerCheckoutModeProjectId: "",
 
   editingProjectId: "",
   branchDialogResolver: null,
@@ -269,6 +315,9 @@ const state = {
 
   helperOpen: false,
   helperPending: false,
+  helperReopenOnReply: false,
+  helperSessions: [],
+  helperSessionId: "",
   helperMessages: [],
   helperLastRunner: ""
 };
@@ -297,7 +346,9 @@ const STORAGE = {
   composerDraft: "agentHeaven.draft.composer",
   agentBinariesToastAt: "agentHeaven.agentBinaries.toastAt.v1",
   onboardingSeen: "agentHeaven.onboarding.seen.v1",
-  helperHistory: "agentHeaven.helper.history.v1"
+  helperHistory: "agentHeaven.helper.history.v1",
+  helperSessions: "agentHeaven.helper.sessions.v2",
+  helperContextScope: "agentHeaven.helper.contextScope.v1"
 };
 
 const DEMO = {
@@ -316,6 +367,7 @@ const PROMPT_PATH_SUGGEST_DEBOUNCE_MS = 90;
 const PROMPT_PATH_SUGGEST_CURSOR_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 let promptPathSuggestTimer = null;
 let promptPathSuggestReqSeq = 0;
+const OFFLINE_TOAST_MESSAGE = "No internet connection. Some actions may fail until you're back online.";
 const promptPathSuggestState = {
   open: false,
   mode: "insert", // insert | attach
@@ -324,8 +376,18 @@ const promptPathSuggestState = {
 };
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
+const HELPER_CONTEXT_GLOBAL_VALUE = "global";
+const HELPER_CONTEXT_PROJECT_PREFIX = "project:";
+const HELPER_SESSION_MAX = 12;
+const HELPER_SESSION_MESSAGES_MAX = 80;
+const HELPER_SESSION_TEXT_MAX = 4000;
 const EDITOR_PRESET_CUSTOM_VALUE = "__custom__";
 const EDITOR_PRESET_VALUES = new Set(["code", "cursor", "windsurf", "zed", "subl", "nvim", "vim", "idea", "webstorm", "pycharm", "goland"]);
+const JOB_DIFF_CACHE_TTL_MS = 25_000;
+const JOB_DIFF_MAX_CHARS = 180_000;
+const jobDiffCache = new Map(); // jobId -> { sig, fetchedAt, payload }
+const jobDiffUiState = new Map(); // jobId -> { filterText, selectedFileId }
+let jobDiffReqSeq = 0;
 
 let followupAutosizeRaf = 0;
 
@@ -805,9 +867,21 @@ function stashTitlesInTree(root) {
   for (const node of matches) stashNativeTitle(node);
 }
 
-function ensureTokenTooltipEl() {
-  if (tokenTooltip.root) return tokenTooltip.root;
+function tooltipHostForElement(el) {
   if (!document || !document.body) return null;
+  if (!el || typeof el.closest !== "function") return document.body;
+  const dlg = el.closest("dialog[open]");
+  if (dlg && dlg.nodeType === Node.ELEMENT_NODE) return dlg;
+  return document.body;
+}
+
+function ensureTokenTooltipEl(hostEl) {
+  if (!document || !document.body) return null;
+  const host = hostEl && hostEl.nodeType === Node.ELEMENT_NODE ? hostEl : document.body;
+  if (tokenTooltip.root) {
+    if (tokenTooltip.root.parentElement !== host) host.appendChild(tokenTooltip.root);
+    return tokenTooltip.root;
+  }
   const wrap = document.createElement("div");
   wrap.className = "tokenTooltip";
   wrap.setAttribute("role", "tooltip");
@@ -815,7 +889,7 @@ function ensureTokenTooltipEl() {
   const text = document.createElement("div");
   text.className = "tokenTooltip__text";
   wrap.appendChild(text);
-  document.body.appendChild(wrap);
+  host.appendChild(wrap);
   tokenTooltip.root = wrap;
   tokenTooltip.textEl = text;
   return wrap;
@@ -837,9 +911,10 @@ function hideTokenTooltip() {
 }
 
 function positionTokenTooltip() {
-  const root = tokenTooltip.root;
   const activeEl = tokenTooltip.activeEl;
-  if (!root || !activeEl) return;
+  if (!activeEl) return;
+  const root = ensureTokenTooltipEl(tooltipHostForElement(activeEl));
+  if (!root) return;
   if (!document.body || !document.body.contains(activeEl)) {
     hideTokenTooltip();
     return;
@@ -901,7 +976,7 @@ function showTokenTooltipFor(target) {
     hideTokenTooltip();
     return;
   }
-  if (!ensureTokenTooltipEl()) return;
+  if (!ensureTokenTooltipEl(tooltipHostForElement(target))) return;
   tokenTooltip.activeEl = target;
   if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
   scheduleTokenTooltipPosition();
@@ -1364,6 +1439,83 @@ function normalizeHelperModelValue(value) {
     .slice(0, 160);
 }
 
+function helperContextValueForProjectId(projectId) {
+  const id = String(projectId || "").trim();
+  return id ? `${HELPER_CONTEXT_PROJECT_PREFIX}${id}` : HELPER_CONTEXT_GLOBAL_VALUE;
+}
+
+function helperProjectIdFromContextValue(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const low = raw.toLowerCase();
+  if (low === HELPER_CONTEXT_GLOBAL_VALUE || low === "project") return "";
+  if (!raw.startsWith(HELPER_CONTEXT_PROJECT_PREFIX)) return raw;
+  return String(raw.slice(HELPER_CONTEXT_PROJECT_PREFIX.length) || "").trim();
+}
+
+function helperProjectById(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id) return null;
+  return state.projects.find((p) => p && String(p.id || "").trim() === id) || null;
+}
+
+function helperDefaultProjectIdForContext() {
+  const selected = String(els.projectSelect && els.projectSelect.value ? els.projectSelect.value : "").trim();
+  if (selected && selected !== "auto" && selected !== TEMP_PROJECT_OPTION_VALUE) {
+    const hit = helperProjectById(selected);
+    if (hit) return String(hit.id || "").trim();
+    if (state.projects.length === 0) return selected;
+  }
+
+  const stored = String(getStoredProjectId() || "").trim();
+  if (stored) {
+    const hit = helperProjectById(stored);
+    if (hit) return String(hit.id || "").trim();
+    if (state.projects.length === 0) return stored;
+  }
+
+  if (state.projects.length === 1) {
+    const only = state.projects[0];
+    return only && only.id ? String(only.id).trim() : "";
+  }
+  return "";
+}
+
+function normalizeHelperContextScope(value, opts = {}) {
+  const raw = String(value || "").trim();
+  const fallbackProjectId = String(opts && opts.defaultProjectId ? opts.defaultProjectId : "").trim();
+  const fallback = fallbackProjectId ? helperContextValueForProjectId(fallbackProjectId) : HELPER_CONTEXT_GLOBAL_VALUE;
+  if (!raw) return HELPER_CONTEXT_GLOBAL_VALUE;
+
+  const low = raw.toLowerCase();
+  if (low === HELPER_CONTEXT_GLOBAL_VALUE) return HELPER_CONTEXT_GLOBAL_VALUE;
+  if (low === "project") return fallback;
+
+  const explicitProjectId = helperProjectIdFromContextValue(raw);
+  if (explicitProjectId) return helperContextValueForProjectId(explicitProjectId);
+  return HELPER_CONTEXT_GLOBAL_VALUE;
+}
+
+function getStoredHelperContextScope() {
+  const fallbackProjectId = helperDefaultProjectIdForContext();
+  try {
+    const raw = window.localStorage.getItem(STORAGE.helperContextScope) || "";
+    return normalizeHelperContextScope(raw, { defaultProjectId: fallbackProjectId });
+  } catch {
+    return fallbackProjectId ? helperContextValueForProjectId(fallbackProjectId) : HELPER_CONTEXT_GLOBAL_VALUE;
+  }
+}
+
+function storeHelperContextScope(scope) {
+  try {
+    const fallbackProjectId = helperDefaultProjectIdForContext();
+    const v = normalizeHelperContextScope(scope, { defaultProjectId: fallbackProjectId });
+    window.localStorage.setItem(STORAGE.helperContextScope, v);
+  } catch {
+    // ignore
+  }
+}
+
 function helperDefaultAgentFromSettings(settings = state.settings) {
   const s = settings && typeof settings === "object" ? settings : {};
   return normalizeHelperAgentSelection(s.helperDefaultAgent);
@@ -1382,43 +1534,128 @@ function helperPersistHistoryFromSettings(settings = state.settings) {
   return s.helperPersistHistory !== false;
 }
 
+function normalizeHelperMessageItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
+  if (!role) return null;
+  const text = String(item.text || "").trim();
+  if (!text) return null;
+  return {
+    id: typeof item.id === "string" ? item.id : safeUuid(),
+    role,
+    text: text.slice(0, HELPER_SESSION_TEXT_MAX),
+    ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
+    agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
+    model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
+  };
+}
+
+function normalizeHelperMessages(messages, limit = HELPER_SESSION_MESSAGES_MAX) {
+  const arr = Array.isArray(messages) ? messages : [];
+  const out = [];
+  for (const item of arr) {
+    const next = normalizeHelperMessageItem(item);
+    if (!next) continue;
+    out.push(next);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function helperRunnerFromMessages(messages) {
+  const arr = Array.isArray(messages) ? messages : [];
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const m = arr[i];
+    if (!m || m.role !== "assistant") continue;
+    const agent = normalizeAgentKey(m.agent || "");
+    if (agent) return agentDisplayName(agent);
+  }
+  return "";
+}
+
+function normalizeHelperSessionRecord(item) {
+  if (!item || typeof item !== "object") return null;
+  const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : safeUuid();
+  const messages = normalizeHelperMessages(item.messages);
+  const fallbackTs = new Date().toISOString();
+  const createdAtRaw = typeof item.createdAt === "string" ? item.createdAt : "";
+  const updatedAtRaw = typeof item.updatedAt === "string" ? item.updatedAt : "";
+  const createdAt = createdAtRaw || (messages.length > 0 && messages[0].ts ? messages[0].ts : fallbackTs);
+  const updatedAt = updatedAtRaw || (messages.length > 0 && messages[messages.length - 1].ts ? messages[messages.length - 1].ts : createdAt);
+  const lastRunnerRaw = typeof item.lastRunner === "string" ? item.lastRunner.trim() : "";
+  const lastRunner = lastRunnerRaw || helperRunnerFromMessages(messages);
+  return { id, createdAt, updatedAt, lastRunner: lastRunner.slice(0, 64), messages };
+}
+
+function normalizeHelperSessions(sessions, activeSessionId = "") {
+  const arr = Array.isArray(sessions) ? sessions : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const next = normalizeHelperSessionRecord(item);
+    if (!next) continue;
+    if (seen.has(next.id)) continue;
+    seen.add(next.id);
+    out.push(next);
+  }
+  out.sort((a, b) => {
+    const ta = Number(new Date(a.updatedAt || a.createdAt || 0).getTime()) || 0;
+    const tb = Number(new Date(b.updatedAt || b.createdAt || 0).getTime()) || 0;
+    return tb - ta;
+  });
+
+  let trimmed = out;
+  if (out.length > HELPER_SESSION_MAX) {
+    if (activeSessionId && out.some((s) => s.id === activeSessionId)) {
+      const keep = out.filter((s) => s.id === activeSessionId).slice(0, 1);
+      const rest = out.filter((s) => s.id !== activeSessionId).slice(0, HELPER_SESSION_MAX - 1);
+      trimmed = [...keep, ...rest];
+      trimmed.sort((a, b) => {
+        const ta = Number(new Date(a.updatedAt || a.createdAt || 0).getTime()) || 0;
+        const tb = Number(new Date(b.updatedAt || b.createdAt || 0).getTime()) || 0;
+        return tb - ta;
+      });
+    } else {
+      trimmed = out.slice(0, HELPER_SESSION_MAX);
+    }
+  }
+
+  let active = String(activeSessionId || "").trim();
+  if (!active || !trimmed.some((s) => s.id === active)) active = trimmed[0] ? trimmed[0].id : "";
+  return { sessions: trimmed, activeSessionId: active };
+}
+
+function createHelperSessionRecord(opts = {}) {
+  const now = new Date().toISOString();
+  const rawMessages = Array.isArray(opts.messages) ? opts.messages : [];
+  const messages = normalizeHelperMessages(rawMessages);
+  const id = typeof opts.id === "string" && opts.id.trim() ? opts.id.trim() : safeUuid();
+  return {
+    id,
+    createdAt: typeof opts.createdAt === "string" && opts.createdAt ? opts.createdAt : now,
+    updatedAt: typeof opts.updatedAt === "string" && opts.updatedAt ? opts.updatedAt : now,
+    lastRunner: typeof opts.lastRunner === "string" ? String(opts.lastRunner).trim().slice(0, 64) : helperRunnerFromMessages(messages),
+    messages
+  };
+}
+
 function clearStoredHelperHistory() {
   try {
     window.localStorage.removeItem(STORAGE.helperHistory);
+    window.localStorage.removeItem(STORAGE.helperSessions);
   } catch {
     // ignore
   }
 }
 
 function storeHelperHistory(messages) {
-  const arr = Array.isArray(messages) ? messages : [];
-  const out = [];
-  for (const item of arr) {
-    if (!item || typeof item !== "object") continue;
-    const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
-    if (!role) continue;
-    const text = String(item.text || "").trim();
-    if (!text) continue;
-    out.push({
-      id: typeof item.id === "string" ? item.id : safeUuid(),
-      role,
-      text: text.slice(0, 12000),
-      ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
-      agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
-      model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
-    });
-    if (out.length >= 80) break;
+  const out = normalizeHelperMessages(messages);
+  if (out.length === 0) {
+    clearStoredHelperHistory();
+    return;
   }
-
-  try {
-    if (out.length === 0) {
-      clearStoredHelperHistory();
-      return;
-    }
-    window.localStorage.setItem(STORAGE.helperHistory, JSON.stringify(out));
-  } catch {
-    // ignore
-  }
+  const seeded = createHelperSessionRecord({ messages: out });
+  storeHelperSessions([seeded], seeded.id);
 }
 
 function getStoredHelperHistory() {
@@ -1427,27 +1664,61 @@ function getStoredHelperHistory() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const arr = Array.isArray(parsed) ? parsed : [];
-    const out = [];
-    for (const item of arr) {
-      if (!item || typeof item !== "object") continue;
-      const role = item.role === "assistant" ? "assistant" : item.role === "user" ? "user" : "";
-      if (!role) continue;
-      const text = String(item.text || "").trim();
-      if (!text) continue;
-      out.push({
-        id: typeof item.id === "string" ? item.id : safeUuid(),
-        role,
-        text: text.slice(0, 12000),
-        ts: typeof item.ts === "string" ? item.ts : new Date().toISOString(),
-        agent: role === "assistant" ? normalizeHelperAgentSelection(item.agent) : "",
-        model: role === "assistant" ? normalizeHelperModelValue(item.model) : ""
-      });
-      if (out.length >= 80) break;
-    }
-    return out;
+    return normalizeHelperMessages(arr);
   } catch {
     return [];
   }
+}
+
+function storeHelperSessions(sessions, activeSessionId = "") {
+  const normalized = normalizeHelperSessions(sessions, activeSessionId);
+  try {
+    if (!normalized.sessions || normalized.sessions.length === 0) {
+      window.localStorage.removeItem(STORAGE.helperSessions);
+      window.localStorage.removeItem(STORAGE.helperHistory);
+      return;
+    }
+    window.localStorage.setItem(
+      STORAGE.helperSessions,
+      JSON.stringify({
+        sessions: normalized.sessions,
+        activeSessionId: normalized.activeSessionId
+      })
+    );
+    // Keep key cleanup for migrated installs.
+    window.localStorage.removeItem(STORAGE.helperHistory);
+  } catch {
+    // ignore
+  }
+}
+
+function getStoredHelperSessions() {
+  try {
+    const raw = window.localStorage.getItem(STORAGE.helperSessions) || "";
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const sessions = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === "object" && Array.isArray(parsed.sessions)
+          ? parsed.sessions
+          : [];
+      const activeSessionId = parsed && typeof parsed === "object" ? String(parsed.activeSessionId || "").trim() : "";
+      return normalizeHelperSessions(sessions, activeSessionId);
+    }
+  } catch {
+    // ignore
+  }
+
+  const legacy = getStoredHelperHistory();
+  if (!Array.isArray(legacy) || legacy.length === 0) return { sessions: [], activeSessionId: "" };
+  const seeded = createHelperSessionRecord({
+    messages: legacy,
+    createdAt: legacy[0] && legacy[0].ts ? String(legacy[0].ts) : "",
+    updatedAt: legacy[legacy.length - 1] && legacy[legacy.length - 1].ts ? String(legacy[legacy.length - 1].ts) : ""
+  });
+  const normalized = normalizeHelperSessions([seeded], seeded.id);
+  storeHelperSessions(normalized.sessions, normalized.activeSessionId);
+  return normalized;
 }
 
 function getStoredAgentBinariesToastAtMs() {
@@ -1958,6 +2229,10 @@ function normalizeImageList(list) {
   return normalizePathList(list);
 }
 
+function normalizeFileList(list) {
+  return normalizePathList(list);
+}
+
 function mergeImages(existing, added, maxCount = 8) {
   const out = normalizeImageList([...(existing || []), ...(added || [])]);
   return out.slice(0, Math.max(0, maxCount));
@@ -2013,162 +2288,6 @@ function droppedFileEntries(e) {
   }
 
   return Array.from(out.values());
-}
-
-function imagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizeImageList(
-    arr
-      .filter((f) => f && f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function nonImagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizePathList(
-    arr
-      .filter((f) => f && !f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function appendPathsToTextarea(inputEl, paths) {
-  if (!inputEl || typeof inputEl.value !== "string") return;
-  const arr = normalizePathList(paths);
-  if (arr.length === 0) return;
-
-  const block = `Files:\n${arr.join("\n")}`;
-  const prev = inputEl.value || "";
-  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
-  inputEl.value = next;
-
-  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
-  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
-
-  try {
-    inputEl.focus();
-    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
-  } catch {
-    // ignore
-  }
-}
-
-function imagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizeImageList(
-    arr
-      .filter((f) => f && f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function nonImagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizePathList(
-    arr
-      .filter((f) => f && !f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function appendPathsToTextarea(inputEl, paths) {
-  if (!inputEl || typeof inputEl.value !== "string") return;
-  const arr = normalizePathList(paths);
-  if (arr.length === 0) return;
-
-  const block = `Files:\n${arr.join("\n")}`;
-  const prev = inputEl.value || "";
-  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
-  inputEl.value = next;
-
-  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
-  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
-
-  try {
-    inputEl.focus();
-    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
-  } catch {
-    // ignore
-  }
-}
-
-function imagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizeImageList(
-    arr
-      .filter((f) => f && f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function nonImagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizePathList(
-    arr
-      .filter((f) => f && !f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function appendPathsToTextarea(inputEl, paths) {
-  if (!inputEl || typeof inputEl.value !== "string") return;
-  const arr = normalizePathList(paths);
-  if (arr.length === 0) return;
-
-  const block = `Files:\n${arr.join("\n")}`;
-  const prev = inputEl.value || "";
-  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
-  inputEl.value = next;
-
-  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
-  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
-
-  try {
-    inputEl.focus();
-    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
-  } catch {
-    // ignore
-  }
-}
-
-function imagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizeImageList(
-    arr
-      .filter((f) => f && f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function nonImagePathsFromDroppedEntries(entries) {
-  const arr = Array.isArray(entries) ? entries : [];
-  return normalizePathList(
-    arr
-      .filter((f) => f && !f.isImage)
-      .map((f) => (f && typeof f.path === "string" ? f.path : ""))
-  );
-}
-
-function appendPathsToTextarea(inputEl, paths) {
-  if (!inputEl || typeof inputEl.value !== "string") return;
-  const arr = normalizePathList(paths);
-  if (arr.length === 0) return;
-
-  const block = `Files:\n${arr.join("\n")}`;
-  const prev = inputEl.value || "";
-  const next = prev ? `${prev.replace(/\s*$/, "")}\n\n${block}\n` : `${block}\n`;
-  inputEl.value = next;
-
-  if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
-  if (inputEl === els.followupInput) scheduleAutosizeFollowupInput();
-
-  try {
-    inputEl.focus();
-    inputEl.selectionStart = inputEl.selectionEnd = inputEl.value.length;
-  } catch {
-    // ignore
-  }
 }
 
 function imagePathsFromDroppedEntries(entries) {
@@ -3028,222 +3147,8 @@ function jobTokensCardText(job) {
   return { text, title };
 }
 
-	function oneLine(s) {
-	  return stripAnsi(String(s || "")).replaceAll(/\s+/g, " ").trim();
-	}
-
-	function isFixLikePrompt(summary) {
-	  const low = String(summary || "").toLowerCase();
-	  if (!low) return false;
-	  if (/\bfix\b/.test(low)) return true;
-	  if (/\bbug\b/.test(low)) return true;
-	  if (/\bbroken\b/.test(low)) return true;
-	  if (/\bnot\s+working\b/.test(low)) return true;
-	  if (/\bdoesn['’]?t\b/.test(low)) return true;
-	  if (low.includes("geht") && low.includes("nicht")) return true;
-	  if (low.includes("funktioniert") && low.includes("nicht")) return true;
-	  if (low.includes("immer") && low.includes("gleich") && low.includes("sound")) return true;
-	  return false;
-	}
-
-		function topicTitleFromPromptSummary(summary) {
-		  const s = oneLine(summary);
-		  const low = s.toLowerCase();
-		  if (!low) return "";
-
-	  if (/\btitle(s)?\b/.test(low) && /\b(summary|summaries|summarize|zusammenfassung)\b/.test(low))
-	    return "Card title summaries";
-
-	  if (/\b(search|suche|volltext)\b/.test(low) && /\b(session(s)?|jobs?|history)\b/.test(low)) return "Session search";
-
-	  if (/\b(theme|dark|light|mode)\b/.test(low) && /\bsystem\b/.test(low)) return "Theme: system option";
-	  if (/\b(theme|dark|light|mode)\b/.test(low)) return "Theme";
-
-	  if (/\b(hot\s*key|hotkey|shortcut|tastenkomb[iy]|accelerator)\b/.test(low)) return "Global hotkey";
-
-	  if (/(sound|sounds|notification)/.test(low)) {
-	    if (/\b(easter\s*egg|easteregg|goat|zieg)\b/.test(low)) return "Goat sound easter egg";
-	    if (/\b(volume|leise|loud)\b/.test(low) || /\b[0-9]{1,3}\s*%\b/.test(low)) return "Sound volume";
-	    if (/\b(select|ausw\u00e4hl|auswahl|preset)\b/.test(low)) return "Sound selection";
-	    return "Sounds";
-	  }
-
-	  if (/\bmarkdown\b/.test(low)) return "Markdown rendering";
-
-	  if (/\b(layout|verschoben|shift(ed)?|textarea|button)\b/.test(low)) return "Layout alignment";
-
-	  if (/\b(preview|vorschau)\b/.test(low) && /\b(image|bild)\b/.test(low)) return "Image preview";
-
-	  const hasMainTs = /\bmain\.ts\b/.test(low) || /\b1000\s*zeilen\b/.test(low);
-	  const hasTests = /\btests?\b/.test(low);
-	  if (hasMainTs && hasTests) return "Refactor main.ts + tests";
-	  if (hasMainTs) return "Refactor main.ts";
-	  if (hasTests) return "Tests";
-
-	  if (/\byour\s+codex\b/.test(low) || /\byour\s+agents\b/.test(low)) return "Branding copy";
-
-		  return "";
-		}
-
-			function looksLikeLowSignalIntro(s) {
-			  const t = oneLine(s).toLowerCase();
-			  if (!t) return false;
-			  if (/^(can|could|would|will|may)\\s+you\\b/.test(t)) return true;
-			  if (/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b/.test(t)) return true;
-			  if (/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b/.test(t)) return true;
-			  if (/^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b/.test(t))
-			    return true;
-			  if (/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend)\\b/.test(t)) return true;
-			  if (/^(bitte\\s+)?(kurz?fristig|schnell|dringend|asap|quick(ly)?|soon)\\b$/.test(t)) return true;
-			  return false;
-			}
-
-			function looksLikeLowSignalOutro(s) {
-			  const t = oneLine(s).toLowerCase();
-			  if (!t) return false;
-			  if (
-			    /^(any(\\s+(other|more))?\\s+ideas|any\\s+ideas|any\\s+thoughts|anything\\s+else|what\\s+else|what\\s+can\\s+we\\s+do)\\b/.test(t)
-			  )
-			    return true;
-			  if (/^(what\\s+do\\s+we\\s+need|what\\s+should\\s+we\\s+do|what\\s+could\\s+we\\s+do)\\b/.test(t)) return true;
-			  if (/^(was\\s+kann\\s+man|was\\s+k\\u00f6nnte\\s+man|was\\s+meinst\\s+du|irgendwelche\\s+ideen)\\b/.test(t))
-			    return true;
-			  if (/^was\\s+br\\u00e4uchten\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+braeuchten\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+brauchen\\s+wir(\\s+(daf\\u00fcr|dafuer))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+wir\\s+machen\\s+k\\u00f6nnten(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+wir\\s+machen\\s+koennten(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+k\\u00f6nnten\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+koennten\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+k\\u00f6nnen\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^was\\s+koennen\\s+wir\\s+machen(\\s+(jetzt|noch|da))?\\s*[.!?]*$/.test(t)) return true;
-			  if (/^(danke|thanks|thx)\\b/.test(t)) return true;
-			  return false;
-			}
-
-			function looksLikeLowSignalLeadInChunk(s) {
-			  const t = oneLine(s).toLowerCase();
-			  if (!t) return true;
-			  if (/^(damit|so\\s+that|so\\s+i\\s+can|so\\s+we\\s+can|to\\s+(be\\s+)?able\\s+to)\\b/.test(t)) return true;
-			  if (/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap|quick(ly)?|soon)\\b/.test(t)) return true;
-			  if (/^(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap|quick(ly)?|soon)\\b$/.test(t)) return true;
-			  if (/^(eine|einen|ein|a|an)\\s+(m\\u00f6glichkeit|option|way|possibility)\\b/.test(t)) return true;
-			  return false;
-			}
-
-			function titlePartSignalScore(s) {
-			  const low = oneLine(s).toLowerCase();
-			  if (!low) return -1e9;
-
-			  let score = 0;
-			  if (looksLikeLowSignalIntro(low)) score -= 8;
-			  if (looksLikeLowSignalLeadInChunk(low)) score -= 8;
-			  if (looksLikeLowSignalOutro(low)) score -= 8;
-
-			  if (/\\b(fix|add|implement|refactor|create|build|enable|allow|investigate|debug)\\b/.test(low)) score += 5;
-			  if (/\\b(fixen|hinzuf\\u00fcg|hinzufueg|implementier|refaktor|erstell|bau|aktivier|erlaub)\\w*\\b/.test(low)) score += 5;
-			  if (/\\b(demo|mock|job|jobs|project|projects|session|history|theme|hotkey|shortcut)\\b/.test(low)) score += 4;
-
-			  score += Math.min(160, low.length) / 40;
-			  return score;
-			}
-
-			function stripLowSignalLeadIn(s) {
-			  let t = String(s || "");
-			  for (let i = 0; i < 4; i += 1) {
-			    const prev = t;
-
-			    t = t.replace(/^(title|titel|summary|zusammenfassung)\\s*[:\\-]\\s*/i, "");
-
-			    t = t.replace(/^(and|und|also|so|ok|okay)\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(hi|hey|hello|hallo)\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(please|pls|plz|bitte)\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(can|could|would|will|may)\\s+you\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(can|could)\\s+we\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(kannst|k\\u00f6nntest|k\\u00f6nnen)\\s+(du|ihr|wir)\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(kann\\s+man)\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(das\\s+bitte)\\b[\\s,:-]*/i, "");
-
-			    t = t.replace(/^(mir|uns)\\s+(bitte\\s+)?(kurz?fristig|kurz|mal|schnell|dringend|asap)\\b[\\s,:-]*/i, "");
-			    t = t.replace(/^(bitte\\s+)?(kurz?fristig|schnell|dringend|asap|quick(ly)?|soon)\\b[\\s,:-]*/i, "");
-
-			    t = t.replace(/^(i\\s+)?(have\\s+)?(now\\s+|just\\s+)?(tried|attempted|tested)\\b[\\s,:-]*/i, "");
-			    t = t.replace(
-			      /^(ich\\s+)?hab(e)?\\s+(jetzt\\s+)?(mal\\s+)?(versucht|probiert|getestet|gecheckt|gepr\\u00fcft)\\b[\\s,:-]*/i,
-			      ""
-			    );
-
-			    t = t.replace(/^(irgendwie|einfach|halt|kurz|mal)\\b[\\s,:-]*/i, "");
-
-			    if (t === prev) break;
-			  }
-			  return t;
-			}
-
-		function compactTitleFromPromptSummary(summary) {
-		  const s = oneLine(summary);
-		  if (!s) return "";
-
-	  const topic = topicTitleFromPromptSummary(s);
-	  if (topic) {
-	    if (isFixLikePrompt(s)) return `Fix: ${topic}`;
-	    return topic;
-			  }
-
-			  let t = stripLowSignalLeadIn(s);
-			  for (let i = 0; i < 4; i += 1) {
-			    const commaIdx = t.indexOf(",");
-			    if (commaIdx <= 12) break;
-			    const head = t.slice(0, commaIdx).trim();
-			    const tail = t.slice(commaIdx + 1).trim();
-			    if (!tail) break;
-
-			    const headScore = titlePartSignalScore(head);
-			    const tailScore = titlePartSignalScore(tail);
-
-			    if (head.length < 8 || looksLikeLowSignalIntro(head) || looksLikeLowSignalLeadInChunk(head) || headScore + 1.2 < tailScore) {
-			      t = tail;
-			      continue;
-			    }
-
-			    t = head;
-			    break;
-			  }
-
-			  t = t.replace(/[!?]+$/, "");
-			  t = oneLine(t);
-			  return t || s;
-			}
-
-	function isBoilerplatePromptLine(s) {
-	  const t = String(s || "").trim();
-	  if (!t) return true;
-
-  const low = t.toLowerCase();
-  // Avoid showing prompt section labels as a "title" in cards/dialogs.
-  if (low === "mined-prompt" || low === "mined prompt") return true;
-  if (low === "mined_prompt") return true;
-  if (low.startsWith("mined-prompt:") || low.startsWith("mined prompt:") || low.startsWith("mined_prompt:")) return true;
-  if (low.includes("agents.md") && low.includes("instructions")) return true;
-  if (low.includes("skill.md")) return true;
-  if (low.includes("available skills")) return true;
-  if (low.includes("how to use skills")) return true;
-  if (low.includes("trigger rules")) return true;
-  if (low.includes("context hygiene")) return true;
-  if (low.includes("safety and fallback")) return true;
-  if (low.includes("environment_context")) return true;
-  if (low === "instructions" || low === "skills") return true;
-  if (low.startsWith("cwd>") || low.startsWith("shell>")) return true;
-  if (low.startsWith("cwd ") || low.startsWith("shell ")) return true;
-  if (low.startsWith("cwd:") || low.startsWith("shell:")) return true;
-  if (low === "-----") return true;
-  if (low.includes("[agent heaven internal]")) return true;
-  if (low.startsWith("ah_status:") || low.startsWith("ah status:")) return true;
-  if (low.includes("at the very end of your final reply")) return true;
-  if (low.includes("do not add any other text after the ah_status line")) return true;
-  if (/^status=[^\s]+(?:\s+[a-z0-9_-]+=[^\s]+){3,}$/i.test(low)) return true;
-  if (low.includes("status=") && low.includes("thread=") && low.includes("model=")) return true;
-  return false;
+function oneLine(s) {
+  return stripAnsi(String(s || "")).replaceAll(/\s+/g, " ").trim();
 }
 
 function jobDisplayTitle(job) {
@@ -3253,6 +3158,9 @@ function jobDisplayTitle(job) {
 
   const fallback = job && typeof job.title === "string" ? oneLine(job.title) : "";
   if (fallback) return truncateText(fallback, JOB_TITLE_MAX_LEN);
+
+  const status = job && typeof job.status === "string" ? oneLine(job.status).toLowerCase() : "";
+  if (status === "running") return "Generating title...";
   return "Untitled";
 }
 
@@ -3643,7 +3551,7 @@ function pickLane(status) {
   return "attention";
 }
 
-const VIEWS = ["board", "archive", "trash"];
+const VIEWS = ["board", "archive", "trash", "settings"];
 const DISPLAY_MODES = ["cards", "table"];
 const TABLE_SCOPES = ["view", "all"];
 
@@ -3971,6 +3879,7 @@ function jobSearchablePanelForActiveTab() {
   if (state.activeTab === "chat") return els.jobDialogChat;
   if (state.activeTab === "live") return els.jobDialogLive;
   if (state.activeTab === "logs") return els.jobDialogLogs;
+  if (state.activeTab === "diff") return els.jobDialogDiff;
   return null;
 }
 
@@ -3995,6 +3904,7 @@ function clearJobSearchMarks() {
   clearJobSearchMarksInPanel(els.jobDialogChat);
   clearJobSearchMarksInPanel(els.jobDialogLive);
   clearJobSearchMarksInPanel(els.jobDialogLogs);
+  clearJobSearchMarksInPanel(els.jobDialogDiff);
 }
 
 function collectJobSearchTextNodes(rootEl) {
@@ -5402,6 +5312,14 @@ async function openProjectDialog(projectId) {
   if (els.projectShortNameInput) els.projectShortNameInput.value = normalizeShortName(project.shortName || "");
   if (els.projectDefaultBranchInput) els.projectDefaultBranchInput.value = normalizeBranchName(project.defaultBranch || "");
   if (els.projectCheckoutModeSelect) els.projectCheckoutModeSelect.value = normalizeCheckoutMode(project.checkoutMode);
+  if (els.projectDialogOpenFinderBtn) {
+    const fullPath = String(project.path || "").trim();
+    const isTemporary = !!project.isTemporary;
+    const canOpenPath = isTemporary && !!fullPath && api && typeof api.shellOpenPath === "function";
+    els.projectDialogOpenFinderBtn.hidden = !isTemporary;
+    els.projectDialogOpenFinderBtn.disabled = !canOpenPath;
+    els.projectDialogOpenFinderBtn.title = fullPath ? fullPath : "";
+  }
 
   renderProjectDialogMeta(project);
 
@@ -5527,7 +5445,7 @@ function renderCheckoutsDialog() {
       const title = p ? p : "";
 
       const job = jobId ? state.jobs.get(jobId) : null;
-      const inUse = !!(job && job.status === "running");
+      const inUse = !!(job && jobStatusForUi(job) === "running");
 
       return `
         <div class="checkoutrow" role="row">
@@ -5542,149 +5460,6 @@ function renderCheckoutsDialog() {
                 Remove
               </button>
             </div>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-
-  els.checkoutsDialogBody.innerHTML = `${head}${rows}`;
-}
-
-async function loadCheckouts(projectId) {
-  const id = String(projectId || "").trim();
-  if (!id) return;
-  if (!api || typeof api.checkoutsList !== "function") return;
-
-  state.checkoutsLoading = true;
-  renderCheckoutsDialog();
-  try {
-    const entries = await api.checkoutsList(id);
-    state.checkoutsEntries = Array.isArray(entries) ? entries : [];
-  } catch {
-    state.checkoutsEntries = [];
-  } finally {
-    state.checkoutsLoading = false;
-    renderCheckoutsDialog();
-  }
-}
-
-async function openCheckoutsDialog(projectId) {
-  const id = String(projectId || "").trim();
-  if (!id || !els.checkoutsDialog) return false;
-
-  const project = state.projects.find((p) => p && p.id === id) || null;
-  if (!project) return false;
-
-  state.checkoutsProjectId = id;
-  if (els.checkoutsDialogMeta) {
-    const label = project && project.name ? project.name : id;
-    const pDisp = formatProjectPathForDisplay(project.path);
-    const bits = [];
-    bits.push(`project=${label}`);
-    if (pDisp) bits.push(`path=${pDisp}`);
-    els.checkoutsDialogMeta.textContent = bits.join("  ");
-    els.checkoutsDialogMeta.title = project.path ? `path=${project.path}` : "";
-  }
-
-  state.checkoutsEntries = [];
-  state.checkoutsLoading = true;
-  renderCheckoutsDialog();
-
-  try {
-    els.checkoutsDialog.showModal();
-  } catch {
-    // ignore
-  }
-
-  await loadCheckouts(id);
-  return true;
-}
-
-function resolveBranchDialog(action) {
-  const r = state.branchDialogResolver;
-  state.branchDialogResolver = null;
-  try {
-    if (els.branchDialog && els.branchDialog.open) els.branchDialog.close();
-  } catch {
-    // ignore
-  }
-  if (typeof r === "function") r(action);
-}
-
-function promptBranchMismatch({ projectName, projectPath, currentBranch, defaultBranch, dirty }) {
-  if (!els.branchDialog) return Promise.resolve("run");
-  const name = String(projectName || "Project");
-  const cur = String(currentBranch || "").trim();
-  const def = String(defaultBranch || "").trim();
-  const pathDisp = formatProjectPathForDisplay(projectPath);
-  if (els.branchDialogMeta) {
-    const bits = [];
-    if (name) bits.push(`project=${name}`);
-    if (pathDisp) bits.push(`path=${pathDisp}`);
-    if (dirty) bits.push("dirty=true");
-    els.branchDialogMeta.textContent = bits.join("  ");
-    els.branchDialogMeta.title = projectPath ? `path=${projectPath}` : "";
-  }
-  if (els.branchDialogText) {
-    els.branchDialogText.textContent =
-      `You are currently on "${cur || "?"}", but this project's default branch is "${def || "?"}".\n` +
-      `Du bist gerade nicht im Default-Branch.\n\n` +
-      `Checkout the default branch first (safer), run anyway on the current branch, or cancel.\n` +
-      `Default-Branch auschecken (sicherer), trotzdem starten, oder abbrechen.`;
-  }
-
-  return new Promise((resolve) => {
-    state.branchDialogResolver = resolve;
-    try {
-      els.branchDialog.showModal();
-    } catch {
-      resolve("run");
-    }
-  });
-}
-
-function renderProjects() {
-  els.projectsList.innerHTML = state.projects
-    .map(
-      (p) => {
-        const color = normalizeHexColor(p.color) || "#64d8a3";
-        const shortName = normalizeShortName(p.shortName);
-        const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
-        const dirty = !!p.gitDirty;
-        const branchHtml = branch
-          ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
-          : "";
-        const fullPath = String(p.path || "");
-        const displayPath = formatProjectPathForDisplay(fullPath);
-        return `
-	        <div class="project" style="--proj-color: ${escapeHtml(color)}">
-	          <input
-	            class="project__swatch"
-	            type="color"
-	            value="${escapeHtml(color)}"
-	            data-project-color="${escapeHtml(p.id)}"
-	            title="Project color"
-	            aria-label="Project color"
-	          />
-	          <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
-	            <div class="project__name">
-	              <span class="project__nametext">${escapeHtml(p.name)}</span>
-	              ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
-                ${branchHtml}
-	            </div>
-	            <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
-	          </div>
-	          <div class="project__actions">
-	            <button
-	              class="iconbtn iconbtn--danger project__remove"
-	              data-project-remove="${escapeHtml(p.id)}"
-	              title="Remove project"
-              aria-label="Remove project"
-              type="button"
-            >
-              &times;
-            </button>
           </div>
         </div>
       `;
@@ -5827,11 +5602,13 @@ function renderProjects() {
     .map((p) => {
       const color = normalizeHexColor(p.color) || "#64d8a3";
       const shortName = normalizeShortName(p.shortName);
+      const isTemporary = !!p.isTemporary;
       const branch = typeof p.gitBranch === "string" ? p.gitBranch.trim() : "";
       const dirty = !!p.gitDirty;
       const branchHtml = branch
         ? `<span class="project__branch ${dirty ? "project__branch--dirty" : ""}" title="Current branch${dirty ? " (dirty)" : ""}">${escapeHtml(branch)}</span>`
         : "";
+      const tempHtml = isTemporary ? `<span class="project__tag" title="Temporary project">TMP</span>` : "";
       const fullPath = String(p.path || "");
       const displayPath = formatProjectPathForDisplay(fullPath);
       return `
@@ -5847,6 +5624,7 @@ function renderProjects() {
           <div class="project__main" role="button" tabindex="0" data-project-edit="${escapeHtml(p.id)}" title="Project settings">
             <div class="project__name">
               <span class="project__nametext">${escapeHtml(p.name)}</span>
+              ${tempHtml}
               ${shortName ? `<span class="project__abbr" title="Short name / Kürzel">${escapeHtml(shortName)}</span>` : ""}
             </div>
             <div class="project__path" title="${escapeHtml(fullPath)}">${escapeHtml(displayPath)}</div>
@@ -5957,13 +5735,23 @@ function setViewButtons(view) {
 
 function applyViewLayout() {
   const v = normalizeView(state.view);
+  const isSettings = v === "settings";
   const display = normalizeDisplayMode(state.displayMode);
-  const showCards = display === "cards";
-  const showTable = display === "table";
+  const showCards = !isSettings && display === "cards";
+  const showTable = !isSettings && display === "table";
 
+  if (els.settingsSection) els.settingsSection.hidden = !isSettings;
   if (els.boardSection) els.boardSection.hidden = !showCards;
   if (els.sessionsTableSection) els.sessionsTableSection.hidden = !showTable;
   if (els.tableScopeCtl) els.tableScopeCtl.hidden = !showTable;
+
+  // Hide composer and viewbar controls when showing settings
+  const composer = document.querySelector(".composer");
+  const viewbar = document.querySelector(".viewbar");
+  if (composer) composer.hidden = isSettings;
+  if (viewbar) viewbar.hidden = isSettings;
+
+  if (isSettings) return;
   if (els.tableScopeSelect && els.tableScopeSelect.value !== state.tableScope) {
     els.tableScopeSelect.value = state.tableScope;
   }
@@ -6073,7 +5861,7 @@ function tableLaneKindForJob(job) {
   } else if (state.view === "trash") {
     return "trash";
   }
-  return pickLane(job && job.status);
+  return pickLane(job);
 }
 
 function tableLaneEnteredMs(job) {
@@ -6141,7 +5929,7 @@ function tableBoxLabel(job) {
   const box = jobBox(job);
   if (box === "archive") return "archive";
   if (box === "trash") return "trash";
-  return `board/${pickLane(job && job.status)}`;
+  return `board/${pickLane(job)}`;
 }
 
 function renderSessionsTable(jobs) {
@@ -6163,7 +5951,7 @@ function renderSessionsTable(jobs) {
     const agent = agentDisplayName(j.agent);
     const model = String(j.model || "").trim() || "—";
     const created = fmtDateTimeShort(j.createdAt);
-    const finished = j.status === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
+    const finished = jobStatusForUi(j) === "running" ? "—" : fmtDateTimeShort(j.finishedAt);
     const duration = jobDurationText(j);
     const tok = jobTokensCardText(j);
     const tokText = tok ? tok.text : "—";
@@ -6178,7 +5966,7 @@ function renderSessionsTable(jobs) {
 
     return `
       <tr class="sessionrow" data-job-id="${escapeHtml(j.id)}">
-        <td>${fmtStatusPill(j.status)}</td>
+        <td>${fmtStatusPill(j)}</td>
         <td class="sessiontable__mono">${escapeHtml(tableBoxLabel(j))}</td>
         <td class="sessiontable__title" title="${escapeHtml(oneLine(title))}">${escapeHtml(title)}</td>
         <td title="${escapeHtml(oneLine(projectTitle))}">${escapeHtml(project)}</td>
@@ -6321,6 +6109,46 @@ function projectColorById(id) {
   return p ? normalizeHexColor(p.color) : "";
 }
 
+function editorCommandFromSettings() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return typeof s.editorCommand === "string" ? s.editorCommand.trim() : "";
+}
+
+function editorPresetFromCommand(command) {
+  const cmd = String(command || "").trim();
+  if (!cmd) return "";
+  if (EDITOR_PRESET_VALUES.has(cmd)) return cmd;
+  return EDITOR_PRESET_CUSTOM_VALUE;
+}
+
+function syncEditorPresetFromCommandInput() {
+  if (!els.settingsEditorPreset || !els.settingsEditorCommand) return;
+  const cmd = String(els.settingsEditorCommand.value || "").trim();
+  els.settingsEditorPreset.value = editorPresetFromCommand(cmd);
+}
+
+function applyEditorPresetToCommandInput() {
+  if (!els.settingsEditorPreset || !els.settingsEditorCommand) return;
+  const preset = String(els.settingsEditorPreset.value || "").trim();
+  if (!preset || preset === EDITOR_PRESET_CUSTOM_VALUE) return;
+  els.settingsEditorCommand.value = preset;
+}
+
+function hasConfiguredEditorCommand() {
+  return !!editorCommandFromSettings();
+}
+
+function jobPathForEditor(job) {
+  if (!job || typeof job !== "object") return "";
+
+  const cwdPath = typeof job.projectPath === "string" ? job.projectPath.trim() : "";
+  if (cwdPath) return cwdPath;
+
+  const project = projectById(job.projectId);
+  const basePath = project && typeof project.path === "string" ? project.path.trim() : "";
+  return basePath || "";
+}
+
 function integratedBadgeForJob(job) {
   if (!job || typeof job !== "object") return null;
   const atRaw = typeof job.integratedToDefaultAt === "string" ? job.integratedToDefaultAt.trim() : "";
@@ -6348,12 +6176,9 @@ function renderCard(job) {
   const title = jobDisplayTitle(job);
   const projColor = projectColorById(job.projectId) || "transparent";
   const dur = job.integratingToDefault === true ? "Integrating…" : isRunningUi ? jobElapsedText(job) : "";
-  const durHiddenAttr = isRunningUi ? "" : " hidden";
-  const tok = jobTokensCardText(job);
-  const tokHiddenAttr = tok ? "" : " hidden";
-  const tokText = tok ? tok.text : "";
-  const tokTitle = tok ? tok.title : "";
-  const metaHiddenAttr = isRunningUi || tok ? "" : " hidden";
+  const showDuration = job.integratingToDefault === true || isRunningUi;
+  const durHiddenAttr = showDuration ? "" : " hidden";
+  const metaHiddenAttr = showDuration ? "" : " hidden";
   const ctx = jobContextStepper(job);
   // On the Board, the lane already conveys status (Running/Needs Attention/Done).
   // Keep the pill for non-board views (Archive/Trash) where lanes aren't status-based.
@@ -6635,6 +6460,36 @@ function updateCardEl(job) {
     integratedEl.hidden = !integrated;
     integratedEl.textContent = integrated ? integrated.text : "Merged";
     integratedEl.title = integrated ? oneLine(integrated.title) : "";
+  }
+
+  const ctx = jobContextStepper(job);
+  const topEl = existing.querySelector(".card__top");
+  let ctxEl = existing.querySelector("[data-job-context]");
+  if (ctx) {
+    if (!ctxEl && topEl) {
+      const statusEl = topEl.querySelector(".card__status");
+      const tpl = document.createElement("template");
+      tpl.innerHTML = renderCardContextStepper(ctx).trim();
+      ctxEl = tpl.content.firstElementChild;
+      if (ctxEl) topEl.insertBefore(ctxEl, statusEl || null);
+    }
+    if (ctxEl) {
+      ctxEl.hidden = false;
+      ctxEl.title = oneLine(ctx.title);
+      const fillEl = ctxEl.querySelector("[data-job-context-fill]");
+      if (fillEl) {
+        if (fillEl.style) fillEl.style.width = `${ctx.fillPct.toFixed(2)}%`;
+        if (fillEl.classList) {
+          fillEl.classList.remove("card__contextFill--warning", "card__contextFill--danger");
+          if (ctx.tone === "warning") fillEl.classList.add("card__contextFill--warning");
+          if (ctx.tone === "danger") fillEl.classList.add("card__contextFill--danger");
+        }
+      }
+      const pctEl = ctxEl.querySelector("[data-job-context-pct]");
+      if (pctEl) pctEl.textContent = ctx.pctText;
+    }
+  } else if (ctxEl) {
+    ctxEl.remove();
   }
 
   const pillEl = existing.querySelector(".pill");
@@ -7015,86 +6870,666 @@ function openJobActionsMenu(anchorEl) {
   menu.style.top = `${Math.round(y)}px`;
 }
 
-function isIntegrateToDefaultAction(action) {
-  const a = action && typeof action === "object" ? action : {};
-  const name = typeof a.name === "string" ? a.name.trim().toLowerCase() : "";
-  const cmd = typeof a.command === "string" ? a.command.trim().toLowerCase() : "";
-  if (!name && !cmd) return false;
-  if (name === "integrate to default branch" || name === "integrate-to-default") return true;
-  if (name.includes("integrate") && name.includes("default branch")) return true;
-  if (cmd === "__integrate_to_default_branch__" || cmd === "integrate-to-default") return true;
-  return false;
+function builtInActionKindFromCommand(command) {
+  const raw = String(command || "").replaceAll("\r\n", "\n");
+  const first = (raw.split("\n")[0] || "").trim();
+  if (!first) return "";
+  if (first === "ah:integrate-to-default" || first === "ah:integrate") return "integrate_to_default";
+  if (first === "ah:commit-and-push" || first === "ah:commit+push" || first === "ah:commit-push") return "commit_and_push";
+  if (first === "ah:commit-only" || first === "ah:commit") return "commit_only";
+  return "";
 }
 
-function suggestIntegrateCommitMessage(job) {
-  const title = String(jobDisplayTitle(job) || "")
-    .replaceAll(/\s+/g, " ")
-    .trim();
-  if (title) return `chore: ${title}`.slice(0, 120);
-  return "chore: integrate job changes";
+function defaultCheckoutCommitMessage(job) {
+  const msg = "Update local changes";
+  return msg.slice(0, 72);
 }
 
-function shortCommitSha(value) {
-  const s = String(value || "").trim();
-  if (!s) return "";
-  return s.slice(0, 12);
+function isIntegrateAutoArchiveEnabled() {
+  const s = state.settings && typeof state.settings === "object" ? state.settings : {};
+  return s.integrateAutoArchive !== false;
 }
 
-async function runIntegrateToDefaultAction(job) {
-  const jobId = String(job && job.id ? job.id : "").trim();
-  if (!jobId) return;
+function normalizeIntegrateToDefaultMode(value) {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "cli") return "cli";
+  return "agent";
+}
+
+function normalizeIntegrationApiBaseUrl(value, fallback) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw || fallback;
+}
+
+function normalizeIntegrationEnvVar(value, fallback) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw || fallback;
+}
+
+function normalizeIntegrationToken(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeIntegrationSettingsForUi(value) {
+  const root = value && typeof value === "object" ? value : {};
+  const providers = root.providers && typeof root.providers === "object" ? root.providers : {};
+  const linear = providers.linear && typeof providers.linear === "object" ? providers.linear : {};
+  const github = providers.github && typeof providers.github === "object" ? providers.github : {};
+  const notion = providers.notion && typeof providers.notion === "object" ? providers.notion : {};
+
+  return {
+    enabled: !!root.enabled,
+    autoEnrichPrompt: root.autoEnrichPrompt !== false,
+    autoCommentOnComplete: root.autoCommentOnComplete !== false,
+    requestTimeoutMs: clampNumber(root.requestTimeoutMs, 1000, 60000, 12000),
+    providers: {
+      linear: {
+        enabled: !!linear.enabled,
+        apiBaseUrl: normalizeIntegrationApiBaseUrl(linear.apiBaseUrl, "https://api.linear.app/graphql"),
+        token: normalizeIntegrationToken(linear.token),
+        tokenEnvVar: normalizeIntegrationEnvVar(linear.tokenEnvVar, "LINEAR_API_KEY"),
+        maxIssuesPerPrompt: clampNumber(linear.maxIssuesPerPrompt, 1, 10, 3),
+        includeDescription: linear.includeDescription !== false
+      },
+      github: {
+        enabled: !!github.enabled,
+        apiBaseUrl: normalizeIntegrationApiBaseUrl(github.apiBaseUrl, "https://api.github.com"),
+        token: normalizeIntegrationToken(github.token),
+        tokenEnvVar: normalizeIntegrationEnvVar(github.tokenEnvVar, "GITHUB_TOKEN"),
+        maxIssuesPerPrompt: clampNumber(github.maxIssuesPerPrompt, 1, 10, 3)
+      },
+      notion: {
+        enabled: !!notion.enabled,
+        apiBaseUrl: normalizeIntegrationApiBaseUrl(notion.apiBaseUrl, "https://api.notion.com/v1"),
+        token: normalizeIntegrationToken(notion.token),
+        tokenEnvVar: normalizeIntegrationEnvVar(notion.tokenEnvVar, "NOTION_API_KEY"),
+        notionVersion: (typeof notion.notionVersion === "string" ? notion.notionVersion.trim() : "") || "2022-06-28",
+        maxPagesPerPrompt: clampNumber(notion.maxPagesPerPrompt, 1, 8, 2)
+      }
+    }
+  };
+}
+
+let integrateDialogJobId = "";
+let integrateDialogPhase = ""; // confirm | pending | success | error
+let integrateDialogStatusText = "";
+let integrateDialogMessageText = "";
+let integrateDialogResultText = "";
+let integrateDialogErrorFull = "";
+let integrateDialogTargetPath = "";
+let integrateDialogTargetBranch = "";
+let integrateDialogArchived = false;
+
+function resetIntegrateDialogState() {
+  integrateDialogJobId = "";
+  integrateDialogPhase = "";
+  integrateDialogStatusText = "";
+  integrateDialogMessageText = "";
+  integrateDialogResultText = "";
+  integrateDialogErrorFull = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  integrateDialogArchived = false;
+  syncIntegrateDialogUi();
+}
+
+function canCloseIntegrateDialog() {
+  return integrateDialogPhase !== "pending";
+}
+
+function setIntegrateDialogPhase(phase, opts = {}) {
+  const p = opts && typeof opts === "object" ? opts : {};
+  integrateDialogPhase = String(phase || "").trim();
+  if (typeof p.status === "string") integrateDialogStatusText = p.status;
+  if (typeof p.message === "string") integrateDialogMessageText = p.message;
+  if (typeof p.details === "string") integrateDialogResultText = p.details;
+  if (typeof p.errorFull === "string") integrateDialogErrorFull = p.errorFull;
+  if (typeof p.targetPath === "string") integrateDialogTargetPath = p.targetPath;
+  if (typeof p.targetBranch === "string") integrateDialogTargetBranch = p.targetBranch;
+  if (typeof p.archived === "boolean") integrateDialogArchived = p.archived;
+  syncIntegrateDialogUi();
+}
+
+function syncIntegrateDialogUi() {
+  if (!els.integrateDialog) return;
+
+  const jobId = String(integrateDialogJobId || "").trim();
+  const job = jobId ? state.jobs.get(jobId) : null;
+  const projectId = job && typeof job.projectId === "string" ? job.projectId : "";
+  const project = projectId ? state.projects.find((p) => p && p.id === projectId) || null : null;
+
+  if (els.integrateDialogTitle) els.integrateDialogTitle.textContent = "Integrate to default branch";
+  if (els.integrateDialogMeta) {
+    const bits = [];
+    if (project && project.name) bits.push(`project=${project.name}`);
+    else if (projectId) bits.push(`project=${projectId}`);
+    if (job) bits.push(`job=${jobDisplayTitle(job)}`);
+    if (jobId) bits.push(`id=${jobId}`);
+    els.integrateDialogMeta.textContent = bits.join("  ");
+    els.integrateDialogMeta.title = jobId ? `jobId=${jobId}` : "";
+  }
+
+  const phase = integrateDialogPhase || "confirm";
+  const iconVariant =
+    phase === "pending" ? "spinner" : phase === "success" ? "success" : phase === "error" ? "error" : "idle";
+  if (els.integrateDialogIcon) {
+    els.integrateDialogIcon.className = `integrate__icon integrate__icon--${iconVariant}`;
+  }
+
+  if (els.integrateDialogStatus) els.integrateDialogStatus.textContent = integrateDialogStatusText || "";
+  if (els.integrateDialogMessage) {
+    els.integrateDialogMessage.textContent = integrateDialogMessageText || "";
+    els.integrateDialogMessage.hidden = !integrateDialogMessageText;
+  }
+
+  const details = String(integrateDialogResultText || integrateDialogErrorFull || "").trim();
+  if (els.integrateDialogResultWrap) els.integrateDialogResultWrap.hidden = !details;
+  if (els.integrateDialogResult) els.integrateDialogResult.textContent = details;
+
+  const isConfirm = phase === "confirm";
+  const isPending = phase === "pending";
+  const isSuccess = phase === "success";
+  const isError = phase === "error";
+
+  if (els.integrateDialogClose) els.integrateDialogClose.disabled = isPending;
+
+  const canArchive = isSuccess && !integrateDialogArchived && job && job.status !== "running" && jobBox(job) === "board";
+  const showArchiveButton = canArchive && !isIntegrateAutoArchiveEnabled();
+  if (els.integrateDialogCancelBtn) {
+    els.integrateDialogCancelBtn.hidden = !isConfirm;
+    els.integrateDialogCancelBtn.disabled = isPending;
+  }
+  if (els.integrateDialogStartBtn) {
+    els.integrateDialogStartBtn.hidden = !isConfirm;
+    els.integrateDialogStartBtn.disabled = isPending;
+    els.integrateDialogStartBtn.textContent = "Integrate";
+  }
+  if (els.integrateDialogArchiveBtn) {
+    els.integrateDialogArchiveBtn.hidden = !showArchiveButton;
+    els.integrateDialogArchiveBtn.disabled = isPending;
+  }
+
+  if (els.integrateDialogRevealBtn) {
+    els.integrateDialogRevealBtn.hidden = !(isSuccess && integrateDialogTargetPath);
+    els.integrateDialogRevealBtn.disabled = !integrateDialogTargetPath || isPending;
+  }
+
+  if (els.integrateDialogDetailsBtn) {
+    els.integrateDialogDetailsBtn.hidden = !(isError && integrateDialogErrorFull);
+    els.integrateDialogDetailsBtn.disabled = isPending;
+  }
+}
+
+function openIntegrateDialog(jobId) {
+  if (!els.integrateDialog) return false;
+  if (els.integrateDialog.open && !canCloseIntegrateDialog()) return false;
+
+  const id = String(jobId || "").trim();
+  if (!id) return false;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return false;
+
+  integrateDialogJobId = id;
+  integrateDialogArchived = false;
+
+  integrateDialogResultText = "";
+  integrateDialogErrorFull = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  setIntegrateDialogPhase("confirm", {
+    status: "Integrate checkout",
+    message:
+      "Integrate this job's checkout into the project's default branch?\n\n" +
+      "This works for jobs that ran in a Worktree/Clone checkout and will cherry-pick the job's commits onto the default branch.\n" +
+      "If the job ran in-place in the project folder, there is nothing separate to integrate."
+  });
+
+  try {
+    if (!els.integrateDialog.open) els.integrateDialog.showModal();
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (els.integrateDialogStartBtn) els.integrateDialogStartBtn.focus();
+  } catch {
+    // ignore
+  }
+
+  return true;
+}
+
+function closeIntegrateDialog() {
+  if (!els.integrateDialog) return;
+  if (!canCloseIntegrateDialog()) return;
+  try {
+    if (els.integrateDialog.open) els.integrateDialog.close();
+  } catch {
+    // ignore
+  }
+}
+
+function revealIntegrateDialogTarget() {
+  const targetPath = String(integrateDialogTargetPath || "").trim();
+  if (!targetPath) return;
+  if (!api || typeof api.shellOpenPath !== "function") return;
+  api.shellOpenPath(targetPath).catch(() => {});
+}
+
+function showIntegrateDialogDetails() {
+  const full = String(integrateDialogErrorFull || "").trim();
+  if (!full) return;
+  try {
+    window.alert(full);
+  } catch {
+    // ignore
+  }
+}
+
+let integrateToDefaultInFlight = false;
+let integrateToDefaultInFlightJobId = "";
+let queuedIntegrateToDefaultJobId = "";
+
+function waitMs(ms) {
+  const delay = Math.max(0, Math.trunc(Number(ms) || 0));
+  if (!delay) return Promise.resolve();
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delay);
+  });
+}
+
+async function archiveJobWithRetry(jobId, opts = {}) {
+  const id = String(jobId || "").trim();
+  if (!id) return { ok: false, error: "Missing job id." };
+  if (!api || typeof api.jobsArchive !== "function") return { ok: false, error: "Archive is not supported in this build." };
+
+  const o = opts && typeof opts === "object" ? opts : {};
+  const attemptsRaw = Number(o.attempts);
+  const attempts = Number.isFinite(attemptsRaw) ? Math.max(1, Math.min(10, Math.trunc(attemptsRaw))) : 5;
+  const baseDelayRaw = Number(o.baseDelayMs);
+  const baseDelayMs = Number.isFinite(baseDelayRaw) ? Math.max(80, Math.min(2000, Math.trunc(baseDelayRaw))) : 220;
+
+  let lastErr = "";
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await api.jobsArchive(id);
+      return { ok: true, error: "" };
+    } catch (err) {
+      const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
+      lastErr = full;
+      const low = full.toLowerCase();
+      const retryable = low.includes("job is running") || low.includes("integration already running");
+      if (!retryable || i >= attempts - 1) break;
+      await waitMs(baseDelayMs * (i + 1));
+    }
+  }
+
+  return { ok: false, error: lastErr || "Failed to archive." };
+}
+
+async function startIntegrateToDefaultFromDialog(opts = {}) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const toastOnly = !!o.toastOnly;
+  const forceAutoArchive = !!o.forceAutoArchive;
+
+  const id = String(integrateDialogJobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+
   if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
-    showToast("Integrate to default branch is not supported in this build.");
+    if (toastOnly) {
+      showToast("Integration is not supported in this build.");
+    } else {
+      setIntegrateDialogPhase("error", {
+        status: "Integration failed",
+        message: "Integration is not supported in this build.",
+        errorFull: "Integration is not supported in this build."
+      });
+    }
     return;
   }
 
-  let commitMessage = "";
-  let askedCommitMessage = false;
+  if (jobStatusForUi(job) === "running") {
+    const busyMessage = job.integratingToDefault === true ? "Integration already running." : "Wait until the job has finished before integrating.";
+    if (toastOnly) {
+      showToast(busyMessage);
+    } else {
+      setIntegrateDialogPhase("error", {
+        status: "Integration failed",
+        message: busyMessage,
+        errorFull: busyMessage
+      });
+    }
+    return;
+  }
 
-  while (true) {
-    try {
-      const res = await api.checkoutsIntegrateToDefault(jobId, commitMessage ? { commitMessage } : {});
-      const targetBranch = normalizeBranchName(res && res.targetBranch ? res.targetBranch : "");
-      const targetPath = String(res && res.targetPath ? res.targetPath : "").trim();
-      const commitsApplied = Math.max(0, toIntOrZero(res && res.commitsApplied));
-      const committed = !!(res && res.committed);
-      const committedSha = shortCommitSha(res && res.committedSha ? res.committedSha : "");
+  if (integrateToDefaultInFlight) {
+    const busyMessage =
+      integrateToDefaultInFlightJobId && integrateToDefaultInFlightJobId !== id
+        ? "Another integration is currently running. Please wait."
+        : "Integration already running for this ticket.";
+    if (toastOnly) {
+      showToast(busyMessage);
+    } else {
+      setIntegrateDialogPhase("error", {
+        status: "Integration already running",
+        message: busyMessage,
+        errorFull: busyMessage
+      });
+    }
+    return;
+  }
+  integrateToDefaultInFlight = true;
+  integrateToDefaultInFlightJobId = id;
 
-      const summaryLines = [];
-      if (commitsApplied > 0) summaryLines.push(`Successfully integrated ${commitsApplied} commit${commitsApplied === 1 ? "" : "s"} into "${targetBranch || "main"}".`);
-      else summaryLines.push(`No commits were applied. This task is already integrated into "${targetBranch || "main"}".`);
-      if (targetPath) summaryLines.push(`Target checkout: ${targetPath}`);
-      if (committed) summaryLines.push(`Committed working-tree changes in task checkout${committedSha ? ` (${committedSha})` : ""}.`);
+  integrateDialogResultText = "";
+  integrateDialogErrorFull = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  integrateDialogArchived = false;
+  const integrateMode = normalizeIntegrateToDefaultMode(state.settings && state.settings.integrateToDefaultMode);
+  const pendingMessage =
+    integrateMode === "agent"
+      ? "Agent is integrating this checkout into the default branch. This may take a moment."
+      : "Cherry-picking commits onto the project's default branch. This may take a moment.";
+  setIntegrateDialogPhase("pending", {
+    status: "Integrating…",
+    message: pendingMessage
+  });
+  if (toastOnly) showToast("Integrating into default branch…");
 
-      const canArchive = jobBox(job) === "board" && job.status !== "running";
-      if (canArchive) {
-        const archiveNow = window.confirm(`${summaryLines.join("\n")}\n\nArchive this task now?`);
-        if (archiveNow) await archiveJob(jobId, { closeDialog: false });
-      } else {
-        window.alert(summaryLines.join("\n"));
-      }
-      return;
-    } catch (err) {
-      const msg = String(err && err.message ? err.message : err);
-      if (!askedCommitMessage && /Provide a commit message first/i.test(msg)) {
-        askedCommitMessage = true;
-        const suggested = suggestIntegrateCommitMessage(job);
-        const entered = window.prompt(
-          "The task checkout has uncommitted changes.\n\nPlease enter a commit message before integrating to the default branch:",
-          suggested
-        );
-        if (entered == null) return;
-        commitMessage = String(entered || "").trim();
-        if (!commitMessage) {
-          showToast("Integration cancelled (empty commit message).");
-          return;
+  const canArchive = jobBox(job) === "board";
+  const autoArchive = canArchive && (forceAutoArchive || isIntegrateAutoArchiveEnabled());
+
+  try {
+    const res = await api.checkoutsIntegrateToDefault(id, {
+      commitMessage: "",
+      autoArchive
+    });
+
+    const applied = res && typeof res.commitsApplied === "number" ? res.commitsApplied : 0;
+    const targetBranch = res && typeof res.targetBranch === "string" ? res.targetBranch : "";
+    const targetPath = res && typeof res.targetPath === "string" ? res.targetPath : "";
+    const committed = !!(res && res.committed === true);
+    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha : "";
+    const targetCommitted = !!(res && res.targetCommitted === true);
+    const targetCommittedSha = res && typeof res.targetCommittedSha === "string" ? res.targetCommittedSha : "";
+    const integrationMethod = res && typeof res.integrationMethod === "string" ? String(res.integrationMethod || "").trim() : "";
+    const agentFallbackReason = res && typeof res.agentFallbackReason === "string" ? String(res.agentFallbackReason || "").trim() : "";
+    const backendAutoArchived = !!(res && res.autoArchived === true);
+    const backendAutoArchiveError = res && typeof res.autoArchiveError === "string" ? String(res.autoArchiveError || "").trim() : "";
+
+    let msg = "";
+    if (applied <= 0) msg = "Nothing to integrate.";
+    else msg = `Integrated ${applied} commit${applied === 1 ? "" : "s"} into ${targetBranch || "default branch"}.`;
+    if (committed && committedSha) msg += ` (Committed: ${committedSha})`;
+
+    integrateDialogTargetPath = targetPath;
+    integrateDialogTargetBranch = targetBranch;
+
+    const details = [
+      targetBranch ? `Target branch: ${targetBranch}` : "",
+      targetPath ? `Target path: ${targetPath}` : "",
+      `Commits applied: ${applied}`,
+      committed && committedSha ? `Committed local changes: ${committedSha}` : committed ? "Committed local changes: yes" : "",
+      targetCommitted && targetCommittedSha
+        ? `Committed default-branch local changes: ${targetCommittedSha}`
+        : targetCommitted
+          ? "Committed default-branch local changes: yes"
+          : "",
+      integrationMethod ? `Integration mode: ${integrationMethod}` : "",
+      agentFallbackReason ? `Agent fallback: ${agentFallbackReason}` : ""
+    ]
+      .filter(Boolean)
+      .join("\n");
+    integrateDialogResultText = details;
+
+    setIntegrateDialogPhase("success", {
+      status: applied <= 0 ? "Nothing to integrate" : "Integrated",
+      message: autoArchive ? `${msg}\n\nArchiving ticket automatically…` : canArchive ? `${msg}\n\nArchive this ticket now?` : msg,
+      details,
+      targetPath,
+      targetBranch
+    });
+
+    if (toastOnly) {
+      if (autoArchive) {
+        if (backendAutoArchived) {
+          integrateDialogArchived = true;
+          showToast(msg, null, 2400);
+          window.setTimeout(() => {
+            showToast("Ticket archived.");
+          }, 950);
+        } else {
+          const archiveRes = await archiveJobWithRetry(id, { attempts: 6, baseDelayMs: 220 });
+          if (archiveRes.ok) {
+            integrateDialogArchived = true;
+            showToast(msg, null, 2400);
+            window.setTimeout(() => {
+              showToast("Ticket archived.");
+            }, 950);
+          } else {
+            const full = backendAutoArchiveError || archiveRes.error || "Failed to archive.";
+            const first = (String(full).split("\n")[0] || "").trim() || "Failed to archive.";
+            showToast(`${msg} ${first}`);
+          }
         }
-        continue;
+      } else if (canArchive && api && typeof api.jobsArchive === "function") {
+        showToast(msg, null, 10000, {
+          actions: [
+            {
+              label: "Archive ticket",
+              kind: "primary",
+              onClick: async () => {
+                try {
+                  await api.jobsArchive(id);
+                  integrateDialogArchived = true;
+                  showToast("Ticket archived.");
+                } catch (err) {
+                  showToast(String(err && err.message ? err.message : err) || "Failed to archive.");
+                }
+              }
+            }
+          ]
+        });
+      } else {
+        showToast(msg);
       }
+    } else if (autoArchive && !backendAutoArchived) {
+      await archiveIntegrateDialogJob();
+    } else if (autoArchive && backendAutoArchived) {
+      integrateDialogArchived = true;
+      setIntegrateDialogPhase("success", {
+        status: "Archived",
+        message: "Ticket archived.",
+        details,
+        targetPath,
+        targetBranch,
+        archived: true
+      });
+    }
+  } catch (err) {
+    const full = String(err && err.message ? err.message : err).trim() || "Integration failed.";
+    const first = (full.split("\n")[0] || "").trim() || "Integration failed.";
+    integrateDialogErrorFull = full;
+    integrateDialogResultText = full;
+    if (toastOnly) showToast(first);
+    else setIntegrateDialogPhase("error", { status: "Integration failed", message: first, errorFull: full, details: full });
+  } finally {
+    integrateToDefaultInFlight = false;
+    integrateToDefaultInFlightJobId = "";
+    syncIntegrateDialogUi();
 
-      showToast(msg || "Failed to integrate to default branch.");
+    const queuedId = String(queuedIntegrateToDefaultJobId || "").trim();
+    if (queuedId && queuedId !== id) {
+      queuedIntegrateToDefaultJobId = "";
+      window.setTimeout(() => {
+        runIntegrateToDefaultAction(queuedId).catch((err) => {
+          showToast(String(err && err.message ? err.message : err) || "Integration failed.");
+        });
+      }, 0);
+    } else if (queuedId === id) {
+      queuedIntegrateToDefaultJobId = "";
+    }
+  }
+}
+
+async function archiveIntegrateDialogJob() {
+  const id = String(integrateDialogJobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+  if (jobStatusForUi(job) === "running") return;
+  if (!api || typeof api.jobsArchive !== "function") return;
+
+  const prevDetails = integrateDialogResultText;
+  const prevTargetPath = integrateDialogTargetPath;
+  const prevTargetBranch = integrateDialogTargetBranch;
+
+  setIntegrateDialogPhase("pending", { status: "Archiving…", message: "Archiving this ticket…" });
+  try {
+    const archived = await archiveJobWithRetry(id, { attempts: 6, baseDelayMs: 220 });
+    if (!archived.ok) throw new Error(archived.error || "Failed to archive.");
+    integrateDialogArchived = true;
+    integrateDialogResultText = prevDetails;
+    integrateDialogTargetPath = prevTargetPath;
+    integrateDialogTargetBranch = prevTargetBranch;
+    setIntegrateDialogPhase("success", {
+      status: "Archived",
+      message: "Ticket archived.",
+      details: prevDetails,
+      targetPath: prevTargetPath,
+      targetBranch: prevTargetBranch,
+      archived: true
+    });
+  } catch (err) {
+    const full = String(err && err.message ? err.message : err).trim() || "Failed to archive.";
+    const first = (full.split("\n")[0] || "").trim() || "Failed to archive.";
+    integrateDialogErrorFull = full;
+    integrateDialogResultText = full;
+    setIntegrateDialogPhase("error", { status: "Archive failed", message: first, errorFull: full, details: full });
+  }
+}
+
+async function runIntegrateToDefaultAction(jobId, opts = {}) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+  const o = opts && typeof opts === "object" ? opts : {};
+  const closeDialog = o.closeDialog !== false;
+
+  if (!api || typeof api.checkoutsIntegrateToDefault !== "function") {
+    showToast("Integration is not supported in this build.");
+    return;
+  }
+
+  if (jobStatusForUi(job) === "running") {
+    showToast(job.integratingToDefault === true ? "Integration already running." : "Wait until the job has finished before integrating.");
+    return;
+  }
+
+  if (integrateToDefaultInFlight) {
+    if (integrateToDefaultInFlightJobId === id) {
+      showToast("Integration already running for this ticket.");
       return;
     }
+    if (queuedIntegrateToDefaultJobId === id) {
+      showToast("This ticket is already queued for integration.");
+      return;
+    }
+    queuedIntegrateToDefaultJobId = id;
+    showToast("Integration already running. This ticket will run next.");
+    return;
+  }
+
+  if (queuedIntegrateToDefaultJobId === id) queuedIntegrateToDefaultJobId = "";
+  integrateDialogJobId = id;
+  integrateDialogArchived = false;
+  integrateDialogErrorFull = "";
+  integrateDialogResultText = "";
+  integrateDialogTargetPath = "";
+  integrateDialogTargetBranch = "";
+  if (closeDialog && state.selectedJobId === id && els.jobDialog && els.jobDialog.open) closeJobDialog();
+  await startIntegrateToDefaultFromDialog({ toastOnly: true, forceAutoArchive: true });
+}
+
+let checkoutCommitActionInFlight = false;
+async function runCheckoutCommitAction(jobId, opts = {}) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+
+  const o = opts && typeof opts === "object" ? opts : {};
+  const push = !!o.push;
+
+  const job = state.jobs.get(id);
+  if (!job || isDemoJob(job)) return;
+
+  if (!api || typeof api.checkoutsCommit !== "function") {
+    showToast("Commit actions are not supported in this build.");
+    return;
+  }
+
+  if (checkoutCommitActionInFlight) {
+    showToast("A commit action is already running.");
+    return;
+  }
+
+  if (jobStatusForUi(job) === "running") {
+    const label = push ? "Commit + push" : "Commit only";
+    const ok = window.confirm(`Job is running. ${label} may interfere.\n\nRun anyway?`);
+    if (!ok) return;
+  }
+
+  let suggested = "";
+  try {
+    if (api && typeof api.checkoutsSuggestCommitMessage === "function") {
+      suggested = await api.checkoutsSuggestCommitMessage(id);
+    }
+  } catch {
+    suggested = "";
+  }
+
+  const entered = await promptText({
+    title: push ? "Commit + push" : "Commit only",
+    message: push
+      ? "Create a commit from local checkout changes and push the current branch."
+      : "Create a commit from local checkout changes.",
+    label: "Commit message",
+    defaultValue: suggested || defaultCheckoutCommitMessage(job),
+    okLabel: push ? "Commit + push" : "Commit",
+    cancelLabel: "Cancel"
+  });
+
+  if (entered == null) return;
+  const commitMessage = String(entered || "").trim();
+  if (!commitMessage) {
+    showToast("Commit message is required.");
+    return;
+  }
+
+  checkoutCommitActionInFlight = true;
+  try {
+    const res = await api.checkoutsCommit(id, { commitMessage, push });
+    const committedSha = res && typeof res.committedSha === "string" ? res.committedSha.trim() : "";
+    const branch = res && typeof res.branch === "string" ? res.branch.trim() : "";
+    const remote = res && typeof res.remote === "string" ? res.remote.trim() : "";
+    const pushed = !!(res && res.pushed === true);
+
+    let msg = committedSha ? `Committed ${committedSha}` : "Committed changes";
+    if (push && pushed) {
+      if (branch && remote) msg += ` and pushed ${branch} to ${remote}.`;
+      else if (branch) msg += ` and pushed ${branch}.`;
+      else msg += " and pushed.";
+    } else {
+      msg += ".";
+    }
+    showToast(msg);
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err) || (push ? "Commit + push failed." : "Commit failed."));
+  } finally {
+    checkoutCommitActionInFlight = false;
   }
 }
 
@@ -7113,7 +7548,11 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  const integrateToDefault = isIntegrateToDefaultAction(action);
+  const cmd = String(action.command || "").trimEnd();
+  if (!cmd) {
+    showToast("Action has no command.");
+    return;
+  }
 
   const builtIn = builtInActionKindFromCommand(cmd);
   if (builtIn === "integrate_to_default") {
@@ -7129,20 +7568,9 @@ async function runJobActionById(actionId) {
     return;
   }
 
-  if (job && job.status === "running") {
+  if (job && jobStatusForUi(job) === "running") {
     const ok = window.confirm(`Job is running. Running actions may interfere.\n\nRun "${action.name}" anyway?`);
     if (!ok) return;
-  }
-
-  if (integrateToDefault) {
-    await runIntegrateToDefaultAction(job);
-    return;
-  }
-
-  const cmd = String(action.command || "").trimEnd();
-  if (!cmd) {
-    showToast("Action has no command.");
-    return;
   }
 
   // Actions run via the per-job terminal session so interactive commands work
@@ -8205,7 +8633,7 @@ function renderJobDialogMeta(job) {
     const dur = jobElapsedText(job);
     if (dur) pushChip("elapsed", dur);
   }
-  if (job) bits.push(`agent=${normalizeAgentKey(job.agent)}`);
+  if (job) pushChip("agent", normalizeAgentKey(job.agent));
 
   // Project + checkout path
   {
@@ -8216,26 +8644,22 @@ function renderJobDialogMeta(job) {
     const projShort = project ? normalizeShortName(project.shortName || "") : "";
     const projName = project && project.name ? String(project.name) : "";
     const projLabel = projShort || projName;
-    if (projLabel) bits.push(`project=${projLabel}`);
+    if (projLabel) pushChip("project", projLabel);
 
     const cwdDisp = formatProjectPathForDisplay(cwdPath);
-    if (cwdDisp) bits.push(`cwd=${cwdDisp}`);
+    if (cwdDisp) pushChip("cwd", cwdDisp, { title: cwdPath, long: true });
 
     if (basePath && cwdPath && basePath !== cwdPath) {
       const baseDisp = formatProjectPathForDisplay(basePath);
-      if (baseDisp) bits.push(`base=${baseDisp}`);
-    }
-
-    if (els.jobDialogMeta) {
-      const titles = [];
-      if (cwdPath) titles.push(`cwd=${cwdPath}`);
-      if (basePath && cwdPath && basePath !== cwdPath) titles.push(`base=${basePath}`);
-      els.jobDialogMeta.title = titles.join("  ");
+      if (baseDisp) pushChip("base", baseDisp, { title: basePath, long: true });
     }
   }
 
-  if (job.threadId) bits.push(`thread=${job.threadId}`);
-  if (job.model) bits.push(`model=${job.model}`);
+  if (job.threadId) {
+    const threadRaw = String(job.threadId);
+    pushChip("thread", middleEllipsis(threadRaw, { head: 12, tail: 10 }), { title: threadRaw, long: true });
+  }
+  if (job.model) pushChip("model", job.model);
   const ut = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : null;
   if (ut && toIntOrZero(ut.turns) > 0) {
     const turns = toIntOrZero(ut.turns);
@@ -8251,10 +8675,27 @@ function renderJobDialogMeta(job) {
   {
     const ctx = jobContextUsage(job);
     if (ctx) {
-      bits.push(`context=${fmtPctCompact(ctx.percent)} (${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in)`);
+      const value = `${fmtPctCompact(ctx.percent)} · ${fmtTokCompact(ctx.input_tokens)}/${fmtTokCompact(ctx.limit_tokens)} in`;
+      const title = `context ${fmtPctCompact(ctx.percent)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
+      pushChip("context", value, { title, tooltip: true });
     }
   }
-  els.jobDialogMeta.textContent = bits.join("  ");
+  if (chips.length === 0) {
+    els.jobDialogMeta.removeAttribute(TOKEN_TOOLTIP_ATTR);
+    els.jobDialogMeta.removeAttribute("title");
+    els.jobDialogMeta.textContent = "";
+    return;
+  }
+  const chipsHtml = chips
+    .map((chip) => {
+      const classes = ["jobmeta__chip"];
+      if (chip.long) classes.push("jobmeta__chip--long");
+      if (chip.tone === "run" || chip.tone === "done" || chip.tone === "attn") classes.push(`jobmeta__chip--${chip.tone}`);
+      const tooltipAttr = chip.title ? ` ${TOKEN_TOOLTIP_ATTR}="${escapeHtml(chip.title)}"` : "";
+      return `<span class="${classes.join(" ")}"${tooltipAttr}><span class="jobmeta__key">${escapeHtml(chip.key)}</span><span class="jobmeta__value">${escapeHtml(chip.value)}</span></span>`;
+    })
+    .join("");
+  els.jobDialogMeta.innerHTML = `<div class="jobmeta">${chipsHtml}</div>`;
 }
 
 function setActiveTab(tab) {
@@ -8264,12 +8705,14 @@ function setActiveTab(tab) {
   document.querySelectorAll(".tab").forEach((t) => {
     t.classList.toggle("tab--active", t.getAttribute("data-tab") === nextTab);
   });
-  els.jobDialogChat.classList.toggle("panel--active", tab === "chat");
-  els.jobDialogLive.classList.toggle("panel--active", tab === "live");
-  els.jobDialogLogs.classList.toggle("panel--active", tab === "logs");
-  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", tab === "term");
+  els.jobDialogChat.classList.toggle("panel--active", nextTab === "chat");
+  els.jobDialogLive.classList.toggle("panel--active", nextTab === "live");
+  els.jobDialogLogs.classList.toggle("panel--active", nextTab === "logs");
+  if (els.jobDialogDiff) els.jobDialogDiff.classList.toggle("panel--active", nextTab === "diff");
+  if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", nextTab === "term");
   if (els.jobDialog && els.jobDialog.open) applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
-  if (tab === "term") maybeEnsureTerminalForSelectedJob();
+  if (nextTab === "term") maybeEnsureTerminalForSelectedJob();
+  if (nextTab === "diff") loadSelectedJobDiff({ force: false }).catch(() => {});
 }
 
 function isNearBottom(el) {
@@ -8420,7 +8863,299 @@ function jobDiffSignature(job) {
   return [status, finishedAt, projectPath, integratedAt, exitCode].join("|");
 }
 
-function diffLineClass(line) {
+function getJobDiffUi(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return { filterText: "", selectedFileId: "" };
+  let entry = jobDiffUiState.get(id);
+  if (!entry) {
+    entry = { filterText: "", selectedFileId: "" };
+    jobDiffUiState.set(id, entry);
+  }
+  return entry;
+}
+
+function normalizeDiffPathToken(value) {
+  let s = typeof value === "string" ? value.trim() : "";
+  if (!s) return "";
+  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) s = s.slice(1, -1);
+  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2) s = s.slice(1, -1);
+  if (s === "/dev/null") return "";
+  if (s.startsWith("a/") || s.startsWith("b/")) s = s.slice(2);
+  return s;
+}
+
+function parseDiffGitHeaderPaths(line) {
+  const m = /^diff --git a\/(.+) b\/(.+)$/.exec(String(line || ""));
+  if (!m) return { oldPath: "", newPath: "" };
+  return {
+    oldPath: normalizeDiffPathToken(m[1]),
+    newPath: normalizeDiffPathToken(m[2])
+  };
+}
+
+function parseDiffHunk(header, bodyLines) {
+  const m = /^@@\s*-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s*@@/.exec(String(header || ""));
+  let leftLine = m ? Number(m[1]) : 0;
+  let rightLine = m ? Number(m[3]) : 0;
+  const rows = [];
+  let additions = 0;
+  let deletions = 0;
+
+  const lines = Array.isArray(bodyLines) ? bodyLines : [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = String(lines[i] || "");
+
+    if (line.startsWith(" ")) {
+      const text = line.slice(1);
+      rows.push({
+        kind: "context",
+        leftNo: leftLine > 0 ? leftLine : null,
+        rightNo: rightLine > 0 ? rightLine : null,
+        leftText: text,
+        rightText: text
+      });
+      leftLine += 1;
+      rightLine += 1;
+      i += 1;
+      continue;
+    }
+
+    if (line.startsWith("-") || line.startsWith("+")) {
+      const dels = [];
+      const adds = [];
+      while (i < lines.length) {
+        const blockLine = String(lines[i] || "");
+        if (blockLine.startsWith("-")) {
+          dels.push(blockLine.slice(1));
+          i += 1;
+          continue;
+        }
+        if (blockLine.startsWith("+")) {
+          adds.push(blockLine.slice(1));
+          i += 1;
+          continue;
+        }
+        break;
+      }
+
+      const span = Math.max(dels.length, adds.length);
+      for (let j = 0; j < span; j += 1) {
+        const leftText = j < dels.length ? dels[j] : null;
+        const rightText = j < adds.length ? adds[j] : null;
+        const hasLeft = leftText != null;
+        const hasRight = rightText != null;
+
+        const row = {
+          kind: hasLeft && hasRight ? "mod" : hasLeft ? "del" : "add",
+          leftNo: hasLeft ? (leftLine > 0 ? leftLine : null) : null,
+          rightNo: hasRight ? (rightLine > 0 ? rightLine : null) : null,
+          leftText,
+          rightText
+        };
+        rows.push(row);
+        if (hasLeft) {
+          leftLine += 1;
+          deletions += 1;
+        }
+        if (hasRight) {
+          rightLine += 1;
+          additions += 1;
+        }
+      }
+      continue;
+    }
+
+    rows.push({
+      kind: "meta",
+      leftNo: null,
+      rightNo: null,
+      leftText: line,
+      rightText: line
+    });
+    i += 1;
+  }
+
+  return {
+    header: String(header || ""),
+    rows,
+    additions,
+    deletions
+  };
+}
+
+function parseUnifiedDiffModel(diffText) {
+  const lines = normalizeNewlines(diffText).split("\n");
+  const files = [];
+  const notes = [];
+  let section = "";
+  let fileCounter = 0;
+  let current = null;
+
+  function pushCurrent() {
+    if (!current) return;
+    current.status = String(current.status || "modified").trim().toLowerCase();
+    if (
+      current.status !== "modified" &&
+      current.status !== "added" &&
+      current.status !== "deleted" &&
+      current.status !== "renamed" &&
+      current.status !== "copied" &&
+      current.status !== "untracked"
+    ) {
+      current.status = "modified";
+    }
+
+    current.oldPath = normalizeDiffPathToken(current.oldPath);
+    current.newPath = normalizeDiffPathToken(current.newPath);
+
+    if (current.status === "deleted") current.path = current.oldPath || current.newPath || "";
+    else current.path = current.newPath || current.oldPath || "";
+    if (!current.path) current.path = current.headerPath || "";
+    if (!current.path) current.path = `file-${current.id}`;
+
+    files.push(current);
+    current = null;
+  }
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = String(lines[i] || "");
+
+    if (line.startsWith("# ")) {
+      pushCurrent();
+      section = line.slice(2).trim();
+      continue;
+    }
+
+    if (line.startsWith("diff --git ")) {
+      pushCurrent();
+      fileCounter += 1;
+      const paths = parseDiffGitHeaderPaths(line);
+      const headerPath = paths.newPath || paths.oldPath || "";
+      current = {
+        id: `f${fileCounter}`,
+        section,
+        status: "modified",
+        headerPath,
+        path: headerPath,
+        oldPath: paths.oldPath,
+        newPath: paths.newPath,
+        metaLines: [],
+        hunks: [],
+        additions: 0,
+        deletions: 0,
+        binary: false,
+        untracked: false
+      };
+      continue;
+    }
+
+    if (line.startsWith("?? ")) {
+      pushCurrent();
+      const untrackedPath = normalizeDiffPathToken(line.slice(3));
+      if (!untrackedPath) continue;
+      fileCounter += 1;
+      files.push({
+        id: `f${fileCounter}`,
+        section,
+        status: "untracked",
+        headerPath: untrackedPath,
+        path: untrackedPath,
+        oldPath: "",
+        newPath: untrackedPath,
+        metaLines: [],
+        hunks: [],
+        additions: 0,
+        deletions: 0,
+        binary: false,
+        untracked: true
+      });
+      continue;
+    }
+
+    if (line.startsWith("... ")) {
+      notes.push(line);
+      continue;
+    }
+
+    if (!current) {
+      if (line.trim()) notes.push(line);
+      continue;
+    }
+
+    if (line.startsWith("@@")) {
+      const body = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const next = String(lines[j] || "");
+        if (next.startsWith("@@") || next.startsWith("diff --git ") || next.startsWith("# ") || next.startsWith("?? ")) break;
+        body.push(next);
+        j += 1;
+      }
+      const hunk = parseDiffHunk(line, body);
+      current.hunks.push(hunk);
+      current.additions += hunk.additions;
+      current.deletions += hunk.deletions;
+      i = j - 1;
+      continue;
+    }
+
+    if (line.startsWith("new file mode ")) current.status = "added";
+    else if (line.startsWith("deleted file mode ")) current.status = "deleted";
+    else if (line.startsWith("rename from ")) {
+      current.status = "renamed";
+      current.oldPath = normalizeDiffPathToken(line.slice("rename from ".length));
+    } else if (line.startsWith("rename to ")) {
+      current.status = "renamed";
+      current.newPath = normalizeDiffPathToken(line.slice("rename to ".length));
+    } else if (line.startsWith("copy from ")) {
+      current.status = "copied";
+      current.oldPath = normalizeDiffPathToken(line.slice("copy from ".length));
+    } else if (line.startsWith("copy to ")) {
+      current.status = "copied";
+      current.newPath = normalizeDiffPathToken(line.slice("copy to ".length));
+    } else if (line.startsWith("Binary files ")) current.binary = true;
+    else if (line.startsWith("--- ")) {
+      const oldPath = normalizeDiffPathToken(line.slice(4));
+      if (oldPath) current.oldPath = oldPath;
+    } else if (line.startsWith("+++ ")) {
+      const newPath = normalizeDiffPathToken(line.slice(4));
+      if (newPath) current.newPath = newPath;
+    }
+    current.metaLines.push(line);
+  }
+
+  pushCurrent();
+  return { files, notes };
+}
+
+function diffStatusText(status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "added") return "Added";
+  if (s === "deleted") return "Deleted";
+  if (s === "renamed") return "Renamed";
+  if (s === "copied") return "Copied";
+  if (s === "untracked") return "Untracked";
+  return "Modified";
+}
+
+function diffStatusShort(status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "added") return "A";
+  if (s === "deleted") return "D";
+  if (s === "renamed") return "R";
+  if (s === "copied") return "C";
+  if (s === "untracked") return "?";
+  return "M";
+}
+
+function diffStatusClass(status) {
+  const s = String(status || "").trim().toLowerCase();
+  if (s === "added" || s === "deleted" || s === "renamed" || s === "copied" || s === "untracked") return s;
+  return "modified";
+}
+
+function diffRawLineClass(line) {
   const s = String(line || "");
   if (!s) return "diffline";
   if (s.startsWith("# ")) return "diffline diffline--section";
@@ -8447,17 +9182,255 @@ function diffLineClass(line) {
   return "diffline";
 }
 
-function renderDiffTextHtml(diffText) {
+function renderDiffRawTextHtml(diffText) {
   const lines = normalizeNewlines(diffText).split("\n");
   if (lines.length === 1 && !lines[0]) return `<div class="logline">No diff output.</div>`;
   const rows = lines
     .map((line) => {
-      const cls = diffLineClass(line);
+      const cls = diffRawLineClass(line);
       const inner = line ? escapeHtml(line) : "&nbsp;";
       return `<div class="${cls}">${inner}</div>`;
     })
     .join("");
-  return `<div class="diffview__body">${rows}</div>`;
+  return `<div class="diffview__body diffview__body--raw">${rows}</div>`;
+}
+
+function diffFileMatchesQuery(file, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  const f = file && typeof file === "object" ? file : {};
+  const hay = [f.path, f.oldPath, f.newPath, f.section, diffStatusText(f.status)].map((x) => String(x || "").toLowerCase()).join(" ");
+  return hay.includes(q);
+}
+
+function renderDiffLineNumberHtml(value) {
+  if (!Number.isFinite(value)) return "&nbsp;";
+  const n = Math.max(0, Math.trunc(value));
+  return n > 0 ? String(n) : "&nbsp;";
+}
+
+function renderDiffCodeHtml(value) {
+  if (value == null) return "&nbsp;";
+  const safe = escapeHtml(String(value));
+  return safe || "&nbsp;";
+}
+
+function renderDiffHunkHtml(hunk) {
+  const h = hunk && typeof hunk === "object" ? hunk : {};
+  const rows = Array.isArray(h.rows) ? h.rows : [];
+  const rowsHtml = rows
+    .map((row) => {
+      const r = row && typeof row === "object" ? row : {};
+      const kind = String(r.kind || "context");
+      const rowClass =
+        kind === "add"
+          ? "difftable__row difftable__row--add"
+          : kind === "del"
+            ? "difftable__row difftable__row--del"
+            : kind === "mod"
+              ? "difftable__row difftable__row--mod"
+              : kind === "meta"
+                ? "difftable__row difftable__row--meta"
+                : "difftable__row difftable__row--context";
+
+      return `
+        <tr class="${rowClass}">
+          <td class="difftable__ln difftable__ln--left">${renderDiffLineNumberHtml(Number(r.leftNo))}</td>
+          <td class="difftable__code difftable__code--left">${renderDiffCodeHtml(r.leftText)}</td>
+          <td class="difftable__ln difftable__ln--right">${renderDiffLineNumberHtml(Number(r.rightNo))}</td>
+          <td class="difftable__code difftable__code--right">${renderDiffCodeHtml(r.rightText)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <section class="diffchunk">
+      <div class="diffchunk__header">${escapeHtml(String(h.header || ""))}</div>
+      <div class="diffchunk__tableWrap">
+        <table class="difftable" role="table" aria-label="Side-by-side diff hunk">
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function renderDiffSelectedFileHtml(file, notes) {
+  const f = file && typeof file === "object" ? file : null;
+  if (!f) return `<div class="diffcontent__empty">No files match the current filter.</div>`;
+
+  const statusClass = diffStatusClass(f.status);
+  const statusText = diffStatusText(f.status);
+  const statusShort = diffStatusShort(f.status);
+  const additions = Number.isFinite(f.additions) ? Math.max(0, Math.trunc(f.additions)) : 0;
+  const deletions = Number.isFinite(f.deletions) ? Math.max(0, Math.trunc(f.deletions)) : 0;
+  const mainPath = String(f.path || f.newPath || f.oldPath || "(unknown file)");
+  const renamed = !!(f.oldPath && f.newPath && f.oldPath !== f.newPath);
+  const metaLines = Array.isArray(f.metaLines)
+    ? f.metaLines.filter((line) => {
+        const s = String(line || "");
+        if (!s) return false;
+        if (s.startsWith("--- ") || s.startsWith("+++ ")) return false;
+        return true;
+      })
+    : [];
+
+  const metaHtml = metaLines.length
+    ? `<div class="diffcontent__meta">${metaLines.map((line) => `<div class="diffcontent__metaLine">${escapeHtml(String(line || ""))}</div>`).join("")}</div>`
+    : "";
+
+  const noteList = Array.isArray(notes) ? notes.filter((line) => String(line || "").trim()) : [];
+  const notesHtml = noteList.length
+    ? `<div class="diffcontent__notes">${noteList.map((line) => `<div class="diffcontent__note">${escapeHtml(String(line || ""))}</div>`).join("")}</div>`
+    : "";
+
+  let bodyHtml = "";
+  if (Array.isArray(f.hunks) && f.hunks.length > 0) {
+    bodyHtml = f.hunks.map((h) => renderDiffHunkHtml(h)).join("");
+  } else if (f.untracked) {
+    bodyHtml = `<div class="diffcontent__empty">Untracked file. Content preview is not included in patch output.</div>`;
+  } else if (f.binary) {
+    bodyHtml = `<div class="diffcontent__empty">Binary file changed.</div>`;
+  } else {
+    bodyHtml = `<div class="diffcontent__empty">No line-level hunks available.</div>`;
+  }
+
+  return `
+    <div class="diffcontent__head">
+      <div class="diffcontent__titleWrap">
+        <div class="diffcontent__title">${escapeHtml(mainPath)}</div>
+        ${renamed ? `<div class="diffcontent__subtitle">renamed from ${escapeHtml(String(f.oldPath || ""))}</div>` : ""}
+      </div>
+      <div class="diffcontent__badges">
+        <span class="diffstatus diffstatus--${statusClass}">${escapeHtml(statusShort)} ${escapeHtml(statusText)}</span>
+        ${additions > 0 ? `<span class="diffdelta diffdelta--add">+${additions}</span>` : ""}
+        ${deletions > 0 ? `<span class="diffdelta diffdelta--del">-${deletions}</span>` : ""}
+      </div>
+    </div>
+    ${notesHtml}
+    <div class="diffcontent__scroll">
+      ${metaHtml}
+      ${bodyHtml}
+    </div>
+  `;
+}
+
+function getJobDiffModel(job, payload) {
+  const p = payload && typeof payload === "object" ? payload : null;
+  if (!p) return { files: [], notes: [] };
+  const diffText = typeof p.diff === "string" ? p.diff : "";
+  const jobId = String((job && job.id) || state.selectedJobId || "").trim();
+  const cached = jobId ? jobDiffCache.get(jobId) : null;
+  if (cached && cached.payload === p && cached.model && typeof cached.model === "object") {
+    return cached.model;
+  }
+  const model = parseUnifiedDiffModel(diffText);
+  if (cached && cached.payload === p) cached.model = model;
+  return model;
+}
+
+function renderDiffWorkbenchHtml(job, payload) {
+  const model = getJobDiffModel(job, payload);
+  const files = Array.isArray(model.files) ? model.files : [];
+  if (files.length === 0) {
+    return renderDiffRawTextHtml(typeof payload.diff === "string" ? payload.diff : "");
+  }
+
+  const jobId = String((job && job.id) || state.selectedJobId || "").trim();
+  const ui = getJobDiffUi(jobId);
+  const queryRaw = typeof ui.filterText === "string" ? ui.filterText : "";
+  const query = queryRaw.trim().toLowerCase();
+  const visible = query ? files.filter((f) => diffFileMatchesQuery(f, query)) : files;
+
+  let selectedFileId = String(ui.selectedFileId || "").trim();
+  if (!visible.some((f) => String(f.id || "") === selectedFileId)) {
+    selectedFileId = visible[0] ? String(visible[0].id || "") : "";
+  }
+  ui.selectedFileId = selectedFileId;
+  const selectedFile = visible.find((f) => String(f.id || "") === selectedFileId) || null;
+
+  const totalAdditions = files.reduce((sum, f) => sum + Math.max(0, Number.isFinite(f.additions) ? Math.trunc(f.additions) : 0), 0);
+  const totalDeletions = files.reduce((sum, f) => sum + Math.max(0, Number.isFinite(f.deletions) ? Math.trunc(f.deletions) : 0), 0);
+
+  let listHtml = "";
+  let lastSection = "";
+  for (const file of visible) {
+    const section = String(file && file.section ? file.section : "");
+    if (section !== lastSection) {
+      listHtml += `<div class="difffiles__section">${escapeHtml(section || "changes")}</div>`;
+      lastSection = section;
+    }
+
+    const f = file && typeof file === "object" ? file : {};
+    const statusClass = diffStatusClass(f.status);
+    const statusShort = diffStatusShort(f.status);
+    const additions = Math.max(0, Number.isFinite(f.additions) ? Math.trunc(f.additions) : 0);
+    const deletions = Math.max(0, Number.isFinite(f.deletions) ? Math.trunc(f.deletions) : 0);
+    const mainPath = String(f.path || f.newPath || f.oldPath || "(unknown file)");
+    const subPath = f.oldPath && f.newPath && f.oldPath !== f.newPath ? String(f.oldPath) : "";
+    const active = String(f.id || "") === selectedFileId;
+
+    listHtml += `
+      <button type="button" class="difffile${active ? " difffile--active" : ""}" data-job-diff-file-id="${escapeHtml(String(f.id || ""))}">
+        <span class="difffile__text">
+          <span class="difffile__path">${escapeHtml(mainPath)}</span>
+          ${subPath ? `<span class="difffile__sub">${escapeHtml(subPath)}</span>` : ""}
+        </span>
+        <span class="difffile__meta">
+          <span class="difffile__status difffile__status--${statusClass}">${escapeHtml(statusShort)}</span>
+          ${additions > 0 ? `<span class="difffile__delta difffile__delta--add">+${additions}</span>` : ""}
+          ${deletions > 0 ? `<span class="difffile__delta difffile__delta--del">-${deletions}</span>` : ""}
+        </span>
+      </button>
+    `;
+  }
+
+  if (!listHtml) {
+    listHtml = `<div class="difffiles__empty">No files match the current filter.</div>`;
+  }
+
+  const fileCountText = query ? `${visible.length}/${files.length} files` : `${files.length} files`;
+
+  return `
+    <div class="diffview__shell">
+      <aside class="difffiles">
+        <div class="difffiles__toolbar">
+          <input
+            class="difffiles__filter"
+            type="search"
+            placeholder="Filter files…"
+            autocomplete="off"
+            value="${escapeHtml(queryRaw)}"
+            data-job-diff-filter
+          />
+          <div class="difffiles__summary">
+            <span>${escapeHtml(fileCountText)}</span>
+            <span class="difffiles__totals">
+              ${totalAdditions > 0 ? `<span class="difffile__delta difffile__delta--add">+${totalAdditions}</span>` : ""}
+              ${totalDeletions > 0 ? `<span class="difffile__delta difffile__delta--del">-${totalDeletions}</span>` : ""}
+            </span>
+          </div>
+        </div>
+        <div class="difffiles__list">${listHtml}</div>
+      </aside>
+      <section class="diffcontent">${renderDiffSelectedFileHtml(selectedFile, model.notes)}</section>
+    </div>
+  `;
+}
+
+function rerenderSelectedJobDiffFromCache() {
+  const jobId = String(state.selectedJobId || "").trim();
+  if (!jobId) return;
+  const job = state.jobs.get(jobId);
+  if (!job) return;
+  const cached = jobDiffCache.get(jobId);
+  if (!(cached && cached.payload)) return;
+
+  renderJobDiffPanel(job, cached.payload, { showRefresh: true });
+  if (state.activeTab === "diff" && normalizeJobSearchQuery(state.jobSearchQuery)) {
+    applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
+  }
 }
 
 function renderJobDiffPanel(job, payload, opts = {}) {
@@ -8490,7 +9463,7 @@ function renderJobDiffPanel(job, payload, opts = {}) {
   if (message) {
     body = `<div class="logline${error ? " logline--stderr" : ""}">${escapeHtml(message)}</div>`;
   } else if (p && p.hasChanges === true) {
-    body = renderDiffTextHtml(typeof p.diff === "string" ? p.diff : "");
+    body = renderDiffWorkbenchHtml(job, p);
   } else {
     body = `<div class="logline">No code changes detected for this task.</div>`;
   }
@@ -8561,7 +9534,8 @@ async function loadSelectedJobDiff(opts = {}) {
 
     const liveJob = state.jobs.get(jobId) || job;
     const payload = res && typeof res === "object" ? res : {};
-    jobDiffCache.set(jobId, { sig: jobDiffSignature(liveJob), fetchedAt: Date.now(), payload });
+    const model = payload && payload.hasChanges === true ? parseUnifiedDiffModel(typeof payload.diff === "string" ? payload.diff : "") : null;
+    jobDiffCache.set(jobId, { sig: jobDiffSignature(liveJob), fetchedAt: Date.now(), payload, model });
     renderJobDiffPanel(liveJob, payload);
 
     if (state.activeTab === "diff" && normalizeJobSearchQuery(state.jobSearchQuery)) {
@@ -8758,14 +9732,48 @@ function appendJobMessage(jobId, message) {
   upsertJob(job);
 }
 
-async function maybeConfirmDefaultBranchBeforeRun(projectId) {
+async function addSkipDefaultBranchConfirmBranch(projectId, branch) {
+  const id = String(projectId || "").trim();
+  const b = normalizeBranchName(branch);
+  if (!id || !b) return false;
+  if (!api || typeof api.projectsUpdate !== "function") return false;
+
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project) return false;
+
+  const existing = Array.isArray(project.skipDefaultBranchConfirmBranches) ? project.skipDefaultBranchConfirmBranches : [];
+  const next = [];
+  const seen = new Set();
+  for (const x of existing) {
+    const nx = normalizeBranchName(x);
+    if (!nx) continue;
+    if (seen.has(nx)) continue;
+    seen.add(nx);
+    next.push(nx);
+    if (next.length >= 100) break;
+  }
+  if (!seen.has(b)) next.push(b);
+  while (next.length > 100) next.shift();
+
+  try {
+    await api.projectsUpdate(id, { skipDefaultBranchConfirmBranches: next });
+    project.skipDefaultBranchConfirmBranches = next;
+    return true;
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err));
+    return false;
+  }
+}
+
+async function maybeConfirmDefaultBranchBeforeRun(projectId, checkoutModeOverride) {
   const id = String(projectId || "").trim();
   if (!id) return true;
 
   const project = state.projects.find((p) => p && p.id === id) || null;
   if (!project) return true;
 
-  const mode = normalizeCheckoutMode(project.checkoutMode);
+  const overrideRaw = typeof checkoutModeOverride === "string" ? checkoutModeOverride.trim() : "";
+  const mode = overrideRaw ? normalizeCheckoutMode(overrideRaw) : normalizeCheckoutMode(project.checkoutMode);
   const def = normalizeBranchName(project.defaultBranch);
   if (mode !== "inplace") return true;
   if (!def) return true;
@@ -8782,6 +9790,11 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId) {
 
   const cur = typeof info.branch === "string" ? info.branch.trim() : "";
   if (!cur || cur === def) return true;
+  const curNorm = normalizeBranchName(cur);
+  if (curNorm && Array.isArray(project.skipDefaultBranchConfirmBranches)) {
+    const suppress = project.skipDefaultBranchConfirmBranches.some((b) => normalizeBranchName(b) === curNorm);
+    if (suppress) return true;
+  }
 
   const action = await promptBranchMismatch({
     projectName: project.name,
@@ -8804,8 +9817,550 @@ async function maybeConfirmDefaultBranchBeforeRun(projectId) {
     }
   }
 
+  if (action === "run_no_ask") {
+    await addSkipDefaultBranchConfirmBranch(id, curNorm || cur);
+    return true;
+  }
+
   if (action === "run") return true;
   return false; // cancel
+}
+
+function helperCurrentAgentPref() {
+  return normalizeHelperAgentSelection(els.helperAgentSelect ? els.helperAgentSelect.value : "");
+}
+
+function helperCurrentContextScope() {
+  const raw = els.helperContextScopeSelect ? String(els.helperContextScopeSelect.value || "") : "";
+  const fallbackProjectId = helperDefaultProjectIdForContext();
+  return normalizeHelperContextScope(raw || getStoredHelperContextScope(), { defaultProjectId: fallbackProjectId });
+}
+
+function isHelperClaudeFamilyModel(value) {
+  const low = String(value || "")
+    .trim()
+    .toLowerCase();
+  return low === "opus" || low === "sonnet" || low === "haiku";
+}
+
+function helperCurrentModelPref() {
+  const selectedAgent = helperCurrentAgentPref();
+  const configured = normalizeHelperModelValue(state.settings && state.settings.helperDefaultModel ? state.settings.helperDefaultModel : "");
+
+  if (selectedAgent === "claude") return configured || "opus";
+  if (selectedAgent === "codex") return isHelperClaudeFamilyModel(configured) ? "" : configured;
+  if (configured) return configured;
+  return helperDefaultModelFromSettings(state.settings);
+}
+
+function helperRunnerText(agent, model) {
+  const a = normalizeAgentKey(agent || "");
+  const aLabel = a ? agentDisplayName(a) : "";
+  const m = String(model || "").trim();
+  return `${aLabel || "auto"}${m ? ` · ${m}` : ""}`;
+}
+
+function helperSelectedProjectForContext(scopeValue = helperCurrentContextScope()) {
+  const projectId = helperProjectIdFromContextValue(scopeValue);
+  if (!projectId) return null;
+  return helperProjectById(projectId);
+}
+
+function helperSelectedJobForContext(projectId = "") {
+  const selected = String(state.selectedJobId || "").trim();
+  if (selected) {
+    const hit = state.jobs.get(selected);
+    if (hit && !isDemoJob(hit)) {
+      if (!projectId) return hit;
+      const hitProjectId = String(hit.projectId || "").trim();
+      if (!hitProjectId || hitProjectId !== String(projectId).trim()) return null;
+      return hit;
+    }
+  }
+  return null;
+}
+
+function buildHelperContextPayload() {
+  const scope = helperCurrentContextScope();
+  const project = helperSelectedProjectForContext(scope);
+  const projectId = project && project.id ? String(project.id).trim() : "";
+  const job = project ? helperSelectedJobForContext(projectId) : null;
+  const composerAgent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
+  const composerModel = String(els.modelInput && els.modelInput.value ? els.modelInput.value : "").trim();
+  const promptPreview = job && typeof job.promptPreview === "string" ? job.promptPreview.trim() : "";
+  const preview =
+    promptPreview ||
+    (job && Array.isArray(job.prompts) && job.prompts.length > 0 && typeof job.prompts[job.prompts.length - 1].text === "string"
+      ? String(job.prompts[job.prompts.length - 1].text || "").trim()
+      : "");
+
+  return {
+    projectName: project && project.name ? String(project.name) : "",
+    projectPath: project && project.path ? String(project.path) : "",
+    activeView: normalizeView(state.view),
+    composerAgent,
+    composerModel,
+    selectedJobTitle: job ? jobDisplayTitle(job) : "",
+    selectedJobStatus: job ? jobStatusForUi(job) : "",
+    selectedJobAgent: job && job.agent ? normalizeAgentKey(job.agent) : "",
+    selectedJobModel: job && job.model ? String(job.model) : "",
+    selectedJobPrompt: preview
+  };
+}
+
+function helperSessionById(sessionId) {
+  const id = String(sessionId || "").trim();
+  if (!id) return null;
+  return Array.isArray(state.helperSessions) ? state.helperSessions.find((s) => s && s.id === id) || null : null;
+}
+
+function helperSessionPreviewText(session) {
+  const messages = session && Array.isArray(session.messages) ? session.messages : [];
+  const seed = messages.find((m) => m && m.role === "user" && String(m.text || "").trim()) || messages[0];
+  const raw = seed && typeof seed.text === "string" ? oneLine(seed.text) : "";
+  return raw ? truncateText(raw, 56) : "New session";
+}
+
+function helperSessionUpdatedLabel(session) {
+  const raw = session && session.updatedAt ? String(session.updatedAt) : session && session.createdAt ? String(session.createdAt) : "";
+  if (!raw) return "";
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  try {
+    return d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return d.toISOString();
+  }
+}
+
+function helperSessionOptionLabel(session, idx) {
+  const title = helperSessionPreviewText(session);
+  const when = helperSessionUpdatedLabel(session);
+  const prefix = `Session ${idx + 1}`;
+  return when ? `${prefix}: ${title} · ${when}` : `${prefix}: ${title}`;
+}
+
+function renderHelperSessionOptions() {
+  if (!els.helperSessionSelect) return;
+  const sessions = Array.isArray(state.helperSessions) ? state.helperSessions : [];
+  if (sessions.length === 0) {
+    els.helperSessionSelect.innerHTML = `<option value="">No sessions</option>`;
+    els.helperSessionSelect.value = "";
+    return;
+  }
+
+  const options = sessions
+    .map((session, idx) => `<option value="${escapeHtml(session.id)}">${escapeHtml(helperSessionOptionLabel(session, idx))}</option>`)
+    .join("");
+  els.helperSessionSelect.innerHTML = options;
+
+  let active = String(state.helperSessionId || "").trim();
+  if (!active || !sessions.some((s) => s && s.id === active)) active = sessions[0].id;
+  state.helperSessionId = active;
+  if (active) els.helperSessionSelect.value = active;
+}
+
+function helperPersistSessionsState() {
+  if (!helperPersistHistoryFromSettings()) {
+    clearStoredHelperHistory();
+    return;
+  }
+  storeHelperSessions(state.helperSessions, state.helperSessionId);
+}
+
+function syncActiveHelperSessionFromState(opts = {}) {
+  const touch = !(opts && opts.touch === false);
+  const persist = !(opts && opts.persist === false);
+
+  state.helperSessions = Array.isArray(state.helperSessions) ? state.helperSessions : [];
+  state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+
+  let activeId = String(state.helperSessionId || "").trim();
+  let active = helperSessionById(activeId);
+  if (!active) {
+    const seeded = createHelperSessionRecord({ messages: state.helperMessages, lastRunner: state.helperLastRunner });
+    state.helperSessions.unshift(seeded);
+    active = seeded;
+    activeId = seeded.id;
+  }
+
+  const normalizedMessages = normalizeHelperMessages(state.helperMessages);
+  const next = {
+    ...active,
+    messages: normalizedMessages,
+    lastRunner: String(state.helperLastRunner || helperRunnerFromMessages(normalizedMessages))
+      .trim()
+      .slice(0, 64)
+  };
+  if (touch) next.updatedAt = new Date().toISOString();
+
+  state.helperSessions = state.helperSessions.map((s) => (s && s.id === activeId ? next : s));
+  const normalized = normalizeHelperSessions(state.helperSessions, activeId);
+  state.helperSessions = normalized.sessions;
+  state.helperSessionId = normalized.activeSessionId;
+
+  if (persist) helperPersistSessionsState();
+}
+
+function loadHelperSessionsFromStorage() {
+  if (!helperPersistHistoryFromSettings()) {
+    clearStoredHelperHistory();
+    const seeded = createHelperSessionRecord({});
+    state.helperSessions = [seeded];
+    state.helperSessionId = seeded.id;
+    state.helperMessages = [];
+    state.helperLastRunner = "";
+    return;
+  }
+
+  const stored = getStoredHelperSessions();
+  if (!Array.isArray(stored.sessions) || stored.sessions.length === 0) {
+    const seeded = createHelperSessionRecord({});
+    state.helperSessions = [seeded];
+    state.helperSessionId = seeded.id;
+    state.helperMessages = [];
+    state.helperLastRunner = "";
+    helperPersistSessionsState();
+    return;
+  }
+
+  state.helperSessions = stored.sessions;
+  state.helperSessionId = stored.activeSessionId || (stored.sessions[0] && stored.sessions[0].id ? stored.sessions[0].id : "");
+  const active = helperSessionById(state.helperSessionId) || stored.sessions[0];
+  state.helperSessionId = active && active.id ? active.id : "";
+  state.helperMessages = active && Array.isArray(active.messages) ? normalizeHelperMessages(active.messages) : [];
+  state.helperLastRunner = String(active && active.lastRunner ? active.lastRunner : helperRunnerFromMessages(state.helperMessages)).trim().slice(0, 64);
+  helperPersistSessionsState();
+}
+
+function helperSelectSession(sessionId, opts = {}) {
+  if (state.helperPending) return false;
+  const id = String(sessionId || "").trim();
+  syncActiveHelperSessionFromState({ touch: false });
+  const next = helperSessionById(id);
+  if (!next) return false;
+  state.helperSessionId = next.id;
+  state.helperMessages = Array.isArray(next.messages) ? normalizeHelperMessages(next.messages) : [];
+  state.helperLastRunner = String(next.lastRunner || helperRunnerFromMessages(state.helperMessages)).trim().slice(0, 64);
+  helperPersistSessionsState();
+  helperSetMeta(helperCurrentMetaStatusText());
+  renderHelperPanel({ forceScroll: true });
+
+  if (opts && opts.focus && els.helperInput) {
+    try {
+      els.helperInput.focus();
+    } catch {
+      // ignore
+    }
+  }
+  return true;
+}
+
+function helperNewSessionNow(opts = {}) {
+  if (state.helperPending) return false;
+  syncActiveHelperSessionFromState({ touch: false });
+
+  const created = createHelperSessionRecord({});
+  const merged = normalizeHelperSessions([created, ...(Array.isArray(state.helperSessions) ? state.helperSessions : [])], created.id);
+  state.helperSessions = merged.sessions;
+  state.helperSessionId = merged.activeSessionId || created.id;
+  state.helperMessages = [];
+  state.helperLastRunner = "";
+  helperPersistSessionsState();
+  helperSetMeta(helperCurrentMetaStatusText());
+  renderHelperPanel({ forceScroll: true });
+
+  if (!(opts && opts.toast === false)) showToast("New chat session started.");
+  if (opts && opts.focus && els.helperInput) {
+    try {
+      els.helperInput.focus();
+    } catch {
+      // ignore
+    }
+  }
+  return true;
+}
+
+function clearHelperCurrentSessionNow(opts = {}) {
+  const showToastMsg = !(opts && opts.toast === false);
+  if (state.helperPending) return false;
+  state.helperMessages = [];
+  state.helperLastRunner = "";
+  syncActiveHelperSessionFromState({ touch: true });
+  helperSetMeta(helperCurrentMetaStatusText());
+  renderHelperPanel({ forceScroll: true });
+  if (showToastMsg) showToast("Current chat session cleared.");
+  return true;
+}
+
+function helperMessagesForApi() {
+  const arr = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+  return arr
+    .filter((m) => m && (m.role === "user" || m.role === "assistant"))
+    .map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      text: String(m.text || "").trim()
+    }))
+    .filter((m) => m.text)
+    .slice(-18);
+}
+
+function helperPushMessage(role, text, meta = {}) {
+  const r = role === "assistant" ? "assistant" : "user";
+  const t = String(text || "").trim();
+  if (!t) return;
+  const item = {
+    id: safeUuid(),
+    role: r,
+    text: t,
+    ts: new Date().toISOString(),
+    agent: r === "assistant" ? normalizeHelperAgentSelection(meta.agent) : "",
+    model: r === "assistant" ? normalizeHelperModelValue(meta.model) : ""
+  };
+  state.helperMessages = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+  state.helperMessages.push(item);
+  const MAX = HELPER_SESSION_MESSAGES_MAX;
+  if (state.helperMessages.length > MAX) state.helperMessages.splice(0, state.helperMessages.length - MAX);
+  syncActiveHelperSessionFromState({ touch: true });
+}
+
+function helperSetMeta(text) {
+  if (!els.helperMeta) return;
+  const scope = helperCurrentContextScope();
+  const project = helperSelectedProjectForContext(scope);
+  const projectName = project && project.name ? String(project.name).trim() : "";
+  const contextText = projectName ? `Context: Project · ${projectName}` : "Context: Global";
+  const msg = String(text || "").trim();
+  els.helperMeta.textContent = msg ? `${msg} · ${contextText}` : contextText;
+}
+
+function helperCurrentMetaStatusText() {
+  if (state.helperPending) return "Thinking…";
+  if (state.helperLastRunner) return `Last reply: ${state.helperLastRunner}`;
+  return "";
+}
+
+function renderHelperPanel(opts = {}) {
+  const forceScroll = !!(opts && opts.forceScroll);
+  const showClosedPending = !!state.helperPending && !state.helperOpen;
+  if (els.helperBubbleBtn) {
+    els.helperBubbleBtn.classList.toggle("helperbubble--open", !!state.helperOpen);
+    els.helperBubbleBtn.classList.toggle("helperbubble--pending", showClosedPending);
+    els.helperBubbleBtn.setAttribute("aria-pressed", state.helperOpen ? "true" : "false");
+  }
+  if (els.helperThinkingIndicator) els.helperThinkingIndicator.hidden = !showClosedPending;
+  if (els.helperPanel) els.helperPanel.hidden = !state.helperOpen;
+  renderHelperSessionOptions();
+  if (!els.helperMessages) return;
+
+  const stick = isNearBottom(els.helperMessages);
+  const items = Array.isArray(state.helperMessages) ? state.helperMessages : [];
+  const hasAssistantReply = items.some((m) => m && m.role === "assistant");
+
+  if (items.length === 0 && !state.helperPending) {
+    els.helperMessages.innerHTML = `<div class="helperpanel__empty">Try quick questions, architecture checks, or ask for a clean task seed. You can move the result into the main prompt.</div>`;
+  } else {
+    const rows = [];
+    for (const m of items) {
+      const isAssistant = m.role === "assistant";
+      const roleLabel = isAssistant ? "Chat" : "You";
+      const runner = isAssistant ? helperRunnerText(m.agent, m.model) : "";
+      rows.push(`
+        <article class="helpermsg ${isAssistant ? "helpermsg--assistant" : "helpermsg--user"}">
+          <div class="helpermsg__head">${escapeHtml(roleLabel)}${runner ? `<span class="helpermsg__meta">${escapeHtml(runner)}</span>` : ""}</div>
+          <div class="msg__text">${renderMarkdownSafeHtml(String(m.text || ""))}</div>
+        </article>
+      `);
+    }
+    if (state.helperPending) {
+      rows.push(`
+        <article class="helpermsg helpermsg--assistant">
+          <div class="helpermsg__head">Chat</div>
+          <div class="msg__text">Thinking…</div>
+        </article>
+      `);
+    }
+    els.helperMessages.innerHTML = rows.join("");
+  }
+
+  if (els.helperSendBtn) els.helperSendBtn.disabled = !!state.helperPending;
+  if (els.helperInput) els.helperInput.disabled = !!state.helperPending;
+  if (els.helperSessionSelect) els.helperSessionSelect.disabled = !!state.helperPending;
+  if (els.helperNewSessionBtn) els.helperNewSessionBtn.disabled = !!state.helperPending;
+  if (els.helperClearSessionBtn) els.helperClearSessionBtn.disabled = !!state.helperPending || items.length === 0;
+  if (els.helperToPromptBtn) {
+    els.helperToPromptBtn.hidden = !hasAssistantReply;
+    els.helperToPromptBtn.disabled = state.helperPending || !hasAssistantReply;
+  }
+
+  if (forceScroll || stick || state.helperPending) {
+    els.helperMessages.scrollTop = els.helperMessages.scrollHeight;
+  }
+}
+
+function setHelperOpen(open, opts = {}) {
+  const nextOpen = !!open;
+  if (!nextOpen && state.helperPending) state.helperReopenOnReply = true;
+  if (nextOpen) state.helperReopenOnReply = false;
+  state.helperOpen = nextOpen;
+  renderHelperPanel();
+  if (state.helperOpen && opts && opts.focus && els.helperInput) {
+    try {
+      els.helperInput.focus();
+      els.helperInput.selectionStart = els.helperInput.selectionEnd = els.helperInput.value.length;
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function toggleHelperPanel(opts = {}) {
+  const force = opts && Object.prototype.hasOwnProperty.call(opts, "open") ? !!opts.open : null;
+  const next = force == null ? !state.helperOpen : force;
+  setHelperOpen(next, { focus: next && opts && opts.focus !== false });
+}
+
+async function askHelperFromInput() {
+  if (state.helperPending) return;
+  if (!api || typeof api.helperAsk !== "function") {
+    showToast("Chat is not supported in this build.");
+    return;
+  }
+  const text = String(els.helperInput && els.helperInput.value ? els.helperInput.value : "").trim();
+  if (!text) return;
+
+  helperPushMessage("user", text);
+  if (els.helperInput) {
+    els.helperInput.value = "";
+    autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+  }
+  state.helperPending = true;
+  helperSetMeta("Thinking…");
+  renderHelperPanel({ forceScroll: true });
+
+  const preferAgent = helperCurrentAgentPref();
+  const preferModel = helperCurrentModelPref();
+  const context = buildHelperContextPayload();
+  const history = helperMessagesForApi();
+
+  try {
+    const res = await api.helperAsk({
+      question: text,
+      history,
+      context,
+      preferAgent,
+      preferModel
+    });
+    const answer = String(res && res.answer ? res.answer : "").trim() || "No answer generated.";
+    const agent = normalizeAgentKey(res && res.agent ? res.agent : "");
+    const model = String(res && res.model ? res.model : "").trim();
+    helperPushMessage("assistant", answer, { agent, model });
+    state.helperLastRunner = agent ? agentDisplayName(agent) : "Auto";
+    syncActiveHelperSessionFromState({ touch: false });
+    helperSetMeta(`Last reply: ${state.helperLastRunner}`);
+  } catch (err) {
+    const msg = String(err && err.message ? err.message : err).trim() || "Chat request failed.";
+    helperPushMessage("assistant", `Error: ${msg}`);
+    syncActiveHelperSessionFromState({ touch: false });
+    helperSetMeta("Chat request failed.");
+  } finally {
+    state.helperPending = false;
+    if (!state.helperOpen && state.helperReopenOnReply) {
+      state.helperOpen = true;
+    }
+    state.helperReopenOnReply = false;
+    renderHelperPanel({ forceScroll: true });
+    if (state.helperOpen && els.helperInput) {
+      try {
+        els.helperInput.focus();
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+function helperContextSnippetForComposer() {
+  const arr = helperMessagesForApi();
+  if (arr.length === 0) return "";
+  const picked = arr.slice(-8);
+  const out = ["[Chat context]"];
+  for (const m of picked) {
+    out.push(m.role === "assistant" ? "Assistant:" : "User:");
+    out.push(m.text);
+    out.push("");
+  }
+  const body = out.join("\n").trim();
+  return body.length > 20_000 ? `${body.slice(0, 20_000).trimEnd()}…` : body;
+}
+
+function appendHelperContextToComposer() {
+  const snippet = helperContextSnippetForComposer();
+  if (!snippet) {
+    showToast("No chat context yet.");
+    return false;
+  }
+  if (!els.promptInput) return false;
+
+  const existing = String(els.promptInput.value || "").trimEnd();
+  const next = existing ? `${existing}\n\n${snippet}` : snippet;
+  els.promptInput.value = next;
+  storeComposerDraft(next);
+  setView("board");
+  try {
+    els.promptInput.focus();
+    els.promptInput.selectionStart = els.promptInput.selectionEnd = els.promptInput.value.length;
+  } catch {
+    // ignore
+  }
+  showToast("Chat context added to prompt.");
+  return true;
+}
+
+function applyHelperDefaultsToPanel(settings = state.settings, opts = {}) {
+  const force = !!(opts && opts.force);
+  const defAgent = helperDefaultAgentFromSettings(settings);
+
+  if (els.helperAgentSelect) {
+    const cur = normalizeHelperAgentSelection(els.helperAgentSelect.value);
+    if (force || !cur) els.helperAgentSelect.value = defAgent;
+  }
+  renderHelperContextScopeOptions({ forceStored: force, skipStore: true });
+}
+
+function clearHelperHistoryNow(opts = {}) {
+  const showToastMsg = !(opts && opts.toast === false);
+  clearStoredHelperHistory();
+  const seeded = createHelperSessionRecord({});
+  state.helperSessions = [seeded];
+  state.helperSessionId = seeded.id;
+  state.helperMessages = [];
+  state.helperLastRunner = "";
+  helperPersistSessionsState();
+  helperSetMeta("");
+  renderHelperPanel({ forceScroll: true });
+  if (showToastMsg) showToast("Chat history cleared.");
+}
+
+function initHelperUi() {
+  const mod = isMacPlatform() ? "⌘" : "Ctrl";
+  applyHelperDefaultsToPanel(state.settings, { force: true });
+  if (els.helperInput) autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+  if (els.helperBubbleBtn) {
+    els.helperBubbleBtn.title = `Chat (${mod}+K)`;
+    const kbd = els.helperBubbleBtn.querySelector(".helperbubble__kbd");
+    if (kbd) kbd.textContent = `${mod}K`;
+  }
+  if (els.helperInput) {
+    els.helperInput.placeholder = `Ask quickly… (${mod}+Enter to send)`;
+  }
+  state.helperOpen = false;
+  state.helperPending = false;
+  state.helperReopenOnReply = false;
+  loadHelperSessionsFromStorage();
+  helperSetMeta("");
+  renderHelperPanel();
 }
 
 async function startJobFromComposer() {
@@ -8852,10 +10407,15 @@ async function startJobFromComposer() {
       projectId = p.id;
     }
 
-    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId);
+    const checkoutMode =
+      els.checkoutModeSelect && !els.checkoutModeSelect.disabled ? normalizeCheckoutMode(els.checkoutModeSelect.value) : "";
+    const okBranch = await maybeConfirmDefaultBranchBeforeRun(projectId, checkoutMode);
     if (!okBranch) return;
 
-    await api.jobsStart({ prompt, projectId, agent, model, images });
+    const prompt = buildPromptWithFileAttachments(promptText, files);
+    const payload = { prompt, projectId, agent, model, images };
+    if (checkoutMode) payload.checkoutMode = checkoutMode;
+    await api.jobsStart(payload);
     els.promptInput.value = "";
     closePromptPathSuggest();
     clearStoredComposerDraft();
@@ -9710,19 +11270,20 @@ function wireUi() {
 	    const p = await api.projectsAddDialog();
 	    if (!p) return;
 
-    state.projects = await api.projectsList();
-    renderProjects();
-    renderBoard();
-    els.projectSelect.value = p.id;
-    storeProjectId(p.id);
+	    state.projects = await api.projectsList();
+	    renderProjects();
+	    renderBoard();
+	    els.projectSelect.value = p.id;
+	    storeProjectId(p.id);
+	    syncComposerCheckoutModeUi();
 
-    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
-    try {
-      await openProjectDialog(p.id);
-    } catch {
-      // ignore
-    }
-  });
+	    // Open the richer project settings modal so default branch / checkout strategy can be set immediately.
+	    try {
+	      await openProjectDialog(p.id);
+	    } catch {
+	      // ignore
+	    }
+	  });
 
   els.projectsList.addEventListener("change", async (e) => {
     const inp = e.target && e.target.closest ? e.target.closest("[data-project-color]") : null;
@@ -9789,118 +11350,23 @@ function wireUi() {
       await openCheckoutsDialog(id);
     });
   }
-  if (els.projectDialog) {
-    els.projectDialog.addEventListener("click", (e) => {
-      if (e.target === els.projectDialog) closeProjectDialog();
-    });
-    els.projectDialog.addEventListener("close", () => {
-      state.editingProjectId = "";
-    });
-  }
-
-  // Checkouts dialog
-  if (els.checkoutsDialogClose) els.checkoutsDialogClose.addEventListener("click", () => closeCheckoutsDialog());
-  if (els.checkoutsDialogClose2) els.checkoutsDialogClose2.addEventListener("click", () => closeCheckoutsDialog());
-  if (els.checkoutsDialogRefresh) {
-    els.checkoutsDialogRefresh.addEventListener("click", async () => {
-      const id = String(state.checkoutsProjectId || "").trim();
+  if (els.projectDialogOpenFinderBtn) {
+    els.projectDialogOpenFinderBtn.addEventListener("click", async () => {
+      const id = String(state.editingProjectId || "").trim();
       if (!id) return;
-      await loadCheckouts(id);
-    });
-  }
-  if (els.checkoutsDialog) {
-    els.checkoutsDialog.addEventListener("click", (e) => {
-      if (e.target === els.checkoutsDialog) closeCheckoutsDialog();
-    });
-    els.checkoutsDialog.addEventListener("cancel", (e) => {
-      e.preventDefault();
-      closeCheckoutsDialog();
-    });
-    els.checkoutsDialog.addEventListener("close", () => {
-      state.checkoutsProjectId = "";
-      state.checkoutsEntries = [];
-      state.checkoutsLoading = false;
-    });
-  }
-  if (els.checkoutsDialogBody) {
-    els.checkoutsDialogBody.addEventListener("click", async (e) => {
-      const openBtn = e.target && e.target.closest ? e.target.closest("[data-checkout-open-job]") : null;
-      if (openBtn) {
-        const kind = openBtn.getAttribute("data-checkout-open-kind") || "";
-        const jobId = openBtn.getAttribute("data-checkout-open-job") || "";
-        const entry = (state.checkoutsEntries || []).find((x) => x && x.kind === kind && x.jobId === jobId) || null;
-        if (entry && entry.path && api && typeof api.shellOpenPath === "function") {
-          try {
-            await api.shellOpenPath(entry.path);
-          } catch (err) {
-            showToast(String(err && err.message ? err.message : err));
-          }
-        }
+      const project = state.projects.find((p) => p && p.id === id) || null;
+      if (!project || !project.isTemporary) return;
+      const fullPath = String(project.path || "").trim();
+      if (!fullPath) {
+        showToast("Temporary project path is missing.");
         return;
       }
-
-      const rmBtn = e.target && e.target.closest ? e.target.closest("[data-checkout-remove-job]") : null;
-      if (!rmBtn) return;
-
-      const kind = rmBtn.getAttribute("data-checkout-remove-kind") || "";
-      const jobId = rmBtn.getAttribute("data-checkout-remove-job") || "";
-      const projectId = String(state.checkoutsProjectId || "").trim();
-      if (!projectId || !kind || !jobId) return;
-
-      const job = state.jobs.get(jobId);
-      if (job && job.status === "running") {
-        showToast("This checkout is in use by a running job.");
-        return;
-      }
-
-      const ok = window.confirm(
-        `Remove ${kind} checkout for job ${jobId}?\n\nThis will delete the checkout folder under the app's checkouts directory (including any uncommitted changes inside it).`
-      );
-      if (!ok) return;
-
+      if (!api || typeof api.shellOpenPath !== "function") return;
       try {
-        await api.checkoutsRemove(projectId, kind, jobId);
-        showToast("Checkout removed.");
-        await loadCheckouts(projectId);
+        await api.shellOpenPath(fullPath);
       } catch (err) {
         showToast(String(err && err.message ? err.message : err));
       }
-    });
-  }
-
-  // Default-branch mismatch dialog
-  if (els.branchDialogClose) els.branchDialogClose.addEventListener("click", () => resolveBranchDialog("cancel"));
-  if (els.branchDialogCheckoutBtn) els.branchDialogCheckoutBtn.addEventListener("click", () => resolveBranchDialog("checkout"));
-  if (els.branchDialogRunBtn) els.branchDialogRunBtn.addEventListener("click", () => resolveBranchDialog("run"));
-  if (els.branchDialogCancelBtn) els.branchDialogCancelBtn.addEventListener("click", () => resolveBranchDialog("cancel"));
-  if (els.branchDialog) {
-    els.branchDialog.addEventListener("click", (e) => {
-      if (e.target === els.branchDialog) resolveBranchDialog("cancel");
-    });
-    els.branchDialog.addEventListener("cancel", (e) => {
-      e.preventDefault();
-      resolveBranchDialog("cancel");
-    });
-    els.branchDialog.addEventListener("close", () => {
-      if (state.branchDialogResolver) resolveBranchDialog("cancel");
-    });
-  }
-
-  els.openSettingsBtn.addEventListener("click", () => {
-    openSettingsDialog();
-  });
-
-  if (els.openStatusBtn) {
-    els.openStatusBtn.addEventListener("click", () => openStatusDialog());
-  }
-  if (els.projectDialogSave) {
-    els.projectDialogSave.addEventListener("click", () => saveProjectDialog());
-  }
-  if (els.projectDialogCheckoutsBtn) {
-    els.projectDialogCheckoutsBtn.addEventListener("click", async () => {
-      const id = String(state.editingProjectId || "").trim();
-      if (!id) return;
-      await openCheckoutsDialog(id);
     });
   }
   if (els.projectDialogRemoveBtn) {
@@ -10029,10 +11495,18 @@ function wireUi() {
 	    });
 	  }
 
-	  els.openSettingsBtn.addEventListener("click", () => {
-	    setView("settings");
-	    openSettingsDialog();
-	  });
+  if (els.openSettingsBtn) {
+    els.openSettingsBtn.addEventListener("click", () => {
+      if ((els.settingsDialog && els.settingsDialog.open) || state.view === "settings") {
+        closeSettings();
+        return;
+      }
+      openSettings();
+    });
+  }
+  if (els.closeSettingsPageBtn) {
+    els.closeSettingsPageBtn.addEventListener("click", () => closeSettings());
+  }
 
   if (els.openStatusBtn) els.openStatusBtn.addEventListener("click", () => openStatusDialog());
   if (els.openStatusSidebarBtn) els.openStatusSidebarBtn.addEventListener("click", () => openStatusDialog());
@@ -10166,6 +11640,9 @@ function wireUi() {
   if (els.helperBubbleBtn) {
     els.helperBubbleBtn.addEventListener("click", () => toggleHelperPanel({ focus: true }));
   }
+  if (els.helperThinkingIndicator) {
+    els.helperThinkingIndicator.addEventListener("click", () => toggleHelperPanel({ open: true, focus: true }));
+  }
   if (els.helperPanelClose) {
     els.helperPanelClose.addEventListener("click", () => toggleHelperPanel({ open: false }));
   }
@@ -10173,23 +11650,36 @@ function wireUi() {
     els.helperAgentSelect.addEventListener("change", () => {
       const next = normalizeHelperAgentSelection(els.helperAgentSelect.value);
       els.helperAgentSelect.value = next;
-      if (els.helperModelInput) {
-        const currentModel = String(els.helperModelInput.value || "").trim();
-        const low = currentModel.toLowerCase();
-        const looksClaudeModel = low === "opus" || low === "sonnet" || low === "haiku";
-        if (next === "claude" && !currentModel) {
-          els.helperModelInput.value = "opus";
-        } else if (next === "codex" && looksClaudeModel) {
-          els.helperModelInput.value = "";
-        }
-      }
-      syncHelperAgentUi();
+      renderHelperPanel();
     });
   }
-  if (els.helperModelInput) {
-    els.helperModelInput.addEventListener("change", () => {
-      els.helperModelInput.value = normalizeHelperModelValue(els.helperModelInput.value || "");
+  if (els.helperContextScopeSelect) {
+    els.helperContextScopeSelect.addEventListener("change", () => {
+      const fallbackProjectId = helperDefaultProjectIdForContext();
+      const next = normalizeHelperContextScope(els.helperContextScopeSelect.value, { defaultProjectId: fallbackProjectId });
+      if (!selectHasOptionValue(els.helperContextScopeSelect, next)) {
+        renderHelperContextScopeOptions({ skipStore: true });
+        helperSetMeta(helperCurrentMetaStatusText());
+        renderHelperPanel();
+        return;
+      }
+      els.helperContextScopeSelect.value = next;
+      storeHelperContextScope(next);
+      helperSetMeta(helperCurrentMetaStatusText());
+      renderHelperPanel();
     });
+  }
+  if (els.helperSessionSelect) {
+    els.helperSessionSelect.addEventListener("change", () => {
+      const next = String(els.helperSessionSelect.value || "").trim();
+      if (!helperSelectSession(next, { focus: true })) renderHelperPanel();
+    });
+  }
+  if (els.helperNewSessionBtn) {
+    els.helperNewSessionBtn.addEventListener("click", () => helperNewSessionNow({ focus: true }));
+  }
+  if (els.helperClearSessionBtn) {
+    els.helperClearSessionBtn.addEventListener("click", () => clearHelperCurrentSessionNow());
   }
   if (els.helperInput) {
     els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
@@ -10211,11 +11701,6 @@ function wireUi() {
   if (els.helperToPromptBtn) {
     els.helperToPromptBtn.addEventListener("click", () => appendHelperContextToComposer());
   }
-  if (els.helperCreateTaskBtn) {
-    els.helperCreateTaskBtn.addEventListener("click", () => {
-      startTicketFromHelperContext();
-    });
-  }
   if (els.settingsHelperClearHistoryBtn) {
     els.settingsHelperClearHistoryBtn.addEventListener("click", () => clearHelperHistoryNow());
   }
@@ -10236,6 +11721,7 @@ function wireUi() {
     if (v && v !== "auto") storeProjectId(v);
     syncComposerCheckoutModeUi();
     schedulePromptPathSuggestRefresh({ immediate: true });
+    helperSetMeta(helperCurrentMetaStatusText());
   });
 
   // Custom model dropdowns (replaces the native <datalist> chrome).
@@ -10325,7 +11811,45 @@ function wireUi() {
   );
   restoreComposerDraft();
 
-  // Attach images via drag&drop and append non-image files as paths to the prompt/follow-up text.
+  // Attach images/files via drag&drop and render them as removable preview tiles.
+  let fileDragDepth = 0;
+  function clearDropwrapDragover() {
+    if (els.promptDropwrap) els.promptDropwrap.classList.remove("dropwrap--dragover");
+    if (els.followupDropwrap) els.followupDropwrap.classList.remove("dropwrap--dragover");
+  }
+  function activeAttachmentDropTarget() {
+    if (els.jobDialog && els.jobDialog.open && els.followupDropwrap && els.followupInput) {
+      return {
+        wrap: els.followupDropwrap,
+        input: els.followupInput,
+        addImages: (imgs) => setFollowupImages(mergeImages(state.followupImages, imgs)),
+        addFiles: (files) => setFollowupFiles(mergeFiles(state.followupFiles, files))
+      };
+    }
+    if (els.promptDropwrap && els.promptInput) {
+      return {
+        wrap: els.promptDropwrap,
+        input: els.promptInput,
+        addImages: (imgs) => setComposerImages(mergeImages(state.composerImages, imgs)),
+        addFiles: (files) => setComposerFiles(mergeFiles(state.composerFiles, files))
+      };
+    }
+    return null;
+  }
+  function syncActiveDropwrapHighlight() {
+    const target = activeAttachmentDropTarget();
+    clearDropwrapDragover();
+    if (!target || !target.wrap) return null;
+    target.wrap.classList.add("dropwrap--dragover");
+    return target;
+  }
+  document.addEventListener("dragenter", (e) => {
+    const dt = e.dataTransfer;
+    if (!dataTransferHasFiles(dt)) return;
+    e.preventDefault();
+    fileDragDepth += 1;
+    syncActiveDropwrapHighlight();
+  });
   document.addEventListener("dragover", (e) => {
     const dt = e.dataTransfer;
     if (!dataTransferHasFiles(dt)) return;
@@ -10420,48 +11944,6 @@ function wireUi() {
     openImageDialogForThumbEl(e.target);
   });
 
-  els.promptDropwrap.addEventListener("dragover", (e) => {
-    const dt = e.dataTransfer;
-    if (!dataTransferHasFiles(dt)) return;
-    e.preventDefault();
-    els.promptDropwrap.classList.add("dropwrap--dragover");
-  });
-  els.promptDropwrap.addEventListener("dragleave", () => {
-    els.promptDropwrap.classList.remove("dropwrap--dragover");
-  });
-  els.promptDropwrap.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    els.promptDropwrap.classList.remove("dropwrap--dragover");
-    const dropped = droppedFileEntries(e);
-    const imgs = imagePathsFromDroppedEntries(dropped);
-    const files = nonImagePathsFromDroppedEntries(dropped);
-    if (imgs.length > 0) setComposerImages(mergeImages(state.composerImages, imgs));
-    if (files.length > 0) appendPathsToTextarea(els.promptInput, files);
-    else if (imgs.length > 0) els.promptInput.focus();
-  });
-
-  els.followupDropwrap.addEventListener("dragover", (e) => {
-    const dt = e.dataTransfer;
-    if (!dataTransferHasFiles(dt)) return;
-    e.preventDefault();
-    els.followupDropwrap.classList.add("dropwrap--dragover");
-  });
-  els.followupDropwrap.addEventListener("dragleave", () => {
-    els.followupDropwrap.classList.remove("dropwrap--dragover");
-  });
-  els.followupDropwrap.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    els.followupDropwrap.classList.remove("dropwrap--dragover");
-    const dropped = droppedFileEntries(e);
-    const imgs = imagePathsFromDroppedEntries(dropped);
-    const files = nonImagePathsFromDroppedEntries(dropped);
-    if (imgs.length > 0) setFollowupImages(mergeImages(state.followupImages, imgs));
-    if (files.length > 0) appendPathsToTextarea(els.followupInput, files);
-    else if (imgs.length > 0) els.followupInput.focus();
-  });
-
   els.jobDialogClose.addEventListener("click", () => {
     if (isJobMode()) {
       window.close();
@@ -10485,9 +11967,45 @@ function wireUi() {
   if (els.jobDialogDiff) {
     els.jobDialogDiff.addEventListener("click", (e) => {
       const refreshBtn = e.target && e.target.closest ? e.target.closest("[data-job-diff-refresh]") : null;
-      if (!refreshBtn) return;
+      if (refreshBtn) {
+        e.preventDefault();
+        loadSelectedJobDiff({ force: true }).catch(() => {});
+        return;
+      }
+
+      const fileBtn = e.target && e.target.closest ? e.target.closest("[data-job-diff-file-id]") : null;
+      if (!fileBtn) return;
       e.preventDefault();
-      loadSelectedJobDiff({ force: true }).catch(() => {});
+
+      const jobId = String(state.selectedJobId || "").trim();
+      if (!jobId) return;
+      const fileId = String(fileBtn.getAttribute("data-job-diff-file-id") || "").trim();
+      const ui = getJobDiffUi(jobId);
+      ui.selectedFileId = fileId;
+      rerenderSelectedJobDiffFromCache();
+    });
+
+    els.jobDialogDiff.addEventListener("input", (e) => {
+      const filterInput = e.target && e.target.closest ? e.target.closest("[data-job-diff-filter]") : null;
+      if (!filterInput) return;
+
+      const jobId = String(state.selectedJobId || "").trim();
+      if (!jobId) return;
+      const ui = getJobDiffUi(jobId);
+      ui.filterText = String(filterInput.value || "");
+      const caret = Number.isFinite(filterInput.selectionStart) ? filterInput.selectionStart : null;
+      rerenderSelectedJobDiffFromCache();
+      const nextInput = els.jobDialogDiff.querySelector("[data-job-diff-filter]");
+      if (nextInput && typeof nextInput.focus === "function") {
+        nextInput.focus();
+        if (caret != null && typeof nextInput.setSelectionRange === "function") {
+          try {
+            nextInput.setSelectionRange(caret, caret);
+          } catch {
+            // ignore
+          }
+        }
+      }
     });
   }
 
@@ -10501,6 +12019,7 @@ function wireUi() {
   els.jobDialog.addEventListener("close", () => {
     hideJobMoreMenu();
     clearJobSearch();
+    jobDiffReqSeq += 1; // cancel in-flight diff requests
 
     const jobId = state.selectedJobId;
     if (!jobId) return;
@@ -10530,17 +12049,6 @@ function wireUi() {
 	  if (els.settingsDialog) {
 	    els.settingsDialog.addEventListener("click", (e) => {
 	      if (e.target === els.settingsDialog) els.settingsDialog.close();
-	    });
-	  }
-
-	  if (els.settingsEditorPreset) {
-	    els.settingsEditorPreset.addEventListener("change", () => {
-	      applyEditorPresetToCommandInput();
-	    });
-	  }
-	  if (els.settingsEditorCommand) {
-	    els.settingsEditorCommand.addEventListener("input", () => {
-	      syncEditorPresetFromCommandInput();
 	    });
 	  }
 
@@ -10949,14 +12457,92 @@ function wireUi() {
                 helperDefaultAgent: normalizeHelperAgentSelection(
                   els.settingsHelperDefaultAgent ? els.settingsHelperDefaultAgent.value : ""
                 ),
-                helperDefaultModel: normalizeHelperModelValue(
-                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
-                ),
-                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
-					      agents: {
-				        codex: {
-				          path: els.settingsCodexPath.value.trim(),
-			          model: els.settingsCodexModel.value.trim(),
+	                helperDefaultModel: normalizeHelperModelValue(
+	                  els.settingsHelperDefaultModel ? els.settingsHelperDefaultModel.value : ""
+	                ),
+	                helperPersistHistory: !!(els.settingsHelperPersistHistory ? els.settingsHelperPersistHistory.checked : true),
+	                integrations: {
+	                  enabled: !!(els.settingsIntegrationsEnabled && els.settingsIntegrationsEnabled.checked),
+	                  autoEnrichPrompt: !!(
+	                    els.settingsIntegrationsAutoEnrichPrompt && els.settingsIntegrationsAutoEnrichPrompt.checked
+	                  ),
+	                  autoCommentOnComplete: !!(
+	                    els.settingsIntegrationsAutoCommentOnComplete && els.settingsIntegrationsAutoCommentOnComplete.checked
+	                  ),
+	                  requestTimeoutMs: clampNumber(
+	                    els.settingsIntegrationsRequestTimeoutMs ? els.settingsIntegrationsRequestTimeoutMs.value : 12000,
+	                    1000,
+	                    60000,
+	                    12000
+	                  ),
+	                  providers: {
+	                    linear: {
+	                      enabled: !!(els.settingsIntegrationsLinearEnabled && els.settingsIntegrationsLinearEnabled.checked),
+	                      apiBaseUrl: els.settingsIntegrationsLinearApiBaseUrl
+	                        ? els.settingsIntegrationsLinearApiBaseUrl.value.trim()
+	                        : "",
+	                      token: els.settingsIntegrationsLinearToken ? els.settingsIntegrationsLinearToken.value.trim() : "",
+	                      tokenEnvVar: els.settingsIntegrationsLinearTokenEnvVar
+	                        ? els.settingsIntegrationsLinearTokenEnvVar.value.trim()
+	                        : "",
+	                      maxIssuesPerPrompt: clampNumber(
+	                        els.settingsIntegrationsLinearMaxIssuesPerPrompt
+	                          ? els.settingsIntegrationsLinearMaxIssuesPerPrompt.value
+	                          : 3,
+	                        1,
+	                        10,
+	                        3
+	                      ),
+	                      includeDescription: !!(
+	                        els.settingsIntegrationsLinearIncludeDescription &&
+	                        els.settingsIntegrationsLinearIncludeDescription.checked
+	                      )
+	                    },
+	                    github: {
+	                      enabled: !!(els.settingsIntegrationsGithubEnabled && els.settingsIntegrationsGithubEnabled.checked),
+	                      apiBaseUrl: els.settingsIntegrationsGithubApiBaseUrl
+	                        ? els.settingsIntegrationsGithubApiBaseUrl.value.trim()
+	                        : "",
+	                      token: els.settingsIntegrationsGithubToken ? els.settingsIntegrationsGithubToken.value.trim() : "",
+	                      tokenEnvVar: els.settingsIntegrationsGithubTokenEnvVar
+	                        ? els.settingsIntegrationsGithubTokenEnvVar.value.trim()
+	                        : "",
+	                      maxIssuesPerPrompt: clampNumber(
+	                        els.settingsIntegrationsGithubMaxIssuesPerPrompt
+	                          ? els.settingsIntegrationsGithubMaxIssuesPerPrompt.value
+	                          : 3,
+	                        1,
+	                        10,
+	                        3
+	                      )
+	                    },
+	                    notion: {
+	                      enabled: !!(els.settingsIntegrationsNotionEnabled && els.settingsIntegrationsNotionEnabled.checked),
+	                      apiBaseUrl: els.settingsIntegrationsNotionApiBaseUrl
+	                        ? els.settingsIntegrationsNotionApiBaseUrl.value.trim()
+	                        : "",
+	                      token: els.settingsIntegrationsNotionToken ? els.settingsIntegrationsNotionToken.value.trim() : "",
+	                      tokenEnvVar: els.settingsIntegrationsNotionTokenEnvVar
+	                        ? els.settingsIntegrationsNotionTokenEnvVar.value.trim()
+	                        : "",
+	                      notionVersion: els.settingsIntegrationsNotionVersion
+	                        ? els.settingsIntegrationsNotionVersion.value.trim()
+	                        : "",
+	                      maxPagesPerPrompt: clampNumber(
+	                        els.settingsIntegrationsNotionMaxPagesPerPrompt
+	                          ? els.settingsIntegrationsNotionMaxPagesPerPrompt.value
+	                          : 2,
+	                        1,
+	                        8,
+	                        2
+	                      )
+	                    }
+	                  }
+	                },
+						      agents: {
+					        codex: {
+					          path: els.settingsCodexPath.value.trim(),
+				          model: els.settingsCodexModel.value.trim(),
 			          transport: els.settingsCodexTransport ? els.settingsCodexTransport.value : "exec_json",
 		          sandboxMode: els.settingsCodexSandboxMode.value,
 		          skipGitRepoCheck: !!els.settingsCodexSkipGitRepoCheck.checked,
@@ -10971,14 +12557,21 @@ function wireUi() {
 		        }
 		      }
 		    };
-		    state.settings = await api.settingsUpdate(patch);
-		    applyThemeFromSettings(state.settings);
+        state.settings = await api.settingsUpdate(patch);
+        applyThemeFromSettings(state.settings);
         applyHelperDefaultsToPanel(state.settings, { force: true });
         if (!helperPersistHistoryFromSettings(state.settings)) clearHelperHistoryNow({ toast: false });
-        else if (Array.isArray(state.helperMessages) && state.helperMessages.length > 0) storeHelperHistory(state.helperMessages);
-		    renderBoard();
-			    els.settingsDialog.close();
-			  });
+        else syncActiveHelperSessionFromState({ touch: false });
+        renderBoard();
+		    if (els.settingsDialog && els.settingsDialog.open) els.settingsDialog.close();
+		    setHint("Settings saved", "info");
+		  };
+  if (els.saveSettingsBtn) {
+    els.saveSettingsBtn.addEventListener("click", saveSettings);
+  }
+  if (els.saveSettingsPageBtn) {
+    els.saveSettingsPageBtn.addEventListener("click", saveSettings);
+  }
 
 	  if (els.saveActionsBtn) {
 	    els.saveActionsBtn.addEventListener("click", async () => {
@@ -11281,22 +12874,28 @@ function jobContextStepper(job) {
 
   const rawPct = clampNumber(ctx.percent, 0, 100_000, 0);
   const fillPct = clampNumber(rawPct, 0, 100, 0);
+  const tone = rawPct >= 90 ? "danger" : rawPct >= 75 ? "warning" : "normal";
   const pctText = `${Math.round(rawPct)}%`;
-  const title = `context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`;
+  const titleBits = [`context ${fmtPctCompact(rawPct)} (${ctx.input_tokens}/${ctx.limit_tokens} input)`];
+  const tok = jobTokensCardText(job);
+  if (tok && tok.title) titleBits.push(tok.title);
+  const title = titleBits.join("  ·  ");
 
-  return { fillPct, pctText, title };
+  return { fillPct, pctText, title, tone };
 }
 
 function renderCardContextStepper(ctx) {
   if (!ctx || typeof ctx !== "object") return "";
   const fillPct = clampNumber(ctx.fillPct, 0, 100, 0);
+  const tone = String(ctx.tone || "normal");
+  const toneCls = tone === "danger" ? " card__contextFill--danger" : tone === "warning" ? " card__contextFill--warning" : "";
   const pctText = typeof ctx.pctText === "string" ? ctx.pctText : "";
   const title = typeof ctx.title === "string" ? ctx.title : "";
 
   return `
         <div class="card__context" data-job-context title="${escapeHtml(oneLine(title))}">
           <span class="card__contextStepper" aria-hidden="true">
-            <span class="card__contextFill" data-job-context-fill style="width:${fillPct.toFixed(2)}%"></span>
+            <span class="card__contextFill${toneCls}" data-job-context-fill style="width:${fillPct.toFixed(2)}%"></span>
           </span>
           <span class="card__contextPct" data-job-context-pct>${escapeHtml(pctText)}</span>
         </div>
@@ -11906,14 +13505,15 @@ function closeSettings() {
 			  const codex = agents.codex && typeof agents.codex === "object" ? agents.codex : {};
 			  const claude = agents.claude && typeof agents.claude === "object" ? agents.claude : {};
 
-			  els.settingsCodexPath.value = codex.path || "";
-			  els.settingsCodexModel.value = codex.model || "";
+		  els.settingsCodexPath.value = codex.path || "";
+		  els.settingsCodexModel.value = codex.model || "";
 	  if (els.settingsCodexTransport) els.settingsCodexTransport.value = codex.transport || "exec_json";
-					  setUiModelControls(s.uiModel || "");
-					  els.settingsTheme.value = normalizeTheme(s.uiTheme);
-					  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
-		  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
-				  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
+		  setUiModelControls(s.uiModel || "");
+		  els.settingsTheme.value = normalizeTheme(s.uiTheme);
+		  els.settingsColorScheme.value = normalizeColorScheme(s.uiColorScheme);
+	  if (els.settingsEditorCommand) els.settingsEditorCommand.value = editorCommandFromSettings();
+	  syncEditorPresetFromCommandInput();
+		  els.settingsCodexSandboxMode.value = codex.sandboxMode || "workspace-write";
 				  els.settingsCodexSkipGitRepoCheck.checked = !!codex.skipGitRepoCheck;
 	  els.settingsCodexBypass.checked = !!codex.bypassApprovalsAndSandbox;
 	  els.settingsCodexColor.value = codex.color || "auto";
@@ -11942,10 +13542,82 @@ function closeSettings() {
 					  if (els.settingsIntegrateToDefaultMode) {
 					    els.settingsIntegrateToDefaultMode.value = normalizeIntegrateToDefaultMode(s.integrateToDefaultMode);
 					  }
-            if (els.settingsHelperDefaultAgent) {
-              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
-            }
-            if (els.settingsHelperDefaultModel) {
+	            {
+	              const integrations = normalizeIntegrationSettingsForUi(s.integrations);
+	              if (els.settingsIntegrationsEnabled) {
+	                els.settingsIntegrationsEnabled.checked = integrations.enabled;
+	              }
+	              if (els.settingsIntegrationsAutoEnrichPrompt) {
+	                els.settingsIntegrationsAutoEnrichPrompt.checked = integrations.autoEnrichPrompt;
+	              }
+	              if (els.settingsIntegrationsAutoCommentOnComplete) {
+	                els.settingsIntegrationsAutoCommentOnComplete.checked = integrations.autoCommentOnComplete;
+	              }
+	              if (els.settingsIntegrationsRequestTimeoutMs) {
+	                els.settingsIntegrationsRequestTimeoutMs.value = String(integrations.requestTimeoutMs);
+	              }
+	              if (els.settingsIntegrationsLinearEnabled) {
+	                els.settingsIntegrationsLinearEnabled.checked = integrations.providers.linear.enabled;
+	              }
+	              if (els.settingsIntegrationsLinearApiBaseUrl) {
+	                els.settingsIntegrationsLinearApiBaseUrl.value = integrations.providers.linear.apiBaseUrl;
+	              }
+	              if (els.settingsIntegrationsLinearToken) {
+	                els.settingsIntegrationsLinearToken.value = integrations.providers.linear.token;
+	              }
+	              if (els.settingsIntegrationsLinearTokenEnvVar) {
+	                els.settingsIntegrationsLinearTokenEnvVar.value = integrations.providers.linear.tokenEnvVar;
+	              }
+	              if (els.settingsIntegrationsLinearMaxIssuesPerPrompt) {
+	                els.settingsIntegrationsLinearMaxIssuesPerPrompt.value = String(
+	                  integrations.providers.linear.maxIssuesPerPrompt
+	                );
+	              }
+	              if (els.settingsIntegrationsLinearIncludeDescription) {
+	                els.settingsIntegrationsLinearIncludeDescription.checked = integrations.providers.linear.includeDescription;
+	              }
+	              if (els.settingsIntegrationsGithubEnabled) {
+	                els.settingsIntegrationsGithubEnabled.checked = integrations.providers.github.enabled;
+	              }
+	              if (els.settingsIntegrationsGithubApiBaseUrl) {
+	                els.settingsIntegrationsGithubApiBaseUrl.value = integrations.providers.github.apiBaseUrl;
+	              }
+	              if (els.settingsIntegrationsGithubToken) {
+	                els.settingsIntegrationsGithubToken.value = integrations.providers.github.token;
+	              }
+	              if (els.settingsIntegrationsGithubTokenEnvVar) {
+	                els.settingsIntegrationsGithubTokenEnvVar.value = integrations.providers.github.tokenEnvVar;
+	              }
+	              if (els.settingsIntegrationsGithubMaxIssuesPerPrompt) {
+	                els.settingsIntegrationsGithubMaxIssuesPerPrompt.value = String(
+	                  integrations.providers.github.maxIssuesPerPrompt
+	                );
+	              }
+	              if (els.settingsIntegrationsNotionEnabled) {
+	                els.settingsIntegrationsNotionEnabled.checked = integrations.providers.notion.enabled;
+	              }
+	              if (els.settingsIntegrationsNotionApiBaseUrl) {
+	                els.settingsIntegrationsNotionApiBaseUrl.value = integrations.providers.notion.apiBaseUrl;
+	              }
+	              if (els.settingsIntegrationsNotionToken) {
+	                els.settingsIntegrationsNotionToken.value = integrations.providers.notion.token;
+	              }
+	              if (els.settingsIntegrationsNotionTokenEnvVar) {
+	                els.settingsIntegrationsNotionTokenEnvVar.value = integrations.providers.notion.tokenEnvVar;
+	              }
+	              if (els.settingsIntegrationsNotionVersion) {
+	                els.settingsIntegrationsNotionVersion.value = integrations.providers.notion.notionVersion;
+	              }
+	              if (els.settingsIntegrationsNotionMaxPagesPerPrompt) {
+	                els.settingsIntegrationsNotionMaxPagesPerPrompt.value = String(
+	                  integrations.providers.notion.maxPagesPerPrompt
+	                );
+	              }
+	            }
+	            if (els.settingsHelperDefaultAgent) {
+	              els.settingsHelperDefaultAgent.value = helperDefaultAgentFromSettings(s);
+	            }
+	            if (els.settingsHelperDefaultModel) {
               els.settingsHelperDefaultModel.value = normalizeHelperModelValue(s.helperDefaultModel || "");
             }
             if (els.settingsHelperPersistHistory) {
@@ -11981,16 +13653,6 @@ function closeSettings() {
 		    setSettingsTab(tab);
 		  });
 		});
-
-		// Wire up settings page Save button (reuse same save logic)
-		if (els.saveSettingsPageBtn) {
-		  els.saveSettingsPageBtn.addEventListener("click", () => {
-		    // Trigger the existing save handler
-		    if (els.saveSettingsBtn) {
-		      els.saveSettingsBtn.click();
-		    }
-		  });
-		}
 
 		// ── MCP server status ─────────────────────────────────────
 		async function refreshMcpStatus() {
@@ -12576,10 +14238,10 @@ function renderShortcutsDialog() {
 
   body.push(`
     <div class="shortcutsection">
-      <div class="shortcutsection__title">Helper</div>
+      <div class="shortcutsection__title">Chat</div>
       <div class="shortcutlist">
-        ${row(`${mod}+K`, "Toggle helper chat")}
-        ${row(`${mod}+Enter`, "Send question (when helper input is focused)")}
+        ${row(`${mod}+K`, "Toggle chat")}
+        ${row(`${mod}+Enter`, "Send question (when chat input is focused)")}
       </div>
     </div>
   `);
@@ -12658,6 +14320,7 @@ async function init() {
   }
 
   wireUi();
+  setupTokenTooltips();
   wireOfflineToast();
   wireSystemColorSchemeListener();
   state.sortMode = normalizeSortMode(getStoredSortMode());
@@ -12692,10 +14355,7 @@ async function init() {
       applyXtermTheme();
       if (!state.helperOpen && !state.helperPending) applyHelperDefaultsToPanel(next, { force: true });
       if (!helperPersistHistoryFromSettings(next)) clearHelperHistoryNow({ toast: false });
-      else if ((!Array.isArray(state.helperMessages) || state.helperMessages.length === 0) && !state.helperPending) {
-        state.helperMessages = getStoredHelperHistory();
-        renderHelperPanel();
-      }
+      else syncActiveHelperSessionFromState({ touch: false });
       renderBoard();
 	      if (els.jobDialog && els.jobDialog.open && state.selectedJobId) {
 	        const job = state.jobs.get(state.selectedJobId);
@@ -12709,11 +14369,21 @@ async function init() {
   renderProjects();
   if (!state.projectRefreshTimer) {
     state.projectRefreshTimer = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (state.projectRefreshInFlight) return;
+      state.projectRefreshInFlight = true;
       try {
-        state.projects = await api.projectsList();
-        renderProjects();
+        const nextProjects = await api.projectsList();
+        const prevSig = projectListSignature(state.projects);
+        const nextSig = projectListSignature(nextProjects);
+        if (nextSig !== prevSig) {
+          state.projects = nextProjects;
+          renderProjects();
+        }
       } catch {
         // ignore
+      } finally {
+        state.projectRefreshInFlight = false;
       }
     }, 30_000);
   }
