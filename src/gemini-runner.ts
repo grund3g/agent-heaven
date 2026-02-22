@@ -20,6 +20,17 @@ function parseJsonLine(line: string) {
   }
 }
 
+function isGeminiPromptDeprecationEvent(data: any): boolean {
+  const d = data && typeof data === "object" ? data : {};
+  const type = String((d as any).type || (d as any).event || "")
+    .trim()
+    .toLowerCase();
+  if (type !== "message") return false;
+  const content = typeof (d as any).content === "string" ? (d as any).content : "";
+  if (!content) return false;
+  return content.includes("--prompt (-p) flag has been deprecated");
+}
+
 function attachLineStream(stream: NodeJS.ReadableStream, onLine: (line: string) => void) {
   let buf = "";
   stream.setEncoding("utf8");
@@ -46,11 +57,12 @@ function normalizeSandboxMode(value: unknown): "read-only" | "workspace-write" |
   return "";
 }
 
-function buildExecArgs({ settings, model }: { settings: any; model: string }) {
+function buildExecArgs({ settings, model, prompt }: { settings: any; model: string; prompt: string }) {
   const s = settings && typeof settings === "object" ? settings : {};
   const args: string[] = ["--output-format", "stream-json"];
 
   if (model) args.push("--model", model);
+  args.push("--prompt", String(prompt || ""));
 
   const sandbox = normalizeSandboxMode((s as any).sandboxMode);
   // Gemini CLI expects --sandbox as a boolean. Our internal modes are mapped to
@@ -66,8 +78,18 @@ function buildExecArgs({ settings, model }: { settings: any; model: string }) {
   return args;
 }
 
-function buildResumeArgs({ settings, model, sessionId }: { settings: any; model: string; sessionId: string }) {
-  const args = buildExecArgs({ settings, model });
+function buildResumeArgs({
+  settings,
+  model,
+  sessionId,
+  prompt
+}: {
+  settings: any;
+  model: string;
+  sessionId: string;
+  prompt: string;
+}) {
+  const args = buildExecArgs({ settings, model, prompt });
   args.push("--resume", sessionId || "latest");
   return args;
 }
@@ -185,24 +207,18 @@ function buildGeminiLaunch(
 function spawnGemini({
   geminiPath,
   cwd,
-  args,
-  prompt
+  args
 }: {
   geminiPath: string;
   cwd: string;
   args: string[];
-  prompt: string;
 }) {
   const launch = buildGeminiLaunch(geminiPath, args, cwd);
   const child = spawnPlatform(launch.command, launch.args, {
     cwd,
-    stdio: ["pipe", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     env: launch.env
   });
-
-  child.stdin.setDefaultEncoding("utf8");
-  child.stdin.write(prompt);
-  child.stdin.end();
 
   return child;
 }
@@ -222,17 +238,23 @@ export function runGeminiExec({
   prompt: string;
   onEvent: (ev: any) => void;
 }) {
-  const args = buildExecArgs({ settings, model });
-  const child = spawnGemini({ geminiPath, cwd: projectPath || process.cwd(), args, prompt });
+  const args = buildExecArgs({ settings, model, prompt });
+  const child = spawnGemini({ geminiPath, cwd: projectPath || process.cwd(), args });
 
   attachLineStream(child.stdout, (line) => {
     const json = parseJsonLine(line);
-    if (json) onEvent({ ts: nowIso(), stream: "stdout", kind: "gemini", data: json });
+    if (json) {
+      if (isGeminiPromptDeprecationEvent(json)) return;
+      onEvent({ ts: nowIso(), stream: "stdout", kind: "gemini", data: json });
+    }
     else if (line.trim().length > 0) onEvent({ ts: nowIso(), stream: "stdout", kind: "log", text: line });
   });
   attachLineStream(child.stderr, (line) => {
     const json = parseJsonLine(line);
-    if (json) onEvent({ ts: nowIso(), stream: "stderr", kind: "gemini", data: json });
+    if (json) {
+      if (isGeminiPromptDeprecationEvent(json)) return;
+      onEvent({ ts: nowIso(), stream: "stderr", kind: "gemini", data: json });
+    }
     else if (line.trim().length > 0) onEvent({ ts: nowIso(), stream: "stderr", kind: "log", text: line });
   });
 
@@ -256,17 +278,23 @@ export function runGeminiResume({
   prompt: string;
   onEvent: (ev: any) => void;
 }) {
-  const args = buildResumeArgs({ settings, model, sessionId });
-  const child = spawnGemini({ geminiPath, cwd: cwd || process.cwd(), args, prompt });
+  const args = buildResumeArgs({ settings, model, sessionId, prompt });
+  const child = spawnGemini({ geminiPath, cwd: cwd || process.cwd(), args });
 
   attachLineStream(child.stdout, (line) => {
     const json = parseJsonLine(line);
-    if (json) onEvent({ ts: nowIso(), stream: "stdout", kind: "gemini", data: json });
+    if (json) {
+      if (isGeminiPromptDeprecationEvent(json)) return;
+      onEvent({ ts: nowIso(), stream: "stdout", kind: "gemini", data: json });
+    }
     else if (line.trim().length > 0) onEvent({ ts: nowIso(), stream: "stdout", kind: "log", text: line });
   });
   attachLineStream(child.stderr, (line) => {
     const json = parseJsonLine(line);
-    if (json) onEvent({ ts: nowIso(), stream: "stderr", kind: "gemini", data: json });
+    if (json) {
+      if (isGeminiPromptDeprecationEvent(json)) return;
+      onEvent({ ts: nowIso(), stream: "stderr", kind: "gemini", data: json });
+    }
     else if (line.trim().length > 0) onEvent({ ts: nowIso(), stream: "stderr", kind: "log", text: line });
   });
 
