@@ -39,7 +39,7 @@ function attachLineStream(stream: NodeJS.ReadableStream, onLine: (line: string) 
   });
 }
 
-function normalizeSandboxMode(value: unknown): string {
+function normalizeSandboxMode(value: unknown): "read-only" | "workspace-write" | "danger-full-access" | "" {
   const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
   // Keep a small allow-list to avoid passing unsupported values.
   if (raw === "read-only" || raw === "workspace-write" || raw === "danger-full-access") return raw;
@@ -53,7 +53,15 @@ function buildExecArgs({ settings, model }: { settings: any; model: string }) {
   if (model) args.push("--model", model);
 
   const sandbox = normalizeSandboxMode((s as any).sandboxMode);
-  if (sandbox) args.push("--sandbox", sandbox);
+  // Gemini CLI expects --sandbox as a boolean. Our internal modes are mapped to
+  // supported flags so mode values never end up as accidental positional prompts.
+  if (sandbox === "read-only") {
+    args.push("--sandbox");
+  } else if (sandbox === "workspace-write") {
+    args.push("--sandbox", "--approval-mode", "auto_edit");
+  } else if (sandbox === "danger-full-access") {
+    args.push("--approval-mode", "yolo");
+  }
 
   return args;
 }
