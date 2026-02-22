@@ -33,18 +33,15 @@ describe("gemini-runner", () => {
 
     const script = [
       "#!/usr/bin/env node",
-      "let input = '';",
-      "process.stdin.setEncoding('utf8');",
-      "process.stdin.on('data', (c) => (input += c));",
-      "process.stdin.on('end', () => {",
-      "  const args = process.argv.slice(2);",
-      "  const resumeIdx = args.indexOf('--resume');",
-      "  const resume = resumeIdx !== -1 ? String(args[resumeIdx + 1] || '') : '';",
-      "  console.log(JSON.stringify({ type: 'content', text: resume ? `resume:${resume}` : 'exec' }));",
-      "  console.log('plain stdout');",
-      "  console.error('plain stderr');",
-      "  process.exit(0);",
-      "});"
+      "const args = process.argv.slice(2);",
+      "const resumeIdx = args.indexOf('--resume');",
+      "const resume = resumeIdx !== -1 ? String(args[resumeIdx + 1] || '') : '';",
+      "const promptIdx = args.indexOf('--prompt');",
+      "const prompt = promptIdx !== -1 ? String(args[promptIdx + 1] || '') : '';",
+      "console.log(JSON.stringify({ type: 'content', text: resume ? `resume:${resume}` : 'exec', prompt }));",
+      "console.log('plain stdout');",
+      "console.error('plain stderr');",
+      "process.exit(0);"
     ].join("\n");
 
     if (isWin) {
@@ -72,6 +69,7 @@ describe("gemini-runner", () => {
     await new Promise((r) => setTimeout(r, 10));
 
     expect(events.some((e) => e.kind === "gemini" && e.stream === "stdout" && e.data && e.data.type === "content")).toBe(true);
+    expect(events.some((e) => e.kind === "gemini" && e.stream === "stdout" && e.data && e.data.prompt === "hello")).toBe(true);
     expect(events.some((e) => e.kind === "log" && e.stream === "stdout" && e.text === "plain stdout")).toBe(true);
     expect(events.some((e) => e.kind === "log" && e.stream === "stderr" && e.text === "plain stderr")).toBe(true);
 
@@ -97,6 +95,7 @@ describe("gemini-runner", () => {
         (e) => e.kind === "gemini" && e.stream === "stdout" && e.data && e.data.type === "content" && e.data.text === "resume:session-42"
       )
     ).toBe(true);
+    expect(resumeEvents.some((e) => e.kind === "gemini" && e.stream === "stdout" && e.data && e.data.prompt === "followup")).toBe(true);
   });
 
   it("maps sandbox modes to supported Gemini CLI flags", async () => {
@@ -107,14 +106,9 @@ describe("gemini-runner", () => {
 
     const script = [
       "#!/usr/bin/env node",
-      "let input = '';",
-      "process.stdin.setEncoding('utf8');",
-      "process.stdin.on('data', (c) => (input += c));",
-      "process.stdin.on('end', () => {",
-      "  const args = process.argv.slice(2);",
-      "  console.log(JSON.stringify({ type: 'args', args, input }));",
-      "  process.exit(0);",
-      "});"
+      "const args = process.argv.slice(2);",
+      "console.log(JSON.stringify({ type: 'args', args }));",
+      "process.exit(0);"
     ].join("\n");
 
     if (isWin) {
@@ -148,12 +142,16 @@ describe("gemini-runner", () => {
     }
 
     const readOnlyArgs = await runOnce("read-only");
+    expect(readOnlyArgs).toContain("--prompt");
+    expect(readOnlyArgs).toContain("hello");
     expect(readOnlyArgs).toContain("--sandbox");
     expect(readOnlyArgs).not.toContain("read-only");
     expect(readOnlyArgs).not.toContain("workspace-write");
     expect(readOnlyArgs).not.toContain("danger-full-access");
 
     const workspaceArgs = await runOnce("workspace-write");
+    expect(workspaceArgs).toContain("--prompt");
+    expect(workspaceArgs).toContain("hello");
     expect(workspaceArgs).toContain("--sandbox");
     expect(workspaceArgs).toContain("--approval-mode");
     expect(workspaceArgs).toContain("auto_edit");
@@ -162,6 +160,8 @@ describe("gemini-runner", () => {
     expect(workspaceArgs).not.toContain("danger-full-access");
 
     const dangerArgs = await runOnce("danger-full-access");
+    expect(dangerArgs).toContain("--prompt");
+    expect(dangerArgs).toContain("hello");
     expect(dangerArgs).toContain("--approval-mode");
     expect(dangerArgs).toContain("yolo");
     expect(dangerArgs).not.toContain("--sandbox");
