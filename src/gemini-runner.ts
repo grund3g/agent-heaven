@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { spawnPlatform } from "./platform-spawn";
 
 function nowIso() {
@@ -62,6 +64,116 @@ function buildResumeArgs({ settings, model, sessionId }: { settings: any; model:
   return args;
 }
 
+function isBareCommand(p: string): boolean {
+  const s = String(p || "").trim();
+  if (!s) return true;
+  return !s.includes("/") && !s.includes("\\");
+}
+
+function fileExists(filePath: string): boolean {
+  try {
+    return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function resolveOnPath(command: string, envPath: string): string {
+  const cmd = String(command || "").trim();
+  if (!cmd) return "";
+  if (!isBareCommand(cmd)) return cmd;
+
+  const dirs = String(envPath || "")
+    .split(path.delimiter)
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+
+  if (process.platform === "win32") {
+    const ext = path.extname(cmd).toLowerCase();
+    const pathext = String(process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD")
+      .split(";")
+      .map((x) => String(x || "").trim().toLowerCase())
+      .filter(Boolean);
+    const suffixes = ext ? [""] : pathext;
+
+    for (const dir of dirs) {
+      for (const suffix of suffixes) {
+        const candidate = path.join(dir, `${cmd}${suffix}`);
+        if (fileExists(candidate)) return candidate;
+      }
+    }
+    return cmd;
+  }
+
+  for (const dir of dirs) {
+    const candidate = path.join(dir, cmd);
+    if (fileExists(candidate)) return candidate;
+  }
+  return cmd;
+}
+
+function resolveForInspection(command: string, cwd: string, envPath: string): string {
+  const cmd = String(command || "").trim();
+  if (!cmd) return "";
+  if (isBareCommand(cmd)) return resolveOnPath(cmd, envPath);
+  if (path.isAbsolute(cmd)) return cmd;
+  return path.resolve(cwd || process.cwd(), cmd);
+}
+
+function readShebangLine(filePath: string): string {
+  if (!filePath || !fileExists(filePath)) return "";
+  let fd = -1;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const buf = Buffer.alloc(256);
+    const read = fs.readSync(fd, buf, 0, buf.length, 0);
+    if (read <= 0) return "";
+    const text = buf.toString("utf8", 0, read);
+    const first = (text.split(/\r?\n/, 1)[0] || "").trim();
+    return first;
+  } catch {
+    return "";
+  } finally {
+    if (fd >= 0) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
+function shebangUsesNode(line: string): boolean {
+  const s = String(line || "").trim();
+  if (!s.startsWith("#!")) return false;
+  return /\bnode(?:\.exe)?\b/i.test(s);
+}
+
+function buildGeminiLaunch(
+  geminiPath: string,
+  args: string[],
+  cwd: string
+): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+  const env = process.env;
+  const envPath = String(env.PATH || "");
+  const inspectPath = resolveForInspection(geminiPath, cwd, envPath);
+  const shebang = readShebangLine(inspectPath);
+
+  // Some global npm installs resolve `gemini` via `#!/usr/bin/env node`.
+  // In GUI apps this can pick an older PATH node (e.g. Node 18) that can't run newer Gemini deps.
+  // Running the script with our current runtime avoids that mismatch.
+  if (inspectPath && shebangUsesNode(shebang)) {
+    return {
+      command: process.execPath,
+      args: [inspectPath, ...args],
+      env: { ...env, ELECTRON_RUN_AS_NODE: "1" }
+    };
+  }
+
+  return { command: geminiPath, args, env };
+}
+
 function spawnGemini({
   geminiPath,
   cwd,
@@ -73,10 +185,11 @@ function spawnGemini({
   args: string[];
   prompt: string;
 }) {
-  const child = spawnPlatform(geminiPath, args, {
+  const launch = buildGeminiLaunch(geminiPath, args, cwd);
+  const child = spawnPlatform(launch.command, launch.args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
-    env: process.env
+    env: launch.env
   });
 
   child.stdin.setDefaultEncoding("utf8");
