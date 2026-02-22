@@ -224,4 +224,79 @@ describe("codex-runner", () => {
     const completed = events.find((e) => e.kind === "codex" && e.data && e.data.type === "turn.completed");
     expect(completed && completed.data && completed.data.usage && completed.data.usage.input_tokens).toBe(11);
   });
+
+  it("passes inline MCP config through app-server transport", async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-heaven-codex-"));
+
+    const script = [
+      "#!/usr/bin/env node",
+      "const args = process.argv.slice(2);",
+      "if (!args.includes('app-server')) {",
+      "  console.error('exec mode disabled for this test');",
+      "  process.exit(99);",
+      "}",
+      "const hasMcpUrl = args.some((a) => a === 'mcp_servers.agent_heaven.url=\"http://127.0.0.1:4321/mcp\"');",
+      "const hasMcpTokenEnvVar = args.some((a) => a === 'mcp_servers.agent_heaven.bearer_token_env_var=\"AGENT_HEAVEN_MCP_BEARER_TOKEN\"');",
+      "const hasMcpToken = process.env.AGENT_HEAVEN_MCP_BEARER_TOKEN === 'tok-123';",
+      "if (!hasMcpUrl || !hasMcpTokenEnvVar || !hasMcpToken) {",
+      "  console.error('missing inline mcp config for app-server');",
+      "  process.exit(23);",
+      "}",
+      "function send(obj){ process.stdout.write(JSON.stringify(obj) + '\\n'); }",
+      "let buf = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (chunk) => {",
+      "  buf += chunk;",
+      "  while (true) {",
+      "    const idx = buf.indexOf('\\n');",
+      "    if (idx < 0) break;",
+      "    const line = buf.slice(0, idx);",
+      "    buf = buf.slice(idx + 1);",
+      "    if (!line.trim()) continue;",
+      "    let msg = null;",
+      "    try { msg = JSON.parse(line); } catch { continue; }",
+      "    if (!msg || typeof msg !== 'object') continue;",
+      "    if (msg.method === 'initialize') { send({ id: msg.id, result: {} }); continue; }",
+      "    if (msg.method === 'thread/start') { send({ id: msg.id, result: { thread: { id: 't-inline' } } }); continue; }",
+      "    if (msg.method === 'turn/start') {",
+      "      send({ id: msg.id, result: { turn: { id: 'turn-inline', items: [], status: 'inProgress', error: null } } });",
+      "      send({ method: 'thread/started', params: { thread: { id: 't-inline' } } });",
+      "      send({ method: 'turn/started', params: { threadId: 't-inline', turn: { id: 'turn-inline', items: [], status: 'inProgress', error: null } } });",
+      "      send({ method: 'turn/completed', params: { threadId: 't-inline', turn: { id: 'turn-inline', items: [], status: 'completed', error: null } } });",
+      "      setTimeout(() => process.exit(0), 10);",
+      "      continue;",
+      "    }",
+      "  }",
+      "});"
+    ].join("\n");
+
+    const binPath = writeFakeCodex(script);
+
+    const events: any[] = [];
+    const child = runCodexExec({
+      codexPath: binPath,
+      settings: {
+        sandboxMode: "workspace-write",
+        transport: "app_server",
+        __agentHeavenMcp: {
+          url: "http://127.0.0.1:4321/mcp",
+          token: "tok-123"
+        }
+      },
+      projectPath: tmpDir,
+      model: "",
+      prompt: "hello",
+      images: [],
+      onEvent: (ev: any) => events.push(ev)
+    });
+
+    const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({ code, signal }));
+    });
+
+    expect(closed.code).toBe(0);
+    expect(events.some((e) => e.kind === "log" && String(e.text || "").includes("falling back to exec --json"))).toBe(false);
+    expect(events.some((e) => e.kind === "codex" && e.data && e.data.type === "turn.completed")).toBe(true);
+  });
 });

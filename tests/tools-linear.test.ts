@@ -1,0 +1,116 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const linearGraphqlMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../src/integrations/providers/linear", async () => {
+  const actual = await vi.importActual<any>("../src/integrations/providers/linear");
+  return {
+    ...actual,
+    linearGraphql: (...args: any[]) => linearGraphqlMock(...args)
+  };
+});
+
+import { registerLinearTools } from "../src/mcp-server/tools-linear";
+
+type ToolHandler = (args: any) => Promise<any>;
+
+function buildHandlers() {
+  const handlers = new Map<string, ToolHandler>();
+  const server = {
+    tool: (name: string, _description: string, _schema: any, handler: ToolHandler) => {
+      handlers.set(name, handler);
+    }
+  } as any;
+
+  registerLinearTools(server, () => ({
+    integrations: {
+      providers: {
+        linear: {
+          enabled: true,
+          token: "lin_api_test"
+        }
+      }
+    }
+  }));
+
+  return handlers;
+}
+
+describe("mcp-server/tools-linear", () => {
+  beforeEach(() => {
+    linearGraphqlMock.mockReset();
+  });
+
+  it("resolves linear_get_issue via searchIssues and exact identifier match", async () => {
+    linearGraphqlMock.mockResolvedValue({
+      searchIssues: {
+        nodes: [
+          {
+            id: "issue-1",
+            identifier: "DEV-1106",
+            title: "Fix failing lookup",
+            description: "details",
+            url: "https://linear.app/x/issue/DEV-1106",
+            state: { id: "s1", name: "Todo" },
+            team: { key: "DEV", name: "Dev" },
+            assignee: { name: "A", email: "a@example.com" },
+            priority: 2,
+            priorityLabel: "High",
+            labels: { nodes: [{ name: "bug" }] },
+            createdAt: "2024-01-01",
+            updatedAt: "2024-01-02"
+          },
+          {
+            id: "issue-2",
+            identifier: "DEV-11067",
+            title: "Wrong issue",
+            description: "",
+            url: "",
+            state: { id: "s1", name: "Todo" },
+            team: { key: "DEV", name: "Dev" },
+            assignee: null,
+            priority: 0,
+            priorityLabel: "None",
+            labels: { nodes: [] },
+            createdAt: "",
+            updatedAt: ""
+          }
+        ]
+      }
+    });
+
+    const handlers = buildHandlers();
+    const getIssue = handlers.get("linear_get_issue");
+    expect(getIssue).toBeTypeOf("function");
+
+    const res = await getIssue!({ identifier: "dev-1106" });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(1);
+    const [, , query, variables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(query || "")).toContain("searchIssues(term:");
+    expect(String(query || "")).not.toContain("issue(identifier:");
+    expect(variables).toEqual({ term: "DEV-1106", first: 25 });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const issue = JSON.parse(text);
+    expect(issue.identifier).toBe("DEV-1106");
+  });
+
+  it("returns not found when only partial matches exist", async () => {
+    linearGraphqlMock.mockResolvedValue({
+      searchIssues: {
+        nodes: [{ id: "issue-2", identifier: "DEV-11067", title: "Wrong issue" }]
+      }
+    });
+
+    const handlers = buildHandlers();
+    const getIssue = handlers.get("linear_get_issue");
+    expect(getIssue).toBeTypeOf("function");
+
+    const res = await getIssue!({ identifier: "DEV-1106" });
+    expect(res && res.isError).toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    expect(text).toContain('No issue found for identifier "DEV-1106".');
+  });
+});

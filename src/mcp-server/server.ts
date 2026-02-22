@@ -8,8 +8,8 @@ import { registerNotionTools } from "./tools-notion";
 
 export class McpServerManager {
   private httpServer: http.Server | null = null;
-  private mcpServer: McpServer;
   private transports = new Map<string, StreamableHTTPServerTransport>();
+  private servers = new Map<string, McpServer>();
   private bearerToken: string;
   private startPromise: Promise<void> | null = null;
 
@@ -17,15 +17,18 @@ export class McpServerManager {
 
   constructor(private getSettings: () => any) {
     this.bearerToken = randomUUID();
+  }
 
-    this.mcpServer = new McpServer(
+  private createSessionServer(): McpServer {
+    const server = new McpServer(
       { name: "agent-heaven", version: "1.0.0" },
       { capabilities: { tools: {} } }
     );
 
-    registerLinearTools(this.mcpServer, getSettings);
-    registerGithubTools(this.mcpServer, getSettings);
-    registerNotionTools(this.mcpServer, getSettings);
+    registerLinearTools(server, this.getSettings);
+    registerGithubTools(server, this.getSettings);
+    registerNotionTools(server, this.getSettings);
+    return server;
   }
 
   get token(): string {
@@ -93,6 +96,11 @@ export class McpServerManager {
     }
     this.transports.clear();
 
+    for (const server of this.servers.values()) {
+      try { await server.close(); } catch { /* ignore */ }
+    }
+    this.servers.clear();
+
     if (this.httpServer) {
       await new Promise<void>((resolve) => {
         this.httpServer!.close(() => resolve());
@@ -144,22 +152,36 @@ export class McpServerManager {
       return;
     }
 
-    // New session: create a new transport
+    // New session: create a dedicated server + transport pair
+    const server = this.createSessionServer();
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID()
+      sessionIdGenerator: () => randomUUID(),
+      onsessioninitialized: (sid) => {
+        this.transports.set(sid, transport);
+        this.servers.set(sid, server);
+      }
     });
 
     transport.onclose = () => {
       const sid = transport.sessionId;
-      if (sid) this.transports.delete(sid);
+      if (!sid) return;
+      this.transports.delete(sid);
+      const sessionServer = this.servers.get(sid);
+      this.servers.delete(sid);
+      if (sessionServer) {
+        void sessionServer.close().catch(() => {
+          // ignore
+        });
+      }
     };
 
-    await this.mcpServer.connect(transport);
+    await server.connect(transport);
     await transport.handleRequest(req, res);
 
     const sid = transport.sessionId;
     if (sid) {
       this.transports.set(sid, transport);
+      this.servers.set(sid, server);
     }
   }
 

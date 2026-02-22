@@ -63,24 +63,38 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
       if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
 
       try {
+        const normalizedIdentifier = String(identifier || "").trim().toUpperCase();
+        if (!normalizedIdentifier) {
+          return { content: [{ type: "text" as const, text: "Missing issue identifier." }], isError: true };
+        }
+
         const data = await linearGraphql(
           cfg.apiBaseUrl,
           cfg.token,
-          `query ($identifier: String!) {
-            issue(identifier: $identifier) {
-              id identifier title description url
-              state { id name }
-              team { key name }
-              assignee { name email }
-              priority priorityLabel
-              labels { nodes { name } }
-              createdAt updatedAt
+          `query ($term: String!, $first: Int!) {
+            searchIssues(term: $term, first: $first) {
+              nodes {
+                id identifier title description url
+                state { id name }
+                team { key name }
+                assignee { name email }
+                priority priorityLabel
+                labels { nodes { name } }
+                createdAt updatedAt
+              }
             }
           }`,
-          { identifier: String(identifier || "").trim().toUpperCase() }
+          { term: normalizedIdentifier, first: 25 }
         );
 
-        const issue = data && typeof data === "object" ? (data as any).issue : null;
+        const nodes =
+          data && (data as any).searchIssues && Array.isArray((data as any).searchIssues.nodes)
+            ? ((data as any).searchIssues.nodes as any[])
+            : [];
+        const issue =
+          nodes.find((node) => String(node && (node as any).identifier ? (node as any).identifier : "").trim().toUpperCase() === normalizedIdentifier) ||
+          null;
+
         if (!issue) return { content: [{ type: "text" as const, text: `No issue found for identifier "${identifier}".` }], isError: true };
 
         return { content: [{ type: "text" as const, text: JSON.stringify(issue, null, 2) }] };
@@ -105,8 +119,8 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
         const data = await linearGraphql(
           cfg.apiBaseUrl,
           cfg.token,
-          `query ($query: String!, $first: Int!) {
-            searchIssues(query: $query, first: $first) {
+          `query ($term: String!, $first: Int!) {
+            searchIssues(term: $term, first: $first) {
               nodes {
                 id identifier title url
                 state { name }
@@ -116,7 +130,7 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
               }
             }
           }`,
-          { query: String(query || ""), first: Math.min(limit || 10, 50) }
+          { term: String(query || ""), first: Math.min(limit || 10, 50) }
         );
 
         const nodes = data && (data as any).searchIssues && Array.isArray((data as any).searchIssues.nodes) ? (data as any).searchIssues.nodes : [];

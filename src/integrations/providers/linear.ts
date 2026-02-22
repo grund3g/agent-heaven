@@ -144,24 +144,35 @@ export const linearConnector: IntegrationConnector = {
 
     const issues: any[] = [];
     for (const identifier of identifiers) {
+      const normalizedIdentifier = String(identifier || "").trim().toUpperCase();
+      if (!normalizedIdentifier) continue;
+
       const data = await linearGraphql(
         cfg.apiBaseUrl,
         token,
-        `query AgentHeavenIssueByIdentifier($identifier: String!) {
-          issue(identifier: $identifier) {
-            id
-            identifier
-            title
-            description
-            url
-            state { name }
-            team { key name }
+        `query AgentHeavenIssueByIdentifier($term: String!, $first: Int!) {
+          searchIssues(term: $term, first: $first) {
+            nodes {
+              id
+              identifier
+              title
+              description
+              url
+              state { name }
+              team { key name }
+            }
           }
         }`,
-        { identifier }
+        { term: normalizedIdentifier, first: 20 }
       );
 
-      const issue = data && typeof data === "object" ? (data as any).issue : null;
+      const nodes =
+        data && typeof data === "object" && (data as any).searchIssues && Array.isArray((data as any).searchIssues.nodes)
+          ? ((data as any).searchIssues.nodes as any[])
+          : [];
+      const issue =
+        nodes.find((node) => String(node && (node as any).identifier ? (node as any).identifier : "").trim().toUpperCase() === normalizedIdentifier) ||
+        null;
       if (!issue || typeof issue !== "object") continue;
       issues.push(issue);
     }
