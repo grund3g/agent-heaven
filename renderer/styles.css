@@ -710,9 +710,15 @@ body::before {
 
 .composer__row {
   display: grid;
-  grid-template-columns: 1fr 140px 160px 260px auto;
+  grid-template-columns: 1fr 130px 130px 240px 240px auto;
   gap: 10px;
   align-items: center;
+}
+
+.composer__row > #runBtn {
+  justify-self: start;
+  width: auto;
+  white-space: nowrap;
 }
 
 .composer__hint {

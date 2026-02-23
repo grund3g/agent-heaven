@@ -11968,7 +11968,12 @@ function wireUi() {
     const hasCombobox = !!(cmb && typeof cmb.setEnabled === "function");
 
     if (els.composerModeSelect) els.composerModeSelect.value = mode;
-    if (els.runBtn) els.runBtn.textContent = mode === "war_room" ? "Run War Room" : "Run";
+    if (els.runBtn) els.runBtn.textContent = "Run";
+    if (els.agentSelect) {
+      const locked = mode === "war_room";
+      els.agentSelect.disabled = locked;
+      els.agentSelect.title = locked ? "War Room uses all agents. Switch to Single to change this." : "Agent";
+    }
 
     if (mode === "war_room") {
       if (hasCombobox) cmb.setEnabled(agent === "codex");
