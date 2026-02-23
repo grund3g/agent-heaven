@@ -22,6 +22,7 @@ const api = window.agentHeaven;
 
 		  projectSelect: document.getElementById("projectSelect"),
 		  agentSelect: document.getElementById("agentSelect"),
+		  composerModeSelect: document.getElementById("composerModeSelect"),
 		  checkoutModeSelect: document.getElementById("checkoutModeSelect"),
 		  modelInput: document.getElementById("modelInput"),
 		  promptDropwrap: document.getElementById("promptDropwrap"),
@@ -340,6 +341,7 @@ const SOUND_SAMPLE_URLS = {
 const STORAGE = {
   lastProjectId: "agentHeaven.lastProjectId",
   lastAgent: "agentHeaven.lastAgent",
+  composerMode: "agentHeaven.composerMode",
   sortMode: "agentHeaven.sortMode",
   displayMode: "agentHeaven.displayMode",
   tableScope: "agentHeaven.tableScope",
@@ -1421,6 +1423,30 @@ function storeAgent(agent) {
   try {
     if (!agent) return;
     window.localStorage.setItem(STORAGE.lastAgent, agent);
+  } catch {
+    // ignore
+  }
+}
+
+function normalizeComposerMode(value) {
+  const s = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (s === "war_room" || s === "war-room" || s === "warroom") return "war_room";
+  return "single";
+}
+
+function getStoredComposerMode() {
+  try {
+    return normalizeComposerMode(window.localStorage.getItem(STORAGE.composerMode) || "");
+  } catch {
+    return "single";
+  }
+}
+
+function storeComposerMode(mode) {
+  try {
+    window.localStorage.setItem(STORAGE.composerMode, normalizeComposerMode(mode));
   } catch {
     // ignore
   }
@@ -8774,6 +8800,7 @@ function renderJobDialogMeta(job) {
     if (dur) pushChip("elapsed", dur);
   }
   if (job) pushChip("agent", normalizeAgentKey(job.agent));
+  if (normalizeComposerMode(job && job.mode) === "war_room") pushChip("mode", "war_room");
 
   // Project + checkout path
   {
@@ -10584,6 +10611,7 @@ async function startJobFromComposer() {
 
   let projectId = els.projectSelect.value;
   const agent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
+  const mode = normalizeComposerMode(els.composerModeSelect ? els.composerModeSelect.value : "single");
   const model = (els.modelInput.value || "").trim();
   const images = [...(state.composerImages || [])];
   const files = [...(state.composerFiles || [])];
@@ -10621,7 +10649,7 @@ async function startJobFromComposer() {
     if (!okBranch) return;
 
     const prompt = buildPromptWithFileAttachments(promptText, files);
-    const payload = { prompt, projectId, agent, model, images };
+    const payload = { prompt, projectId, agent, mode, model, images };
     if (checkoutMode) payload.checkoutMode = checkoutMode;
     await api.jobsStart(payload);
     els.promptInput.value = "";
@@ -11944,9 +11972,21 @@ function wireUi() {
 
   function syncComposerAgentUi() {
     const agent = normalizeAgentKey(els.agentSelect ? els.agentSelect.value : "");
+    const mode = normalizeComposerMode(els.composerModeSelect ? els.composerModeSelect.value : "single");
     if (!els.modelInput) return;
     const cmb = codexModelComboboxComposer;
     const hasCombobox = !!(cmb && typeof cmb.setEnabled === "function");
+
+    if (els.composerModeSelect) els.composerModeSelect.value = mode;
+    if (els.runBtn) els.runBtn.textContent = mode === "war_room" ? "Run War Room" : "Run";
+
+    if (mode === "war_room") {
+      if (hasCombobox) cmb.setEnabled(agent === "codex");
+      else if (agent === "codex") els.modelInput.setAttribute("list", "codexModelsList");
+      else els.modelInput.removeAttribute("list");
+      els.modelInput.placeholder = "Model override for selected judge (optional)";
+      return;
+    }
 
     if (agent === "claude") {
       if (hasCombobox) cmb.setEnabled(false);
@@ -11972,8 +12012,18 @@ function wireUi() {
       storeAgent(next);
       syncComposerAgentUi();
     });
-    syncComposerAgentUi();
   }
+  if (els.composerModeSelect) {
+    const storedMode = getStoredComposerMode();
+    els.composerModeSelect.value = storedMode;
+    els.composerModeSelect.addEventListener("change", () => {
+      const next = normalizeComposerMode(els.composerModeSelect.value);
+      els.composerModeSelect.value = next;
+      storeComposerMode(next);
+      syncComposerAgentUi();
+    });
+  }
+  syncComposerAgentUi();
 
   els.runBtn.addEventListener("click", () => {
     startJobFromComposer();

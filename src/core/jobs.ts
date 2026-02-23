@@ -3,6 +3,7 @@ import { addUsageTotals, toIntOrZero, type UsageTotals } from "./usage";
 
 export type JobBox = "board" | "archive" | "trash";
 export type JobStatus = "running" | "done" | "failed" | "cancelled" | "needs_attention" | "unknown";
+export type JobRunMode = "single" | "war_room";
 
 export type JobPrompt = { ts: string; text: string; images?: string[] };
 export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string };
@@ -33,6 +34,7 @@ export type Job = {
   title: string;
   // Optional LLM-generated title (preferred for display if present).
   titleLlm?: string;
+  mode?: JobRunMode;
   status: JobStatus;
   box: JobBox;
   archivedAt: string;
@@ -62,6 +64,14 @@ export type Job = {
   exitCode: number | null;
 };
 
+function normalizeJobRunMode(value: unknown): JobRunMode {
+  const s = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (s === "war_room" || s === "war-room" || s === "warroom") return "war_room";
+  return "single";
+}
+
 function safeIso(s: unknown): string {
   const t = typeof s === "string" ? s : "";
   return t && t.length >= 10 ? t : "";
@@ -76,6 +86,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
 
   out.title = typeof out.title === "string" ? out.title : "";
   out.titleLlm = typeof out.titleLlm === "string" ? out.titleLlm : "";
+  out.mode = normalizeJobRunMode(out.mode);
   out.status = typeof out.status === "string" ? out.status : "unknown";
 
   out.box = typeof out.box === "string" ? out.box : "board";
@@ -153,6 +164,7 @@ export function snapshotJob(job: Job): Job {
     id,
     title,
     titleLlm,
+    mode,
     status,
     box,
     archivedAt,
@@ -185,6 +197,7 @@ export function snapshotJob(job: Job): Job {
     id,
     title,
     titleLlm,
+    mode,
     status,
     box,
     archivedAt,
@@ -273,6 +286,7 @@ export function snapshotJobMeta(job: Job): any {
     finishedAt,
     projectId,
     projectPath,
+    mode,
     agent,
     model,
     threadId,
@@ -298,6 +312,7 @@ export function snapshotJobMeta(job: Job): any {
     finishedAt,
     projectId,
     projectPath,
+    mode,
     agent,
     model,
     threadId,

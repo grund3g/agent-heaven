@@ -535,4 +535,96 @@ describe("electron/jobs-manager", () => {
 
     resumeChild.emit("close", 0, null);
   });
+
+  it("runs war room mode across multiple agents and rejects follow-ups", async () => {
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "gpt-5-codex" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false },
+          gemini: { path: "", model: "gemini-2.5-pro", sandboxMode: "workspace-write" }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const spawnCodex = (opts: any) => {
+      const child = new FakeChild();
+      setTimeout(() => {
+        opts.onEvent({
+          ts: "2020-01-01T00:00:00.000Z",
+          stream: "stdout",
+          kind: "codex",
+          data: { type: "item.completed", item: { type: "agent_message", text: "codex war room output" } }
+        });
+        child.emit("close", 0, null);
+      }, 0);
+      return child as any;
+    };
+
+    const spawnClaude = (opts: any) => {
+      const child = new FakeChild();
+      setTimeout(() => {
+        opts.onEvent({
+          ts: "2020-01-01T00:00:00.000Z",
+          stream: "stdout",
+          kind: "claude",
+          data: { type: "assistant", parent_tool_use_id: null, message: { content: [{ type: "text", text: "claude war room output" }] } }
+        });
+        child.emit("close", 0, null);
+      }, 0);
+      return child as any;
+    };
+
+    const spawnGemini = (opts: any) => {
+      const child = new FakeChild();
+      setTimeout(() => {
+        opts.onEvent({
+          ts: "2020-01-01T00:00:00.000Z",
+          stream: "stdout",
+          kind: "gemini",
+          data: { type: "result", text: "gemini war room output" }
+        });
+        child.emit("close", 0, null);
+      }, 0);
+      return child as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: spawnCodex,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec: spawnClaude,
+      runClaudeResume: () => new FakeChild() as any,
+      runGeminiExec: spawnGemini,
+      runGeminiResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Design a rollout plan", projectId: "p1", agent: "codex", mode: "war_room", images: [] })).toEqual({
+      ok: true,
+      jobId: "job1"
+    });
+
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.mode).toBe("war_room");
+    expect(["done", "needs_attention"]).toContain(snap.job.status);
+    expect(Array.isArray(snap.job.logs)).toBe(true);
+    expect(snap.job.logs.some((x: any) => x && x.kind === "codex")).toBe(true);
+    expect(snap.job.logs.some((x: any) => x && x.kind === "claude")).toBe(true);
+    expect(snap.job.logs.some((x: any) => x && x.kind === "gemini")).toBe(true);
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up" })).toEqual({
+      ok: false,
+      error: "War Room sessions do not support follow-up prompts yet. Start a new War Room run from the composer."
+    });
+  });
 });
