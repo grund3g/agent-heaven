@@ -33,15 +33,18 @@ describe("gemini-runner", () => {
 
     const script = [
       "#!/usr/bin/env node",
-      "const args = process.argv.slice(2);",
-      "const resumeIdx = args.indexOf('--resume');",
-      "const resume = resumeIdx !== -1 ? String(args[resumeIdx + 1] || '') : '';",
-      "const promptIdx = args.indexOf('--prompt');",
-      "const prompt = promptIdx !== -1 ? String(args[promptIdx + 1] || '') : '';",
-      "console.log(JSON.stringify({ type: 'content', text: resume ? `resume:${resume}` : 'exec', prompt }));",
-      "console.log('plain stdout');",
-      "console.error('plain stderr');",
-      "process.exit(0);"
+      "let input = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (c) => (input += c));",
+      "process.stdin.on('end', () => {",
+      "  const args = process.argv.slice(2);",
+      "  const resumeIdx = args.indexOf('--resume');",
+      "  const resume = resumeIdx !== -1 ? String(args[resumeIdx + 1] || '') : '';",
+      "  console.log(JSON.stringify({ type: 'content', text: resume ? `resume:${resume}` : 'exec', prompt: input }));",
+      "  console.log('plain stdout');",
+      "  console.error('plain stderr');",
+      "  process.exit(0);",
+      "});"
     ].join("\n");
 
     if (isWin) {
@@ -106,9 +109,14 @@ describe("gemini-runner", () => {
 
     const script = [
       "#!/usr/bin/env node",
-      "const args = process.argv.slice(2);",
-      "console.log(JSON.stringify({ type: 'args', args }));",
-      "process.exit(0);"
+      "let input = '';",
+      "process.stdin.setEncoding('utf8');",
+      "process.stdin.on('data', (c) => (input += c));",
+      "process.stdin.on('end', () => {",
+      "  const args = process.argv.slice(2);",
+      "  console.log(JSON.stringify({ type: 'args', args, input }));",
+      "  process.exit(0);",
+      "});"
     ].join("\n");
 
     if (isWin) {
@@ -138,36 +146,39 @@ describe("gemini-runner", () => {
 
       const argsEvent = events.find((e) => e.kind === "gemini" && e.data && e.data.type === "args");
       expect(argsEvent).toBeTruthy();
-      return Array.isArray(argsEvent.data.args) ? argsEvent.data.args.map((x: any) => String(x)) : [];
+      return {
+        args: Array.isArray(argsEvent.data.args) ? argsEvent.data.args.map((x: any) => String(x)) : [],
+        input: typeof argsEvent.data.input === "string" ? argsEvent.data.input : ""
+      };
     }
 
-    const readOnlyArgs = await runOnce("read-only");
-    expect(readOnlyArgs).toContain("--prompt");
-    expect(readOnlyArgs).toContain("hello");
-    expect(readOnlyArgs).toContain("--sandbox");
-    expect(readOnlyArgs).not.toContain("read-only");
-    expect(readOnlyArgs).not.toContain("workspace-write");
-    expect(readOnlyArgs).not.toContain("danger-full-access");
+    const readOnlyRun = await runOnce("read-only");
+    expect(readOnlyRun.args).not.toContain("--prompt");
+    expect(readOnlyRun.input).toBe("hello");
+    expect(readOnlyRun.args).toContain("--sandbox");
+    expect(readOnlyRun.args).not.toContain("read-only");
+    expect(readOnlyRun.args).not.toContain("workspace-write");
+    expect(readOnlyRun.args).not.toContain("danger-full-access");
 
-    const workspaceArgs = await runOnce("workspace-write");
-    expect(workspaceArgs).toContain("--prompt");
-    expect(workspaceArgs).toContain("hello");
-    expect(workspaceArgs).toContain("--sandbox");
-    expect(workspaceArgs).toContain("--approval-mode");
-    expect(workspaceArgs).toContain("auto_edit");
-    expect(workspaceArgs).not.toContain("read-only");
-    expect(workspaceArgs).not.toContain("workspace-write");
-    expect(workspaceArgs).not.toContain("danger-full-access");
+    const workspaceRun = await runOnce("workspace-write");
+    expect(workspaceRun.args).not.toContain("--prompt");
+    expect(workspaceRun.input).toBe("hello");
+    expect(workspaceRun.args).toContain("--sandbox");
+    expect(workspaceRun.args).toContain("--approval-mode");
+    expect(workspaceRun.args).toContain("auto_edit");
+    expect(workspaceRun.args).not.toContain("read-only");
+    expect(workspaceRun.args).not.toContain("workspace-write");
+    expect(workspaceRun.args).not.toContain("danger-full-access");
 
-    const dangerArgs = await runOnce("danger-full-access");
-    expect(dangerArgs).toContain("--prompt");
-    expect(dangerArgs).toContain("hello");
-    expect(dangerArgs).toContain("--approval-mode");
-    expect(dangerArgs).toContain("yolo");
-    expect(dangerArgs).not.toContain("--sandbox");
-    expect(dangerArgs).not.toContain("read-only");
-    expect(dangerArgs).not.toContain("workspace-write");
-    expect(dangerArgs).not.toContain("danger-full-access");
+    const dangerRun = await runOnce("danger-full-access");
+    expect(dangerRun.args).not.toContain("--prompt");
+    expect(dangerRun.input).toBe("hello");
+    expect(dangerRun.args).toContain("--approval-mode");
+    expect(dangerRun.args).toContain("yolo");
+    expect(dangerRun.args).not.toContain("--sandbox");
+    expect(dangerRun.args).not.toContain("read-only");
+    expect(dangerRun.args).not.toContain("workspace-write");
+    expect(dangerRun.args).not.toContain("danger-full-access");
   });
 
   it("uses current runtime for node shebang scripts even if PATH node is broken", async () => {
