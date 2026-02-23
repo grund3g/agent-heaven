@@ -57,12 +57,11 @@ function normalizeSandboxMode(value: unknown): "read-only" | "workspace-write" |
   return "";
 }
 
-function buildExecArgs({ settings, model, prompt }: { settings: any; model: string; prompt: string }) {
+function buildExecArgs({ settings, model }: { settings: any; model: string }) {
   const s = settings && typeof settings === "object" ? settings : {};
   const args: string[] = ["--output-format", "stream-json"];
 
   if (model) args.push("--model", model);
-  args.push("--prompt", String(prompt || ""));
 
   const sandbox = normalizeSandboxMode((s as any).sandboxMode);
   // Gemini CLI expects --sandbox as a boolean. Our internal modes are mapped to
@@ -81,15 +80,13 @@ function buildExecArgs({ settings, model, prompt }: { settings: any; model: stri
 function buildResumeArgs({
   settings,
   model,
-  sessionId,
-  prompt
+  sessionId
 }: {
   settings: any;
   model: string;
   sessionId: string;
-  prompt: string;
 }) {
-  const args = buildExecArgs({ settings, model, prompt });
+  const args = buildExecArgs({ settings, model });
   args.push("--resume", sessionId || "latest");
   return args;
 }
@@ -207,18 +204,24 @@ function buildGeminiLaunch(
 function spawnGemini({
   geminiPath,
   cwd,
-  args
+  args,
+  prompt
 }: {
   geminiPath: string;
   cwd: string;
   args: string[];
+  prompt: string;
 }) {
   const launch = buildGeminiLaunch(geminiPath, args, cwd);
   const child = spawnPlatform(launch.command, launch.args, {
     cwd,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
     env: launch.env
   });
+
+  child.stdin.setDefaultEncoding("utf8");
+  child.stdin.write(String(prompt || ""));
+  child.stdin.end();
 
   return child;
 }
@@ -238,8 +241,8 @@ export function runGeminiExec({
   prompt: string;
   onEvent: (ev: any) => void;
 }) {
-  const args = buildExecArgs({ settings, model, prompt });
-  const child = spawnGemini({ geminiPath, cwd: projectPath || process.cwd(), args });
+  const args = buildExecArgs({ settings, model });
+  const child = spawnGemini({ geminiPath, cwd: projectPath || process.cwd(), args, prompt });
 
   attachLineStream(child.stdout, (line) => {
     const json = parseJsonLine(line);
@@ -278,8 +281,8 @@ export function runGeminiResume({
   prompt: string;
   onEvent: (ev: any) => void;
 }) {
-  const args = buildResumeArgs({ settings, model, sessionId, prompt });
-  const child = spawnGemini({ geminiPath, cwd: cwd || process.cwd(), args });
+  const args = buildResumeArgs({ settings, model, sessionId });
+  const child = spawnGemini({ geminiPath, cwd: cwd || process.cwd(), args, prompt });
 
   attachLineStream(child.stdout, (line) => {
     const json = parseJsonLine(line);
