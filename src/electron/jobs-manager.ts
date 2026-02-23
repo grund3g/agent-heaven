@@ -7,7 +7,7 @@ import { promptSummary } from "../core/prompt";
 import { oneLine, truncateText } from "../core/text";
 import { addUsageTotals, toIntOrZero } from "../core/usage";
 import { newId } from "../core/id";
-import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job } from "../core/jobs";
+import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job, type JobRunMode } from "../core/jobs";
 import { searchJobs, type JobSearchOpts } from "../core/job-search";
 import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as normalizeGitCheckoutMode } from "../core/git-normalize";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
@@ -810,6 +810,539 @@ export class JobsManager {
     if (s === "claude" || s === "anthropic") return "claude";
     if (s === "gemini" || s === "google") return "gemini";
     return "codex";
+  }
+
+  private normalizeJobRunMode(value: unknown): JobRunMode {
+    const s = String(value || "")
+      .trim()
+      .toLowerCase();
+    if (s === "war_room" || s === "war-room" || s === "warroom") return "war_room";
+    return "single";
+  }
+
+  private agentLabel(agent: "codex" | "claude" | "gemini"): string {
+    if (agent === "claude") return "Claude";
+    if (agent === "gemini") return "Gemini";
+    return "Codex";
+  }
+
+  private warRoomParticipants(preferred: "codex" | "claude" | "gemini"): Array<"codex" | "claude" | "gemini"> {
+    const out: Array<"codex" | "claude" | "gemini"> = [];
+    const add = (agent: "codex" | "claude" | "gemini") => {
+      if (out.includes(agent)) return;
+      if (agent === "claude" && !this.runClaudeExec) return;
+      if (agent === "gemini" && !this.runGeminiExec) return;
+      out.push(agent);
+    };
+
+    add(preferred);
+    add("codex");
+    add("claude");
+    add("gemini");
+    return out;
+  }
+
+  private modelForWarRoomAgent(opts: {
+    agent: "codex" | "claude" | "gemini";
+    preferredAgent: "codex" | "claude" | "gemini";
+    modelOverride: string;
+    codexSettings: any;
+    claudeSettings: any;
+    geminiSettings: any;
+  }): string {
+    const { agent, preferredAgent, modelOverride, codexSettings, claudeSettings, geminiSettings } = opts;
+    if (modelOverride && agent === preferredAgent) return modelOverride;
+    if (agent === "claude") return String((claudeSettings as any).model || "").trim();
+    if (agent === "gemini") return String((geminiSettings as any).model || "").trim();
+    const model = String((codexSettings as any).model || "").trim();
+    return model || readCodexDefaultModelFromConfigToml();
+  }
+
+  private appendSystemLog(job: Job, stream: "stdout" | "stderr", text: string) {
+    const entry = { ts: new Date().toISOString(), stream, kind: "log" as const, text };
+    this.appendLog(job, entry);
+    this.sendJobEvent({ jobId: job.id, kind: "log", entry });
+  }
+
+  private buildWarRoomOpeningPrompt(opts: {
+    agent: "codex" | "claude" | "gemini";
+    participants: Array<"codex" | "claude" | "gemini">;
+    task: string;
+  }): string {
+    const participantNames = opts.participants.map((a) => this.agentLabel(a)).join(", ");
+    return [
+      `You are ${this.agentLabel(opts.agent)} in a multi-agent War Room.`,
+      `Other participants: ${participantNames}`,
+      "",
+      "Goal:",
+      "- Produce your strongest standalone answer to the user's request.",
+      "- Keep it concrete, technical, and actionable.",
+      "",
+      "Output format (STRICT):",
+      "[Position]",
+      "1-2 short paragraphs with your proposed approach.",
+      "",
+      "[Plan]",
+      "3-6 concise bullets.",
+      "",
+      "[Risks]",
+      "2-4 concise bullets.",
+      "",
+      "User request:",
+      opts.task
+    ].join("\n");
+  }
+
+  private buildWarRoomCritiquePrompt(opts: {
+    agent: "codex" | "claude" | "gemini";
+    participants: Array<"codex" | "claude" | "gemini">;
+    task: string;
+    openings: Record<string, string>;
+  }): string {
+    const blocks = opts.participants.map((a) => {
+      const key = a;
+      const txt = truncateText(String(opts.openings[key] || "").trim() || "(no answer)", 5_000);
+      return `### ${this.agentLabel(a)}\n${txt}`;
+    });
+    return [
+      `You are ${this.agentLabel(opts.agent)} in round 2 of a War Room.`,
+      "Critique the round-1 proposals and improve your own position.",
+      "",
+      "Rules:",
+      "- Be direct and specific.",
+      "- Call out concrete flaws, risks, or missing assumptions.",
+      "- Update your recommendation after critique.",
+      "",
+      "Output format (STRICT):",
+      "[Critique]",
+      "3-6 bullets addressing the other proposals.",
+      "",
+      "[Revised Position]",
+      "1-2 short paragraphs with your refined recommendation.",
+      "",
+      "Original user request:",
+      opts.task,
+      "",
+      "Round-1 proposals:",
+      blocks.join("\n\n")
+    ].join("\n");
+  }
+
+  private buildWarRoomSynthesisPrompt(opts: {
+    judge: "codex" | "claude" | "gemini";
+    participants: Array<"codex" | "claude" | "gemini">;
+    task: string;
+    openings: Record<string, string>;
+    critiques: Record<string, string>;
+  }): string {
+    const blocks = opts.participants.map((a) => {
+      const opening = truncateText(String(opts.openings[a] || "").trim() || "(no answer)", 4_000);
+      const critique = truncateText(String(opts.critiques[a] || "").trim() || "(no critique)", 4_000);
+      return `## ${this.agentLabel(a)}\n[Round 1]\n${opening}\n\n[Round 2]\n${critique}`;
+    });
+    return [
+      `You are ${this.agentLabel(opts.judge)}, acting as War Room judge.`,
+      "Synthesize the debate into one final answer for the user.",
+      "",
+      "Output format (STRICT):",
+      "[Final Recommendation]",
+      "1-3 short paragraphs.",
+      "",
+      "[Chosen Strategy]",
+      "3-6 concise bullets.",
+      "",
+      "[Why this wins]",
+      "3-6 concise bullets comparing alternatives.",
+      "",
+      "[Confidence]",
+      "One line: low | medium | high + one-sentence reason.",
+      "",
+      "Original user request:",
+      opts.task,
+      "",
+      "War Room material:",
+      blocks.join("\n\n")
+    ].join("\n");
+  }
+
+  private runWarRoomTurn(opts: {
+    jobId: string;
+    agent: "codex" | "claude" | "gemini";
+    projectPath: string;
+    prompt: string;
+    model: string;
+    codexSettings: any;
+    claudeSettings: any;
+    geminiSettings: any;
+    images?: string[];
+  }): Promise<{ ok: boolean; cancelled: boolean; code: number | null; text: string; error: string }> {
+    const { jobId, agent, projectPath, prompt, model, codexSettings, claudeSettings, geminiSettings } = opts;
+    const images = Array.isArray(opts.images) ? opts.images : [];
+    return new Promise((resolve) => {
+      let child: ChildProcess | null = null;
+      let settled = false;
+      let out = "";
+      let geminiPartial = "";
+
+      const finish = (result: { ok: boolean; cancelled: boolean; code: number | null; text: string; error: string }) => {
+        if (settled) return;
+        settled = true;
+        const live = this.procs.get(jobId);
+        if (live && child && live === child) this.procs.delete(jobId);
+        if (geminiPartial.trim()) out += (out ? "\n" : "") + geminiPartial.trim();
+        resolve({ ...result, text: result.text || out.trim() });
+      };
+
+      try {
+        if (agent === "claude") {
+          if (!this.runClaudeExec) {
+            finish({ ok: false, cancelled: false, code: null, text: "", error: "Claude runner not configured" });
+            return;
+          }
+          const claudePath = this.getClaudePath();
+          const safeClaudeSettings = { ...(claudeSettings || {}), permissionMode: "plan", dangerouslySkipPermissions: false };
+          child = this.runClaudeExec({
+            claudePath,
+            settings: safeClaudeSettings,
+            projectPath,
+            model,
+            sessionId: randomUUID(),
+            prompt,
+            onEvent: (ev: any) => {
+              this.onClaudeEvent(jobId, ev);
+              if (!ev || ev.kind !== "claude") return;
+              const data = ev.data || {};
+              if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+                const text = this.claudeMessageToText(data.message);
+                if (text) out += (out ? "\n" : "") + text;
+              }
+            }
+          });
+        } else if (agent === "gemini") {
+          if (!this.runGeminiExec) {
+            finish({ ok: false, cancelled: false, code: null, text: "", error: "Gemini runner not configured" });
+            return;
+          }
+          const geminiPath = this.getGeminiPath();
+          const safeGeminiSettings = { ...(geminiSettings || {}), sandboxMode: "read-only" };
+          child = this.runGeminiExec({
+            geminiPath,
+            settings: safeGeminiSettings,
+            projectPath,
+            model,
+            prompt,
+            onEvent: (ev: any) => {
+              this.onGeminiEvent(jobId, ev);
+              if (!ev || ev.kind !== "gemini") return;
+              const data = ev.data || {};
+              const type = this.geminiEventType(data);
+              if (type === "content" || type === "message") {
+                const chunks = this.geminiDataToTextChunks(data);
+                if (chunks.length > 0) geminiPartial += chunks.join("");
+                return;
+              }
+              if (type === "chatcomplete" || type === "result") {
+                const chunks = this.geminiDataToTextChunks(data);
+                const finalText = `${geminiPartial}${chunks.join("\n")}`.trim();
+                if (finalText) out += (out ? "\n" : "") + finalText;
+                geminiPartial = "";
+                return;
+              }
+              if (!out.trim()) {
+                const chunks = this.geminiDataToTextChunks(data);
+                if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
+              }
+            }
+          });
+        } else {
+          const codexPath = this.getCodexPath();
+          const safeCodexSettings = this.codexSettingsWithInlineMcp({
+            ...(codexSettings || {}),
+            sandboxMode: "read-only",
+            bypassApprovalsAndSandbox: false,
+            skipGitRepoCheck: true
+          });
+          child = this.runCodexExec({
+            codexPath,
+            settings: safeCodexSettings,
+            projectPath,
+            model,
+            prompt,
+            images,
+            onEvent: (ev: any) => {
+              this.onCodexEvent(jobId, ev);
+              if (!ev || ev.kind !== "codex") return;
+              const data = ev.data || {};
+              if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+                const text = typeof data.item.text === "string" ? data.item.text : "";
+                if (text) out += (out ? "\n" : "") + text;
+              }
+            }
+          });
+        }
+      } catch (err: any) {
+        finish({
+          ok: false,
+          cancelled: false,
+          code: null,
+          text: out.trim(),
+          error: String(err && err.message ? err.message : err)
+        });
+        return;
+      }
+
+      if (!child) {
+        finish({ ok: false, cancelled: false, code: null, text: out.trim(), error: "Failed to start process" });
+        return;
+      }
+      this.procs.set(jobId, child);
+
+      child.once("error", (err: any) => {
+        finish({
+          ok: false,
+          cancelled: false,
+          code: null,
+          text: out.trim(),
+          error: String(err && err.message ? err.message : err)
+        });
+      });
+
+      child.once("close", (code: any, signal: any) => {
+        const numericCode = typeof code === "number" ? code : null;
+        if (signal) {
+          finish({ ok: false, cancelled: true, code: numericCode, text: out.trim(), error: `terminated by ${String(signal)}` });
+          return;
+        }
+        if (numericCode !== 0) {
+          finish({
+            ok: false,
+            cancelled: false,
+            code: numericCode,
+            text: out.trim(),
+            error: `exited with code ${numericCode == null ? "?" : String(numericCode)}`
+          });
+          return;
+        }
+        finish({ ok: true, cancelled: false, code: numericCode, text: out.trim(), error: "" });
+      });
+    });
+  }
+
+  private async runWarRoomJob(opts: {
+    jobId: string;
+    preferredAgent: "codex" | "claude" | "gemini";
+    modelOverride: string;
+    taskPrompt: string;
+    runProjectPath: string;
+    codexSettings: any;
+    claudeSettings: any;
+    geminiSettings: any;
+    images: string[];
+  }) {
+    const {
+      jobId,
+      preferredAgent,
+      modelOverride,
+      taskPrompt,
+      runProjectPath,
+      codexSettings,
+      claudeSettings,
+      geminiSettings,
+      images
+    } = opts;
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+    try {
+      const participants = this.warRoomParticipants(preferredAgent);
+      if (participants.length === 0) {
+        const finishedAt = new Date().toISOString();
+        this.appendSystemLog(job, "stderr", "WAR ROOM: no available agent runners.");
+        this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+        this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
+        return;
+      }
+
+      const task = String(taskPrompt || "").trim();
+      this.appendSystemLog(
+        job,
+        "stdout",
+        `WAR ROOM started with ${participants.map((a) => this.agentLabel(a)).join(", ")} (${participants.length} agents).`
+      );
+
+      const openings: Record<string, string> = {};
+      const critiques: Record<string, string> = {};
+      let successfulOpenings = 0;
+
+      for (const participant of participants) {
+        const model = this.modelForWarRoomAgent({
+          agent: participant,
+          preferredAgent,
+          modelOverride,
+          codexSettings,
+          claudeSettings,
+          geminiSettings
+        });
+        this.appendSystemLog(
+          job,
+          "stdout",
+          `WAR ROOM round 1: ${this.agentLabel(participant)}${model ? ` (${model})` : ""}`
+        );
+        const prompt = this.buildWarRoomOpeningPrompt({ agent: participant, participants, task });
+        const run = await this.runWarRoomTurn({
+          jobId,
+          agent: participant,
+          projectPath: runProjectPath,
+          prompt,
+          model,
+          codexSettings,
+          claudeSettings,
+          geminiSettings,
+          images: participant === "codex" ? images : []
+        });
+
+        if (run.cancelled) {
+          const finishedAt = new Date().toISOString();
+          this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: run.code });
+          this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, run.code);
+          return;
+        }
+
+        if (!run.ok) {
+          const msg = run.error || "unknown error";
+          openings[participant] = `[${this.agentLabel(participant)} failed] ${msg}`;
+          this.appendSystemLog(job, "stderr", `WAR ROOM round 1 failed (${this.agentLabel(participant)}): ${msg}`);
+          continue;
+        }
+
+        const text = String(run.text || "").trim();
+        if (text) successfulOpenings += 1;
+        openings[participant] = text || "(no answer)";
+        this.appendSystemLog(job, "stdout", `WAR ROOM round 1 complete (${this.agentLabel(participant)}).`);
+      }
+
+      for (const participant of participants) {
+        const model = this.modelForWarRoomAgent({
+          agent: participant,
+          preferredAgent,
+          modelOverride,
+          codexSettings,
+          claudeSettings,
+          geminiSettings
+        });
+        this.appendSystemLog(
+          job,
+          "stdout",
+          `WAR ROOM round 2: ${this.agentLabel(participant)}${model ? ` (${model})` : ""}`
+        );
+        const prompt = this.buildWarRoomCritiquePrompt({ agent: participant, participants, task, openings });
+        const run = await this.runWarRoomTurn({
+          jobId,
+          agent: participant,
+          projectPath: runProjectPath,
+          prompt,
+          model,
+          codexSettings,
+          claudeSettings,
+          geminiSettings,
+          images: []
+        });
+
+        if (run.cancelled) {
+          const finishedAt = new Date().toISOString();
+          this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: run.code });
+          this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, run.code);
+          return;
+        }
+
+        if (!run.ok) {
+          const msg = run.error || "unknown error";
+          critiques[participant] = `[${this.agentLabel(participant)} failed] ${msg}`;
+          this.appendSystemLog(job, "stderr", `WAR ROOM round 2 failed (${this.agentLabel(participant)}): ${msg}`);
+          continue;
+        }
+
+        critiques[participant] = String(run.text || "").trim() || "(no critique)";
+        this.appendSystemLog(job, "stdout", `WAR ROOM round 2 complete (${this.agentLabel(participant)}).`);
+      }
+
+      const judge = participants.includes(preferredAgent) ? preferredAgent : participants[0];
+      const judgeModel = this.modelForWarRoomAgent({
+        agent: judge,
+        preferredAgent,
+        modelOverride,
+        codexSettings,
+        claudeSettings,
+        geminiSettings
+      });
+      this.appendSystemLog(job, "stdout", `WAR ROOM synthesis: ${this.agentLabel(judge)}${judgeModel ? ` (${judgeModel})` : ""}`);
+      const synthesisPrompt = this.buildWarRoomSynthesisPrompt({
+        judge,
+        participants,
+        task,
+        openings,
+        critiques
+      });
+      const synthesis = await this.runWarRoomTurn({
+        jobId,
+        agent: judge,
+        projectPath: runProjectPath,
+        prompt: synthesisPrompt,
+        model: judgeModel,
+        codexSettings,
+        claudeSettings,
+        geminiSettings,
+        images: []
+      });
+
+      if (synthesis.cancelled) {
+        const finishedAt = new Date().toISOString();
+        this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: synthesis.code });
+        this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, synthesis.code);
+        return;
+      }
+
+      if (!synthesis.ok) {
+        this.appendSystemLog(
+          job,
+          "stderr",
+          `WAR ROOM synthesis failed (${this.agentLabel(judge)}): ${synthesis.error || "unknown error"}`
+        );
+        if (successfulOpenings > 0) {
+          const fallback = [
+            "[Final Recommendation]",
+            "War Room synthesis failed, but round-1/round-2 outputs are available above.",
+            "",
+            "[Chosen Strategy]",
+            "- Review the participant outputs and pick the strongest proposal with acceptable risk.",
+            "",
+            "[Why this wins]",
+            "- A synthesis pass could not be completed in this run."
+          ].join("\n");
+          const ts = new Date().toISOString();
+          this.appendMessage(job, { ts, role: "assistant", text: fallback });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts, role: "assistant", text: fallback } });
+        }
+      }
+
+      const finishedAt = new Date().toISOString();
+      if (successfulOpenings === 0 && !synthesis.ok) {
+        this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+        this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
+        return;
+      }
+
+      const hinted = this.attentionHintByJobId.get(jobId) || null;
+      const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
+      this.setJobStatus(jobId, provisionalStatus, { finishedAt, exitCode: 0 });
+      this.kickoffAttentionClassification(jobId, finishedAt, 0, hinted, (finalStatus) => {
+        this.finalizeIntegrationRun(jobId, finalStatus, finishedAt, 0);
+      });
+    } catch (err: any) {
+      const finishedAt = new Date().toISOString();
+      this.appendSystemLog(job, "stderr", `WAR ROOM crashed: ${String(err && err.message ? err.message : err)}`);
+      this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
+      this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
+    }
   }
 
   private pickTitleSummarizer(settings: any, fallback: { agent: "codex" | "claude" | "gemini"; model: string }) {
@@ -2567,6 +3100,7 @@ export class JobsManager {
     const geminiSettings = this.getGeminiSettingsFrom(settings);
     const projects = this.store.listProjects();
     const agent = this.normalizeAgentKey(params && params.agent ? params.agent : "");
+    const mode = this.normalizeJobRunMode(params && typeof params === "object" ? (params as any).mode : "");
 
     const prompt = (params && params.prompt ? String(params.prompt) : "").trim();
     if (!prompt) return { ok: false, error: "Prompt is empty" };
@@ -2638,12 +3172,15 @@ export class JobsManager {
 
     await this.ensureMcpServerStarted("job-start");
 
+    const warRoomParticipants = mode === "war_room" ? this.warRoomParticipants(agent) : [];
+    const needsClaudeMcp = mode === "war_room" ? warRoomParticipants.includes("claude") : agent === "claude";
+
     // Claude reads MCP from .mcp.json; Codex gets MCP via inline runner config.
-    if (agent === "claude" && this.mcpServerManager && this.mcpServerManager.port > 0) {
+    if (needsClaudeMcp && this.mcpServerManager && this.mcpServerManager.port > 0) {
       try {
         const mcpFiles = writeMcpConfig({
           projectPath: run.projectPath || project.path,
-          agent,
+          agent: "claude",
           port: this.mcpServerManager.port,
           token: this.mcpServerManager.token
         });
@@ -2668,7 +3205,7 @@ export class JobsManager {
     }
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
 
-    const threadId = agent === "claude" ? randomUUID() : "";
+    const threadId = mode === "single" && agent === "claude" ? randomUUID() : "";
 
     const createdAt = new Date().toISOString();
     const fallbackTitle = truncateText(promptSummary(prompt), 120);
@@ -2677,6 +3214,7 @@ export class JobsManager {
       id: jobId,
       title: fallbackTitle,
       titleLlm: "",
+      mode,
       status: "running",
       box: "board",
       archivedAt: "",
@@ -2726,6 +3264,21 @@ export class JobsManager {
 
     // Title summaries are best-effort and should not block job start.
     this.kickoffTitleSummary(jobId, prompt, { settings, codexSettings, claudeSettings, geminiSettings });
+
+    if (mode === "war_room") {
+      void this.runWarRoomJob({
+        jobId,
+        preferredAgent: agent,
+        modelOverride,
+        taskPrompt: enrichedPrompt,
+        runProjectPath: run.projectPath || project.path,
+        codexSettings,
+        claudeSettings,
+        geminiSettings,
+        images
+      });
+      return { ok: true, jobId };
+    }
 
     let child: ChildProcess;
     try {
@@ -2791,6 +3344,12 @@ export class JobsManager {
     const jobId = params && params.jobId ? String(params.jobId) : "";
     const job = this.jobs.get(jobId);
     if (!job) return { ok: false, error: "Unknown job" };
+    if (this.normalizeJobRunMode((job as any).mode) === "war_room") {
+      return {
+        ok: false,
+        error: "War Room sessions do not support follow-up prompts yet. Start a new War Room run from the composer."
+      };
+    }
     const isRunning = this.procs.has(jobId) || job.status === "running";
     const missingCheckoutAction = this.normalizeMissingCheckoutAction(params && (params as any).missingCheckoutAction);
 
