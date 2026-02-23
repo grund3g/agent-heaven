@@ -1124,7 +1124,7 @@ export class JobsManager {
           if (!ev || ev.kind !== "gemini") return;
           const data = ev.data || {};
           const type = this.geminiEventType(data);
-          if (type === "content" || type === "message") {
+          if (type === "content" || (type === "message" && this.geminiShouldUseMessageText(data))) {
             const chunks = this.geminiDataToTextChunks(data);
             if (chunks.length > 0) partial += chunks.join("");
             return;
@@ -1137,6 +1137,7 @@ export class JobsManager {
             return;
           }
           if (!out.trim()) {
+            if (type === "message" && !this.geminiShouldUseMessageText(data)) return;
             const chunks = this.geminiDataToTextChunks(data);
             if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
           }
@@ -1612,6 +1613,22 @@ export class JobsManager {
       .toLowerCase();
   }
 
+  private geminiEventRole(data: any): string {
+    const d = data && typeof data === "object" ? data : {};
+    const raw = typeof d.role === "string" ? d.role : "";
+    return String(raw || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  private geminiShouldUseMessageText(data: any): boolean {
+    if (this.geminiEventType(data) !== "message") return true;
+    const role = this.geminiEventRole(data);
+    // Gemini can emit user echo events in stream-json; do not surface those as assistant output.
+    if (!role) return true;
+    return role === "assistant" || role === "model";
+  }
+
   private geminiDataToTextChunks(data: any): string[] {
     const d = data && typeof data === "object" ? data : {};
     const out: string[] = [];
@@ -1812,7 +1829,7 @@ export class JobsManager {
         }
       }
 
-      if (type === "content" || type === "message") {
+      if (type === "content" || (type === "message" && this.geminiShouldUseMessageText(data))) {
         const chunks = this.geminiDataToTextChunks(data);
         if (chunks.length > 0) {
           const cur = this.geminiStreamingTextByJobId.get(jobId) || "";
@@ -2157,7 +2174,7 @@ export class JobsManager {
           if (!ev || ev.kind !== "gemini") return;
           const data = ev.data || {};
           const type = this.geminiEventType(data);
-          if (type === "content" || type === "message") {
+          if (type === "content" || (type === "message" && this.geminiShouldUseMessageText(data))) {
             const chunks = this.geminiDataToTextChunks(data);
             if (chunks.length > 0) partial += chunks.join("");
             return;
@@ -2170,6 +2187,7 @@ export class JobsManager {
             return;
           }
           if (!out.trim()) {
+            if (type === "message" && !this.geminiShouldUseMessageText(data)) return;
             const chunks = this.geminiDataToTextChunks(data);
             if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
           }

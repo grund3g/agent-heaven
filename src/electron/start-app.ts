@@ -921,6 +921,22 @@ function geminiEventType(data: any): string {
     .toLowerCase();
 }
 
+function geminiEventRole(data: any): string {
+  const d = data && typeof data === "object" ? data : {};
+  const raw = typeof d.role === "string" ? d.role : "";
+  return String(raw || "")
+    .trim()
+    .toLowerCase();
+}
+
+function geminiShouldUseMessageText(data: any): boolean {
+  if (geminiEventType(data) !== "message") return true;
+  const role = geminiEventRole(data);
+  // Gemini streams user echo events for role=user; do not treat them as assistant output.
+  if (!role) return true;
+  return role === "assistant" || role === "model";
+}
+
 function geminiEventTextChunks(data: any): string[] {
   const d = data && typeof data === "object" ? data : {};
   const out: string[] = [];
@@ -997,7 +1013,7 @@ function runGeminiUiPrompt(opts: {
         const data = ev.data || {};
         const t = geminiEventType(data);
 
-        if (t === "content" || t === "message") {
+        if (t === "content" || (t === "message" && geminiShouldUseMessageText(data))) {
           const chunks = geminiEventTextChunks(data);
           if (chunks.length > 0) partial += chunks.join("");
           return;
@@ -1012,6 +1028,7 @@ function runGeminiUiPrompt(opts: {
         }
 
         if (!out.trim()) {
+          if (t === "message" && !geminiShouldUseMessageText(data)) return;
           const chunks = geminiEventTextChunks(data);
           if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
         }
@@ -1272,7 +1289,7 @@ async function runUiAgentExecPrompt(opts: {
             if (!ev || ev.kind !== "gemini") return;
             const data = ev.data || {};
             const t = geminiEventType(data);
-            if (t === "content" || t === "message") {
+            if (t === "content" || (t === "message" && geminiShouldUseMessageText(data))) {
               const chunks = geminiEventTextChunks(data);
               if (chunks.length > 0) geminiPartial += chunks.join("");
               return;
@@ -1285,6 +1302,7 @@ async function runUiAgentExecPrompt(opts: {
               return;
             }
             if (!out.trim()) {
+              if (t === "message" && !geminiShouldUseMessageText(data)) return;
               const chunks = geminiEventTextChunks(data);
               if (chunks.length > 0) out += (out ? "\n" : "") + chunks.join("\n");
             }

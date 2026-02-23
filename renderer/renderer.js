@@ -3495,7 +3495,12 @@ function geminiEntryToLiveChunks(entry) {
   const type = String(d.type || d.event || "")
     .trim()
     .toLowerCase();
+  const role = String(d.role || "")
+    .trim()
+    .toLowerCase();
   const chunks = [];
+
+  if (type === "message" && role === "user") return chunks;
 
   const pushText = (kind, value) => {
     const raw = stripAnsi(normalizeNewlines(String(value || "")));
@@ -8960,6 +8965,11 @@ function geminiEventToLogLines(data) {
   const type = String(d.type || d.event || "gemini")
     .trim()
     .toLowerCase();
+  const role = String(d.role || "")
+    .trim()
+    .toLowerCase();
+
+  if (type === "message" && role === "user") return [];
 
   if (type === "init") {
     const bits = [];

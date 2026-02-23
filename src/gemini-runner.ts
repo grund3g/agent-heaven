@@ -177,6 +177,25 @@ function shebangUsesNode(line: string): boolean {
   return /\bnode(?:\.exe)?\b/i.test(s);
 }
 
+function isElectronRuntime() {
+  return !!((process as any).versions && (process as any).versions.electron);
+}
+
+function resolveNodeNearScript(scriptPath: string, envPath: string): string {
+  const p = String(scriptPath || "").trim();
+  if (!p) return "";
+
+  const dir = path.dirname(p);
+  const names = process.platform === "win32" ? ["node.exe", "node.cmd", "node"] : ["node"];
+  for (const name of names) {
+    const candidate = path.join(dir, name);
+    if (fileExists(candidate)) return candidate;
+  }
+
+  const nodeOnPath = resolveOnPath("node", envPath);
+  return String(nodeOnPath || "").trim();
+}
+
 function buildGeminiLaunch(
   geminiPath: string,
   args: string[],
@@ -187,10 +206,23 @@ function buildGeminiLaunch(
   const inspectPath = resolveForInspection(geminiPath, cwd, envPath);
   const shebang = readShebangLine(inspectPath);
 
-  // Some global npm installs resolve `gemini` via `#!/usr/bin/env node`.
-  // In GUI apps this can pick an older PATH node (e.g. Node 18) that can't run newer Gemini deps.
-  // Running the script with our current runtime avoids that mismatch.
+  // Some installs resolve `gemini` via `#!/usr/bin/env node`.
+  // In Electron, re-launching via process.execPath (Electron in run-as-node mode)
+  // can make Gemini CLI think a positional prompt was passed.
   if (inspectPath && shebangUsesNode(shebang)) {
+    if (isElectronRuntime()) {
+      const nodePath = resolveNodeNearScript(inspectPath, envPath);
+      if (nodePath) {
+        return {
+          command: nodePath,
+          args: [inspectPath, ...args],
+          env
+        };
+      }
+      return { command: geminiPath, args, env };
+    }
+
+    // Non-Electron runtime: keep using the current runtime to avoid PATH node mismatches.
     return {
       command: process.execPath,
       args: [inspectPath, ...args],
