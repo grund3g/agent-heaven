@@ -97,6 +97,117 @@ describe("mcp-server/tools-linear", () => {
     expect(issue.identifier).toBe("DEV-1106");
   });
 
+  it("lists Linear labels for a team resolved via teamKey", async () => {
+    linearGraphqlMock.mockResolvedValueOnce({
+      teams: { nodes: [{ id: "team-1", key: "ORG", name: "Org Team" }] }
+    });
+    linearGraphqlMock.mockResolvedValueOnce({
+      team: {
+        id: "team-1",
+        key: "ORG",
+        name: "Org Team",
+        labels: {
+          nodes: [
+            { id: "label-2", name: "Feature", color: "#1f9cf0", description: "", isGroup: false },
+            { id: "label-1", name: "Bug", color: "#f24f4f", description: "Regression", isGroup: false }
+          ]
+        }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const listLabels = handlers.get("linear_list_labels");
+    expect(listLabels).toBeTypeOf("function");
+
+    const res = await listLabels!({
+      teamKey: "org",
+      query: "bug",
+      limit: 10
+    });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(2);
+    const [, , teamQuery, teamVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(teamQuery || "")).toContain("teams(first:");
+    expect(teamVariables).toEqual({ first: 250 });
+
+    const [, , labelsQuery, labelsVariables] = linearGraphqlMock.mock.calls[1] || [];
+    expect(String(labelsQuery || "")).toContain("team(id: $teamId)");
+    expect(String(labelsQuery || "")).toContain("labels(first:");
+    expect(labelsVariables).toEqual({ teamId: "team-1", first: 250 });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const labels = JSON.parse(text);
+    expect(labels).toEqual([
+      {
+        id: "label-1",
+        name: "Bug",
+        color: "#f24f4f",
+        description: "Regression",
+        isGroup: false,
+        team: { id: "team-1", key: "ORG", name: "Org Team" }
+      }
+    ]);
+  });
+
+  it("lists workspace labels without team scope", async () => {
+    linearGraphqlMock.mockResolvedValue({
+      issueLabels: {
+        nodes: [
+          {
+            id: "label-1",
+            name: "Backend",
+            color: "#475569",
+            description: "",
+            isGroup: false,
+            team: { id: "team-1", key: "ORG", name: "Org Team" }
+          },
+          {
+            id: "label-2",
+            name: "Frontend",
+            color: "#0ea5e9",
+            description: "UI work",
+            isGroup: false,
+            team: { id: "team-2", key: "WEB", name: "Web Team" }
+          }
+        ]
+      }
+    });
+
+    const handlers = buildHandlers();
+    const listLabels = handlers.get("linear_list_labels");
+    expect(listLabels).toBeTypeOf("function");
+
+    const res = await listLabels!({ limit: 5 });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(1);
+    const [, , labelsQuery, labelsVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(labelsQuery || "")).toContain("issueLabels(first:");
+    expect(labelsVariables).toEqual({ first: 250 });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const labels = JSON.parse(text);
+    expect(labels).toEqual([
+      {
+        id: "label-1",
+        name: "Backend",
+        color: "#475569",
+        description: null,
+        isGroup: false,
+        team: { id: "team-1", key: "ORG", name: "Org Team" }
+      },
+      {
+        id: "label-2",
+        name: "Frontend",
+        color: "#0ea5e9",
+        description: "UI work",
+        isGroup: false,
+        team: { id: "team-2", key: "WEB", name: "Web Team" }
+      }
+    ]);
+  });
+
   it("creates a Linear issue via teamKey lookup", async () => {
     linearGraphqlMock.mockResolvedValueOnce({
       teams: { nodes: [{ id: "team-1", key: "ORG", name: "Org Team" }] }

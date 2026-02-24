@@ -91,6 +91,71 @@ async function resolveLinearTeamId(
   return { ok: true, teamId: resolvedTeamId };
 }
 
+function normalizeLinearLabels(
+  nodes: unknown,
+  opts?: {
+    fallbackTeam?: { id?: string; key?: string; name?: string } | null;
+    query?: string;
+    limit?: number;
+  }
+): Array<{
+  id: string;
+  name: string;
+  color: string | null;
+  description: string | null;
+  isGroup: boolean;
+  team: { id: string | null; key: string | null; name: string | null } | null;
+}> {
+  const fallbackTeam = opts && opts.fallbackTeam ? opts.fallbackTeam : null;
+  const rawQuery = String((opts && opts.query) || "").trim().toLowerCase();
+  const limit = Math.min(Math.max(Number((opts && opts.limit) || 100) || 100, 1), 250);
+
+  const list = Array.isArray(nodes) ? nodes : [];
+  const seen = new Set<string>();
+  const out: Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    description: string | null;
+    isGroup: boolean;
+    team: { id: string | null; key: string | null; name: string | null } | null;
+  }> = [];
+
+  for (const node of list) {
+    const id = String(node && (node as any).id ? (node as any).id : "").trim();
+    const name = String(node && (node as any).name ? (node as any).name : "").trim();
+    if (!id || !name || seen.has(id)) continue;
+    seen.add(id);
+
+    if (rawQuery && !name.toLowerCase().includes(rawQuery)) continue;
+
+    const color = String(node && (node as any).color ? (node as any).color : "").trim() || null;
+    const description = String(node && (node as any).description ? (node as any).description : "").trim() || null;
+    const labelTeam =
+      node && (node as any).team && typeof (node as any).team === "object"
+        ? ((node as any).team as any)
+        : fallbackTeam && typeof fallbackTeam === "object"
+          ? fallbackTeam
+          : null;
+    const teamId = String(labelTeam && (labelTeam as any).id ? (labelTeam as any).id : "").trim() || null;
+    const teamKey = String(labelTeam && (labelTeam as any).key ? (labelTeam as any).key : "").trim() || null;
+    const teamName = String(labelTeam && (labelTeam as any).name ? (labelTeam as any).name : "").trim() || null;
+
+    out.push({
+      id,
+      name,
+      color,
+      description,
+      isGroup: !!(node && (node as any).isGroup),
+      team: teamId || teamKey || teamName ? { id: teamId, key: teamKey, name: teamName } : null
+    });
+
+    if (out.length >= limit) break;
+  }
+
+  return out.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
+}
+
 export function registerLinearTools(server: McpServer, getSettings: () => any) {
   server.tool(
     "linear_get_issue",
@@ -175,6 +240,130 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
         if (nodes.length === 0) return { content: [{ type: "text" as const, text: `No issues found for query "${query}".` }] };
 
         return { content: [{ type: "text" as const, text: JSON.stringify(nodes, null, 2) }] };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "linear_list_labels",
+    "List Linear issue labels. Optionally scope by team and filter by name.",
+    {
+      teamId: z.string().optional().describe("Linear team ID (UUID). Use this or teamKey to scope labels to one team."),
+      teamKey: z.string().optional().describe("Linear team key like ENG. Used when teamId is not provided."),
+      query: z.string().optional().describe("Optional case-insensitive text filter for label names."),
+      limit: z.number().int().min(1).max(250).optional().describe("Max results (default 100)")
+    },
+    async ({ teamId, teamKey, query, limit }) => {
+      const cfg = resolveLinearConfig(getSettings);
+      if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
+
+      try {
+        const normalizedLimit = Math.min(Math.max(Number(limit || 100), 1), 250);
+        const hasTeamScope = !!String(teamId || "").trim() || !!String(teamKey || "").trim();
+
+        if (hasTeamScope) {
+          const resolvedTeam = await resolveLinearTeamId(cfg, teamId, teamKey);
+          if (!resolvedTeam.ok) {
+            const errorText = (resolvedTeam as { error: string }).error;
+            return { content: [{ type: "text" as const, text: errorText }], isError: true };
+          }
+
+          const data = await linearGraphql(
+            cfg.apiBaseUrl,
+            cfg.token,
+            `query ($teamId: String!, $first: Int!) {
+              team(id: $teamId) {
+                id
+                key
+                name
+                labels(first: $first, includeArchived: false) {
+                  nodes {
+                    id
+                    name
+                    color
+                    description
+                    isGroup
+                  }
+                }
+              }
+            }`,
+            { teamId: resolvedTeam.teamId, first: 250 }
+          );
+
+          const team = data && (data as any).team && typeof (data as any).team === "object" ? ((data as any).team as any) : null;
+          if (!team) {
+            return { content: [{ type: "text" as const, text: `No Linear team found for ID "${resolvedTeam.teamId}".` }], isError: true };
+          }
+
+          const labels = normalizeLinearLabels(team && (team as any).labels && (team as any).labels.nodes, {
+            fallbackTeam: {
+              id: String((team as any).id || "").trim(),
+              key: String((team as any).key || "").trim(),
+              name: String((team as any).name || "").trim()
+            },
+            query: String(query || ""),
+            limit: normalizedLimit
+          });
+
+          if (labels.length === 0) {
+            const teamRef = String((team as any).key || (team as any).name || resolvedTeam.teamId || "").trim();
+            const filterText = String(query || "").trim();
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: filterText
+                    ? `No labels found for team "${teamRef}" matching "${filterText}".`
+                    : `No labels found for team "${teamRef}".`
+                }
+              ]
+            };
+          }
+
+          return { content: [{ type: "text" as const, text: JSON.stringify(labels, null, 2) }] };
+        }
+
+        const data = await linearGraphql(
+          cfg.apiBaseUrl,
+          cfg.token,
+          `query ($first: Int!) {
+            issueLabels(first: $first, includeArchived: false) {
+              nodes {
+                id
+                name
+                color
+                description
+                isGroup
+                team {
+                  id
+                  key
+                  name
+                }
+              }
+            }
+          }`,
+          { first: 250 }
+        );
+
+        const labels = normalizeLinearLabels(data && (data as any).issueLabels && (data as any).issueLabels.nodes, {
+          query: String(query || ""),
+          limit: normalizedLimit
+        });
+        if (labels.length === 0) {
+          const filterText = String(query || "").trim();
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: filterText ? `No labels found matching "${filterText}".` : "No labels found."
+              }
+            ]
+          };
+        }
+
+        return { content: [{ type: "text" as const, text: JSON.stringify(labels, null, 2) }] };
       } catch (err: any) {
         return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
       }
