@@ -97,6 +97,91 @@ describe("mcp-server/tools-linear", () => {
     expect(issue.identifier).toBe("DEV-1106");
   });
 
+  it("supports linear_read_issue as alias for get_issue", async () => {
+    linearGraphqlMock.mockResolvedValue({
+      searchIssues: {
+        nodes: [{ id: "issue-1", identifier: "SEC-51", title: "Scope review", url: "https://linear.app/x/issue/SEC-51" }]
+      }
+    });
+
+    const handlers = buildHandlers();
+    const readIssue = handlers.get("linear_read_issue");
+    expect(readIssue).toBeTypeOf("function");
+
+    const res = await readIssue!({ identifier: "sec-51" });
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(1);
+    const [, , query, variables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(query || "")).toContain("searchIssues(term:");
+    expect(variables).toEqual({ term: "SEC-51", first: 25 });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const issue = JSON.parse(text);
+    expect(issue.identifier).toBe("SEC-51");
+  });
+
+  it("lists Linear issues for a team resolved via teamKey", async () => {
+    linearGraphqlMock.mockResolvedValueOnce({
+      teams: { nodes: [{ id: "team-1", key: "SEC", name: "Security" }] }
+    });
+    linearGraphqlMock.mockResolvedValueOnce({
+      team: {
+        id: "team-1",
+        key: "SEC",
+        name: "Security",
+        issues: {
+          nodes: [
+            {
+              id: "issue-1",
+              identifier: "SEC-51",
+              title: "Scope review",
+              url: "https://linear.app/signteq/issue/SEC-51",
+              state: { name: "Todo" },
+              assignee: { name: "Simon" },
+              priority: 2,
+              priorityLabel: "High",
+              updatedAt: "2026-02-24T19:14:10.272Z"
+            }
+          ]
+        }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const listIssues = handlers.get("linear_list_issues");
+    expect(listIssues).toBeTypeOf("function");
+
+    const res = await listIssues!({ teamKey: "sec", limit: 5 });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(2);
+    const [, , teamQuery, teamVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(teamQuery || "")).toContain("teams(first:");
+    expect(teamVariables).toEqual({ first: 250 });
+
+    const [, , listQuery, listVariables] = linearGraphqlMock.mock.calls[1] || [];
+    expect(String(listQuery || "")).toContain("team(id: $teamId)");
+    expect(String(listQuery || "")).toContain("issues(first: $first)");
+    expect(listVariables).toEqual({ teamId: "team-1", first: 5 });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const issues = JSON.parse(text);
+    expect(issues).toEqual([
+      {
+        id: "issue-1",
+        identifier: "SEC-51",
+        title: "Scope review",
+        url: "https://linear.app/signteq/issue/SEC-51",
+        state: { name: "Todo" },
+        assignee: { name: "Simon" },
+        priority: 2,
+        priorityLabel: "High",
+        updatedAt: "2026-02-24T19:14:10.272Z",
+        team: { id: "team-1", key: "SEC", name: "Security" }
+      }
+    ]);
+  });
+
   it("lists Linear labels for a team resolved via teamKey", async () => {
     linearGraphqlMock.mockResolvedValueOnce({
       teams: { nodes: [{ id: "team-1", key: "ORG", name: "Org Team" }] }
@@ -307,6 +392,142 @@ describe("mcp-server/tools-linear", () => {
     });
 
     expect(res && res.isError).not.toBe(true);
+  });
+
+  it("updates a Linear issue by identifier", async () => {
+    linearGraphqlMock.mockResolvedValueOnce({
+      searchIssues: {
+        nodes: [{ id: "issue-51", identifier: "SEC-51", title: "Before update" }]
+      }
+    });
+    linearGraphqlMock.mockResolvedValueOnce({
+      issueUpdate: {
+        success: true,
+        issue: {
+          id: "issue-51",
+          identifier: "SEC-51",
+          title: "After update",
+          labels: { nodes: [{ id: "label-1", name: "Non-Conformity" }] }
+        }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const updateIssue = handlers.get("linear_update_issue");
+    expect(updateIssue).toBeTypeOf("function");
+
+    const res = await updateIssue!({
+      identifier: "sec-51",
+      title: "After update",
+      priority: 2,
+      labelIds: ["label-1", "label-1", " "]
+    });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(2);
+    const [, , lookupQuery, lookupVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(lookupQuery || "")).toContain("searchIssues(term:");
+    expect(lookupVariables).toEqual({ term: "SEC-51", first: 25 });
+
+    const [, , updateQuery, updateVariables] = linearGraphqlMock.mock.calls[1] || [];
+    expect(String(updateQuery || "")).toContain("issueUpdate(id: $id, input: $input)");
+    expect(updateVariables).toEqual({
+      id: "issue-51",
+      input: {
+        title: "After update",
+        priority: 2,
+        labelIds: ["label-1"]
+      }
+    });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const payload = JSON.parse(text);
+    expect(payload.success).toBe(true);
+    expect(payload.issue.identifier).toBe("SEC-51");
+  });
+
+  it("sets labels on a Linear issue via issueId", async () => {
+    linearGraphqlMock.mockResolvedValue({
+      issueUpdate: {
+        success: true,
+        issue: { id: "issue-70", identifier: "SEC-70", labels: { nodes: [{ id: "label-2", name: "NC: Minor" }] } }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const setLabels = handlers.get("linear_set_labels");
+    expect(setLabels).toBeTypeOf("function");
+
+    const res = await setLabels!({
+      issueId: "issue-70",
+      labelIds: ["label-2", "label-2", " "]
+    });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(1);
+    const [, , updateQuery, updateVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(updateQuery || "")).toContain("issueUpdate(id: $id, input: $input)");
+    expect(updateVariables).toEqual({
+      id: "issue-70",
+      input: { labelIds: ["label-2"] }
+    });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const payload = JSON.parse(text);
+    expect(payload.success).toBe(true);
+    expect(payload.labelIds).toEqual(["label-2"]);
+  });
+
+  it("adds a label while preserving existing labels", async () => {
+    linearGraphqlMock.mockResolvedValueOnce({
+      searchIssues: {
+        nodes: [{ id: "issue-70", identifier: "SEC-70", title: "Label target" }]
+      }
+    });
+    linearGraphqlMock.mockResolvedValueOnce({
+      issue: {
+        id: "issue-70",
+        identifier: "SEC-70",
+        labels: { nodes: [{ id: "label-1" }] }
+      }
+    });
+    linearGraphqlMock.mockResolvedValueOnce({
+      issueUpdate: {
+        success: true,
+        issue: { id: "issue-70", identifier: "SEC-70", labels: { nodes: [{ id: "label-1" }, { id: "label-2" }] } }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const addLabel = handlers.get("linear_add_label");
+    expect(addLabel).toBeTypeOf("function");
+
+    const res = await addLabel!({
+      identifier: "SEC-70",
+      labelId: "label-2"
+    });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(3);
+    const [, , lookupQuery, lookupVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(lookupQuery || "")).toContain("searchIssues(term:");
+    expect(lookupVariables).toEqual({ term: "SEC-70", first: 25 });
+
+    const [, , readQuery, readVariables] = linearGraphqlMock.mock.calls[1] || [];
+    expect(String(readQuery || "")).toContain("issue(id: $id)");
+    expect(readVariables).toEqual({ id: "issue-70" });
+
+    const [, , updateQuery, updateVariables] = linearGraphqlMock.mock.calls[2] || [];
+    expect(String(updateQuery || "")).toContain("issueUpdate(id: $id, input: $input)");
+    expect(updateVariables).toEqual({
+      id: "issue-70",
+      input: { labelIds: ["label-1", "label-2"] }
+    });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const payload = JSON.parse(text);
+    expect(payload.success).toBe(true);
+    expect(payload.labelIds).toEqual(["label-1", "label-2"]);
   });
 
   it("returns error when teamId and teamKey are both missing for issue creation", async () => {
