@@ -97,6 +97,119 @@ describe("mcp-server/tools-linear", () => {
     expect(issue.identifier).toBe("DEV-1106");
   });
 
+  it("creates a Linear issue via teamKey lookup", async () => {
+    linearGraphqlMock.mockResolvedValueOnce({
+      teams: { nodes: [{ id: "team-1", key: "ORG", name: "Org Team" }] }
+    });
+    linearGraphqlMock.mockResolvedValueOnce({
+      issueCreate: {
+        success: true,
+        issue: {
+          id: "issue-1",
+          identifier: "ORG-23",
+          title: "Research & User Testing",
+          description: "Details",
+          url: "https://linear.app/signteq/issue/ORG-23",
+          state: { id: "state-1", name: "Backlog" },
+          team: { id: "team-1", key: "ORG", name: "Org Team" },
+          assignee: null,
+          priority: 0,
+          priorityLabel: "No priority",
+          createdAt: "2024-01-01",
+          updatedAt: "2024-01-01"
+        }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const createIssue = handlers.get("linear_create_issue");
+    expect(createIssue).toBeTypeOf("function");
+
+    const res = await createIssue!({
+      teamKey: "org",
+      title: "Research & User Testing",
+      description: "Details"
+    });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(2);
+    const [, , teamQuery, teamVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(teamQuery || "")).toContain("teams(first:");
+    expect(teamVariables).toEqual({ first: 250 });
+
+    const [, , createQuery, createVariables] = linearGraphqlMock.mock.calls[1] || [];
+    expect(String(createQuery || "")).toContain("issueCreate(input:");
+    expect(createVariables).toEqual({
+      input: {
+        teamId: "team-1",
+        title: "Research & User Testing",
+        description: "Details"
+      }
+    });
+
+    expect(res && res.isError).not.toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    const payload = JSON.parse(text);
+    expect(payload.success).toBe(true);
+    expect(payload.issue.identifier).toBe("ORG-23");
+  });
+
+  it("creates a Linear issue directly via teamId", async () => {
+    linearGraphqlMock.mockResolvedValue({
+      issueCreate: {
+        success: true,
+        issue: {
+          id: "issue-2",
+          identifier: "ORG-24",
+          title: "Direct team id path",
+          description: "",
+          url: "https://linear.app/signteq/issue/ORG-24",
+          state: { id: "state-1", name: "Backlog" },
+          team: { id: "team-1", key: "ORG", name: "Org Team" },
+          assignee: null,
+          priority: 0,
+          priorityLabel: "No priority",
+          createdAt: "2024-01-01",
+          updatedAt: "2024-01-01"
+        }
+      }
+    });
+
+    const handlers = buildHandlers();
+    const createIssue = handlers.get("linear_create_issue");
+    expect(createIssue).toBeTypeOf("function");
+
+    const res = await createIssue!({
+      teamId: "team-1",
+      title: "Direct team id path",
+      labelIds: ["label-1", "label-1", "label-2", "  "]
+    });
+
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(1);
+    const [, , createQuery, createVariables] = linearGraphqlMock.mock.calls[0] || [];
+    expect(String(createQuery || "")).toContain("issueCreate(input:");
+    expect(createVariables).toEqual({
+      input: {
+        teamId: "team-1",
+        title: "Direct team id path",
+        labelIds: ["label-1", "label-2"]
+      }
+    });
+
+    expect(res && res.isError).not.toBe(true);
+  });
+
+  it("returns error when teamId and teamKey are both missing for issue creation", async () => {
+    const handlers = buildHandlers();
+    const createIssue = handlers.get("linear_create_issue");
+    expect(createIssue).toBeTypeOf("function");
+
+    const res = await createIssue!({ title: "Missing team" });
+    expect(linearGraphqlMock).toHaveBeenCalledTimes(0);
+    expect(res && res.isError).toBe(true);
+    const text = String(res && res.content && res.content[0] && res.content[0].text ? res.content[0].text : "");
+    expect(text).toContain("Missing team information");
+  });
+
   it("returns not found when only partial matches exist", async () => {
     linearGraphqlMock.mockResolvedValue({
       searchIssues: {
