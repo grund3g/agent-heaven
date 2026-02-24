@@ -156,6 +156,108 @@ function normalizeLinearLabels(
   return out.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }));
 }
 
+function normalizeLinearIdArray(values: unknown, max = 30): string[] {
+  return Array.from(new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean))).slice(
+    0,
+    Math.max(1, max)
+  );
+}
+
+async function findLinearIssueByIdentifier(
+  cfg: { apiBaseUrl: string; token: string },
+  identifier: unknown
+): Promise<{ ok: true; issue: any } | { ok: false; error: string }> {
+  const normalizedIdentifier = String(identifier || "").trim().toUpperCase();
+  if (!normalizedIdentifier) {
+    return { ok: false, error: "Missing issue identifier." };
+  }
+
+  const data = await linearGraphql(
+    cfg.apiBaseUrl,
+    cfg.token,
+    `query ($term: String!, $first: Int!) {
+      searchIssues(term: $term, first: $first) {
+        nodes {
+          id identifier title description url
+          state { id name }
+          team { id key name }
+          assignee { id name email }
+          priority priorityLabel
+          labels { nodes { id name } }
+          createdAt updatedAt
+        }
+      }
+    }`,
+    { term: normalizedIdentifier, first: 25 }
+  );
+
+  const nodes =
+    data && (data as any).searchIssues && Array.isArray((data as any).searchIssues.nodes)
+      ? ((data as any).searchIssues.nodes as any[])
+      : [];
+  const issue =
+    nodes.find((node) => String(node && (node as any).identifier ? (node as any).identifier : "").trim().toUpperCase() === normalizedIdentifier) ||
+    null;
+  if (!issue) {
+    return { ok: false, error: `No issue found for identifier "${identifier}".` };
+  }
+
+  return { ok: true, issue };
+}
+
+async function resolveLinearIssueReference(
+  cfg: { apiBaseUrl: string; token: string },
+  issueId: unknown,
+  identifier: unknown
+): Promise<{ ok: true; issueId: string; identifier: string | null } | { ok: false; error: string }> {
+  const normalizedIssueId = String(issueId || "").trim();
+  if (normalizedIssueId) {
+    return { ok: true, issueId: normalizedIssueId, identifier: null };
+  }
+
+  const resolvedByIdentifier = await findLinearIssueByIdentifier(cfg, identifier);
+  if (!resolvedByIdentifier.ok) {
+    const errorText = (resolvedByIdentifier as { ok: false; error: string }).error;
+    return { ok: false, error: errorText };
+  }
+
+  const resolvedIssueId = String((resolvedByIdentifier.issue as any).id || "").trim();
+  const resolvedIdentifier = String((resolvedByIdentifier.issue as any).identifier || "").trim() || null;
+  if (!resolvedIssueId) {
+    return { ok: false, error: `Issue "${identifier}" has no ID in Linear response.` };
+  }
+  return { ok: true, issueId: resolvedIssueId, identifier: resolvedIdentifier };
+}
+
+async function getLinearIssueLabelIds(
+  cfg: { apiBaseUrl: string; token: string },
+  issueId: string
+): Promise<{ ok: true; labelIds: string[]; identifier: string | null } | { ok: false; error: string }> {
+  const data = await linearGraphql(
+    cfg.apiBaseUrl,
+    cfg.token,
+    `query ($id: String!) {
+      issue(id: $id) {
+        id
+        identifier
+        labels { nodes { id } }
+      }
+    }`,
+    { id: issueId }
+  );
+
+  const issue = data && (data as any).issue && typeof (data as any).issue === "object" ? ((data as any).issue as any) : null;
+  if (!issue) {
+    return { ok: false, error: `No issue found for ID "${issueId}".` };
+  }
+
+  return {
+    ok: true,
+    labelIds: normalizeLinearIdArray(issue && (issue as any).labels && (issue as any).labels.nodes ? (issue as any).labels.nodes.map((n: any) => n.id) : []),
+    identifier: String((issue as any).identifier || "").trim() || null
+  };
+}
+
 export function registerLinearTools(server: McpServer, getSettings: () => any) {
   server.tool(
     "linear_get_issue",
@@ -166,41 +268,34 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
       if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
 
       try {
-        const normalizedIdentifier = String(identifier || "").trim().toUpperCase();
-        if (!normalizedIdentifier) {
-          return { content: [{ type: "text" as const, text: "Missing issue identifier." }], isError: true };
+        const resolved = await findLinearIssueByIdentifier(cfg, identifier);
+        if (!resolved.ok) {
+          const errorText = (resolved as { ok: false; error: string }).error;
+          return { content: [{ type: "text" as const, text: errorText }], isError: true };
         }
-
-        const data = await linearGraphql(
-          cfg.apiBaseUrl,
-          cfg.token,
-          `query ($term: String!, $first: Int!) {
-            searchIssues(term: $term, first: $first) {
-              nodes {
-                id identifier title description url
-                state { id name }
-                team { key name }
-                assignee { name email }
-                priority priorityLabel
-                labels { nodes { name } }
-                createdAt updatedAt
-              }
-            }
-          }`,
-          { term: normalizedIdentifier, first: 25 }
-        );
-
-        const nodes =
-          data && (data as any).searchIssues && Array.isArray((data as any).searchIssues.nodes)
-            ? ((data as any).searchIssues.nodes as any[])
-            : [];
-        const issue =
-          nodes.find((node) => String(node && (node as any).identifier ? (node as any).identifier : "").trim().toUpperCase() === normalizedIdentifier) ||
-          null;
-
-        if (!issue) return { content: [{ type: "text" as const, text: `No issue found for identifier "${identifier}".` }], isError: true };
-
+        const issue = resolved.issue;
         return { content: [{ type: "text" as const, text: JSON.stringify(issue, null, 2) }] };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "linear_read_issue",
+    "Alias for linear_get_issue. Fetch a Linear issue by its identifier (e.g. ENG-123).",
+    { identifier: z.string().describe("Issue identifier like ENG-123") },
+    async ({ identifier }) => {
+      const cfg = resolveLinearConfig(getSettings);
+      if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
+
+      try {
+        const resolved = await findLinearIssueByIdentifier(cfg, identifier);
+        if (!resolved.ok) {
+          const errorText = (resolved as { ok: false; error: string }).error;
+          return { content: [{ type: "text" as const, text: errorText }], isError: true };
+        }
+        return { content: [{ type: "text" as const, text: JSON.stringify(resolved.issue, null, 2) }] };
       } catch (err: any) {
         return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
       }
@@ -239,6 +334,104 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
         const nodes = data && (data as any).searchIssues && Array.isArray((data as any).searchIssues.nodes) ? (data as any).searchIssues.nodes : [];
         if (nodes.length === 0) return { content: [{ type: "text" as const, text: `No issues found for query "${query}".` }] };
 
+        return { content: [{ type: "text" as const, text: JSON.stringify(nodes, null, 2) }] };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "linear_list_issues",
+    "List Linear issues. Optionally scope by team.",
+    {
+      teamId: z.string().optional().describe("Linear team ID (UUID). Use this or teamKey to scope issues to one team."),
+      teamKey: z.string().optional().describe("Linear team key like ENG. Used when teamId is not provided."),
+      limit: z.number().int().min(1).max(50).optional().describe("Max results (default 10)")
+    },
+    async ({ teamId, teamKey, limit }) => {
+      const cfg = resolveLinearConfig(getSettings);
+      if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
+
+      try {
+        const normalizedLimit = Math.min(Math.max(Number(limit || 10), 1), 50);
+        const hasTeamScope = !!String(teamId || "").trim() || !!String(teamKey || "").trim();
+
+        if (hasTeamScope) {
+          const resolvedTeam = await resolveLinearTeamId(cfg, teamId, teamKey);
+          if (!resolvedTeam.ok) {
+            const errorText = (resolvedTeam as { error: string }).error;
+            return { content: [{ type: "text" as const, text: errorText }], isError: true };
+          }
+
+          const data = await linearGraphql(
+            cfg.apiBaseUrl,
+            cfg.token,
+            `query ($teamId: String!, $first: Int!) {
+              team(id: $teamId) {
+                id
+                key
+                name
+                issues(first: $first) {
+                  nodes {
+                    id
+                    identifier
+                    title
+                    url
+                    state { name }
+                    assignee { name }
+                    priority
+                    priorityLabel
+                    updatedAt
+                  }
+                }
+              }
+            }`,
+            { teamId: resolvedTeam.teamId, first: normalizedLimit }
+          );
+
+          const team = data && (data as any).team && typeof (data as any).team === "object" ? ((data as any).team as any) : null;
+          const nodes = team && (team as any).issues && Array.isArray((team as any).issues.nodes) ? (team as any).issues.nodes : [];
+          if (nodes.length === 0) {
+            const teamRef = String(team && ((team as any).key || (team as any).name) ? (team as any).key || (team as any).name : resolvedTeam.teamId);
+            return { content: [{ type: "text" as const, text: `No issues found for team "${teamRef}".` }] };
+          }
+
+          const enriched = nodes.map((node: any) => ({
+            ...node,
+            team: {
+              id: String(team && (team as any).id ? (team as any).id : "").trim() || null,
+              key: String(team && (team as any).key ? (team as any).key : "").trim() || null,
+              name: String(team && (team as any).name ? (team as any).name : "").trim() || null
+            }
+          }));
+          return { content: [{ type: "text" as const, text: JSON.stringify(enriched, null, 2) }] };
+        }
+
+        const data = await linearGraphql(
+          cfg.apiBaseUrl,
+          cfg.token,
+          `query ($first: Int!) {
+            issues(first: $first) {
+              nodes {
+                id
+                identifier
+                title
+                url
+                state { name }
+                team { key name }
+                assignee { name }
+                priority
+                priorityLabel
+                updatedAt
+              }
+            }
+          }`,
+          { first: normalizedLimit }
+        );
+
+        const nodes = data && (data as any).issues && Array.isArray((data as any).issues.nodes) ? (data as any).issues.nodes : [];
+        if (nodes.length === 0) return { content: [{ type: "text" as const, text: "No issues found." }] };
         return { content: [{ type: "text" as const, text: JSON.stringify(nodes, null, 2) }] };
       } catch (err: any) {
         return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
@@ -492,6 +685,249 @@ export function registerLinearTools(server: McpServer, getSettings: () => any) {
         );
 
         return { content: [{ type: "text" as const, text: `Comment posted to issue ${issueId}.` }] };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "linear_update_issue",
+    "Update a Linear issue. Provide either issueId (UUID) or identifier (e.g. ENG-123).",
+    {
+      issueId: z.string().optional().describe("Linear issue ID (UUID). Prefer this when known."),
+      identifier: z.string().optional().describe("Issue identifier like ENG-123 (used when issueId is omitted)."),
+      title: z.string().optional().describe("Issue title"),
+      description: z.string().optional().describe("Issue description in markdown; pass empty string to clear"),
+      priority: z.number().int().min(0).max(4).optional().describe("Priority (0 none, 1 urgent, 2 high, 3 normal, 4 low)"),
+      stateId: z.string().optional().describe("Workflow state ID (UUID)"),
+      assigneeId: z.string().optional().describe("Assignee user ID (UUID)"),
+      projectId: z.string().optional().describe("Project ID (UUID)"),
+      labelIds: z.array(z.string()).max(30).optional().describe("Replace labels with this exact set (empty array clears labels)")
+    },
+    async ({ issueId, identifier, title, description, priority, stateId, assigneeId, projectId, labelIds }) => {
+      const cfg = resolveLinearConfig(getSettings);
+      if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
+
+      try {
+        const resolvedIssue = await resolveLinearIssueReference(cfg, issueId, identifier);
+        if (!resolvedIssue.ok) {
+          const errorText = (resolvedIssue as { error: string }).error;
+          return { content: [{ type: "text" as const, text: errorText }], isError: true };
+        }
+
+        const input: Record<string, any> = {};
+
+        if (typeof title === "string") {
+          const normalizedTitle = clipText(String(title || "").trim(), 512);
+          if (!normalizedTitle) {
+            return { content: [{ type: "text" as const, text: "Issue title cannot be empty." }], isError: true };
+          }
+          input.title = normalizedTitle;
+        }
+
+        if (typeof description === "string") input.description = clipText(description, 10_000);
+        if (typeof priority === "number") input.priority = priority;
+
+        const normalizedStateId = String(stateId || "").trim();
+        if (normalizedStateId) input.stateId = normalizedStateId;
+
+        const normalizedAssigneeId = String(assigneeId || "").trim();
+        if (normalizedAssigneeId) input.assigneeId = normalizedAssigneeId;
+
+        const normalizedProjectId = String(projectId || "").trim();
+        if (normalizedProjectId) input.projectId = normalizedProjectId;
+
+        if (typeof labelIds !== "undefined") input.labelIds = normalizeLinearIdArray(labelIds, 30);
+
+        if (Object.keys(input).length === 0) {
+          return { content: [{ type: "text" as const, text: "No update fields provided." }], isError: true };
+        }
+
+        const data = await linearGraphql(
+          cfg.apiBaseUrl,
+          cfg.token,
+          `mutation ($id: String!, $input: IssueUpdateInput!) {
+            issueUpdate(id: $id, input: $input) {
+              success
+              issue {
+                id
+                identifier
+                title
+                description
+                url
+                state { id name }
+                team { id key name }
+                assignee { id name email }
+                priority
+                priorityLabel
+                labels { nodes { id name } }
+                updatedAt
+              }
+            }
+          }`,
+          { id: resolvedIssue.issueId, input }
+        );
+
+        const payload = data && (data as any).issueUpdate && typeof (data as any).issueUpdate === "object" ? (data as any).issueUpdate : null;
+        const issue = payload && typeof (payload as any).issue === "object" ? (payload as any).issue : null;
+        if (!issue) {
+          return { content: [{ type: "text" as const, text: "Linear issue update failed." }], isError: true };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({ success: payload ? (payload as any).success !== false : true, issue }, null, 2)
+            }
+          ]
+        };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "linear_set_labels",
+    "Set the full label set on a Linear issue. Existing labels are replaced.",
+    {
+      issueId: z.string().optional().describe("Linear issue ID (UUID). Prefer this when known."),
+      identifier: z.string().optional().describe("Issue identifier like ENG-123 (used when issueId is omitted)."),
+      labelIds: z.array(z.string()).max(30).describe("Exact label IDs to set on the issue (empty array clears all labels)")
+    },
+    async ({ issueId, identifier, labelIds }) => {
+      const cfg = resolveLinearConfig(getSettings);
+      if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
+
+      try {
+        const resolvedIssue = await resolveLinearIssueReference(cfg, issueId, identifier);
+        if (!resolvedIssue.ok) {
+          const errorText = (resolvedIssue as { error: string }).error;
+          return { content: [{ type: "text" as const, text: errorText }], isError: true };
+        }
+
+        const normalizedLabelIds = normalizeLinearIdArray(labelIds, 30);
+
+        const data = await linearGraphql(
+          cfg.apiBaseUrl,
+          cfg.token,
+          `mutation ($id: String!, $input: IssueUpdateInput!) {
+            issueUpdate(id: $id, input: $input) {
+              success
+              issue {
+                id
+                identifier
+                labels { nodes { id name } }
+                updatedAt
+              }
+            }
+          }`,
+          { id: resolvedIssue.issueId, input: { labelIds: normalizedLabelIds } }
+        );
+
+        const payload = data && (data as any).issueUpdate && typeof (data as any).issueUpdate === "object" ? (data as any).issueUpdate : null;
+        const issue = payload && typeof (payload as any).issue === "object" ? (payload as any).issue : null;
+        if (!issue) {
+          return { content: [{ type: "text" as const, text: "Setting Linear issue labels failed." }], isError: true };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: payload ? (payload as any).success !== false : true,
+                  issueId: String((issue as any).id || resolvedIssue.issueId),
+                  identifier: String((issue as any).identifier || resolvedIssue.identifier || "").trim() || null,
+                  labelIds: normalizedLabelIds
+                },
+                null,
+                2
+              )
+            }
+          ]
+        };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    "linear_add_label",
+    "Add a label to a Linear issue while preserving existing labels.",
+    {
+      issueId: z.string().optional().describe("Linear issue ID (UUID). Prefer this when known."),
+      identifier: z.string().optional().describe("Issue identifier like ENG-123 (used when issueId is omitted)."),
+      labelId: z.string().describe("Label ID to add")
+    },
+    async ({ issueId, identifier, labelId }) => {
+      const cfg = resolveLinearConfig(getSettings);
+      if (!cfg.ok) return { content: [{ type: "text" as const, text: cfg.error }], isError: true };
+
+      try {
+        const resolvedIssue = await resolveLinearIssueReference(cfg, issueId, identifier);
+        if (!resolvedIssue.ok) {
+          const errorText = (resolvedIssue as { error: string }).error;
+          return { content: [{ type: "text" as const, text: errorText }], isError: true };
+        }
+
+        const normalizedLabelId = String(labelId || "").trim();
+        if (!normalizedLabelId) {
+          return { content: [{ type: "text" as const, text: "Missing labelId." }], isError: true };
+        }
+
+        const current = await getLinearIssueLabelIds(cfg, resolvedIssue.issueId);
+        if (!current.ok) {
+          const errorText = (current as { error: string }).error;
+          return { content: [{ type: "text" as const, text: errorText }], isError: true };
+        }
+
+        const nextLabelIds = normalizeLinearIdArray([...current.labelIds, normalizedLabelId], 30);
+
+        const data = await linearGraphql(
+          cfg.apiBaseUrl,
+          cfg.token,
+          `mutation ($id: String!, $input: IssueUpdateInput!) {
+            issueUpdate(id: $id, input: $input) {
+              success
+              issue {
+                id
+                identifier
+                labels { nodes { id name } }
+                updatedAt
+              }
+            }
+          }`,
+          { id: resolvedIssue.issueId, input: { labelIds: nextLabelIds } }
+        );
+
+        const payload = data && (data as any).issueUpdate && typeof (data as any).issueUpdate === "object" ? (data as any).issueUpdate : null;
+        const issue = payload && typeof (payload as any).issue === "object" ? (payload as any).issue : null;
+        if (!issue) {
+          return { content: [{ type: "text" as const, text: "Adding Linear label failed." }], isError: true };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  success: payload ? (payload as any).success !== false : true,
+                  issueId: String((issue as any).id || resolvedIssue.issueId),
+                  identifier: String((issue as any).identifier || current.identifier || resolvedIssue.identifier || "").trim() || null,
+                  labelIds: nextLabelIds
+                },
+                null,
+                2
+              )
+            }
+          ]
+        };
       } catch (err: any) {
         return { content: [{ type: "text" as const, text: linearToolFailureMessage(err) }], isError: true };
       }
