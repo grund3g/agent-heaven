@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.12.0...agent-heaven-v0.12.1) (2026-02-25)
+
+
+### Bug Fixes
+
+* **build:** sync lockfile for npm ci ([8c1b777](https://github.com/grund3g/agent-heaven/commit/8c1b7773431656e8eef4a31ab732331b1d0473ec))
+
 ## [0.12.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.11.1...agent-heaven-v0.12.0) (2026-02-25)
 
 
