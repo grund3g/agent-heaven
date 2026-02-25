@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.12.1...agent-heaven-v0.12.2) (2026-02-25)
+
+
+### Bug Fixes
+
+* **tests:** normalize git EOL assertion on windows ([62895a6](https://github.com/grund3g/agent-heaven/commit/62895a68930da0c51b89873ebc73c33bd51b3958))
+
 ## [0.12.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.12.0...agent-heaven-v0.12.1) (2026-02-25)
 
 
