@@ -33,6 +33,10 @@ function hasCherryPickInProgress(cwd: string): boolean {
   return res.status === 0;
 }
 
+function normalizeEol(value: string): string {
+  return value.replace(/\r\n/g, "\n");
+}
+
 describe("electron/git cherryPick", () => {
   it("skips empty cherry-picks and continues with remaining commits", async () => {
     const dir = initRepo();
@@ -54,7 +58,7 @@ describe("electron/git cherryPick", () => {
     await cherryPick(dir, [commitA, commitB]);
 
     const text = fs.readFileSync(path.join(dir, "file.txt"), "utf8");
-    expect(text).toBe("line 1\nline A\nline B\n");
+    expect(normalizeEol(text)).toBe("line 1\nline A\nline B\n");
     expect(hasCherryPickInProgress(dir)).toBe(false);
   });
 
