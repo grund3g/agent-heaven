@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.12.0](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.11.1...agent-heaven-v0.12.0) (2026-02-25)
+
+
+### Features
+
+* improve job handling, theming, and agent binary installation ([0040a36](https://github.com/grund3g/agent-heaven/commit/0040a3633fc080f994673ce1dfc6c9b488988eda))
+
+
+### Bug Fixes
+
+* **gemini:** ignore user echo messages and use script-local Node ([4f322d6](https://github.com/grund3g/agent-heaven/commit/4f322d6cd7cb5f01b9795d825946f791ba066831))
+* **jobs:** initialize jobs manager during app startup with tests ([6fb8e4e](https://github.com/grund3g/agent-heaven/commit/6fb8e4e71b8e903b9eba80023e3a6894980b2dbd))
+
 ## [0.11.1](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.11.0...agent-heaven-v0.11.1) (2026-02-21)
 
 
