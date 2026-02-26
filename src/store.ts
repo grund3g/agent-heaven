@@ -24,7 +24,7 @@ export const DEFAULT_STATE = {
     uiModel: "",
     uiTheme: "heaven", // fixed
     uiColorScheme: "dark", // dark | light | system
-    uiDesignVersion: "v1", // v1 | v2
+    uiDesignVersion: "v1", // fixed
     editorCommand: "", // command/binary for "Open in editor" (e.g. code, cursor, zed)
 
     // Global shortcuts
@@ -951,10 +951,9 @@ function ensureSettings(settings) {
   }
 
   {
-    const raw = typeof (next as any).uiDesignVersion === "string" ? (next as any).uiDesignVersion.trim().toLowerCase() : "";
-    const nextVersion = raw === "v2" ? "v2" : "v1";
-    if ((next as any).uiDesignVersion !== nextVersion) {
-      (next as any).uiDesignVersion = nextVersion;
+    // Design v2 is retired; always normalize persisted settings to v1.
+    if ((next as any).uiDesignVersion !== "v1") {
+      (next as any).uiDesignVersion = "v1";
       changed = true;
     }
   }

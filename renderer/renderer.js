@@ -288,6 +288,8 @@ const state = {
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
   durationTimer: null,
+  deferredLogUpsertTimer: null,
+  deferredLogUpsertIds: new Set(),
   projectRefreshTimer: null,
   projectRefreshInFlight: false,
   composerCheckoutModeProjectId: "",
@@ -379,6 +381,7 @@ const promptPathSuggestState = {
   activeIndex: 0
 };
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
+const LOG_UPSERT_DEBOUNCE_MS = 180;
 const TEMP_PROJECT_OPTION_VALUE = "__temp_new__";
 const HELPER_CONTEXT_GLOBAL_VALUE = "global";
 const HELPER_CONTEXT_PROJECT_PREFIX = "project:";
@@ -9919,6 +9922,35 @@ function upsertJob(job) {
   if (isSearchActive()) scheduleSearch(900, { replace: false });
 }
 
+function flushDeferredLogUpserts() {
+  if (state.deferredLogUpsertTimer) {
+    window.clearTimeout(state.deferredLogUpsertTimer);
+    state.deferredLogUpsertTimer = null;
+  }
+  if (!state.deferredLogUpsertIds || state.deferredLogUpsertIds.size === 0) return;
+
+  const ids = Array.from(state.deferredLogUpsertIds);
+  state.deferredLogUpsertIds.clear();
+
+  for (const id of ids) {
+    const job = state.jobs.get(id);
+    if (!job) continue;
+    upsertJob(job);
+  }
+}
+
+function scheduleDeferredLogUpsert(jobId) {
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  state.deferredLogUpsertIds.add(id);
+  if (state.deferredLogUpsertTimer) return;
+
+  state.deferredLogUpsertTimer = window.setTimeout(() => {
+    state.deferredLogUpsertTimer = null;
+    flushDeferredLogUpserts();
+  }, LOG_UPSERT_DEBOUNCE_MS);
+}
+
 function patchJob(jobId, patch) {
   const job = state.jobs.get(jobId);
   if (!job) return;
@@ -9942,12 +9974,22 @@ function removeJob(jobId) {
 }
 
 function appendJobLog(jobId, entry) {
-  const job = state.jobs.get(jobId);
+  const id = String(jobId || "").trim();
+  if (!id) return;
+  const job = state.jobs.get(id);
   if (!job) return;
   job.logs = job.logs || [];
   job.logs.push(entry);
   if (job.logs.length > 2000) job.logs.splice(0, job.logs.length - 2000);
-  upsertJob(job);
+  const isOpen = state.selectedJobId === id && els.jobDialog && els.jobDialog.open;
+  if (isOpen) {
+    // Keep the active dialog live while reading a running stream.
+    flushDeferredLogUpserts();
+    upsertJob(job);
+    return;
+  }
+  // Outside the open dialog, batch frequent stream events to avoid excessive board rerenders.
+  scheduleDeferredLogUpsert(id);
 }
 
 function appendJobMessage(jobId, message) {
