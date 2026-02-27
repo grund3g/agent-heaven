@@ -9847,8 +9847,7 @@ function renderJobDialogPanels(job) {
     enriched.push({ ...t, _ms: tMs, _baseMs: lastPromptMs });
   }
 
-  const items = enriched.map((t, idx) => {
-    const isLast = idx === enriched.length - 1;
+  const items = enriched.map((t) => {
     const isUser = t.role === "user";
     const clock = fmtClock(t._ms);
     const relMs =
@@ -9857,27 +9856,37 @@ function renderJobDialogPanels(job) {
     const showRel = rel && rel !== "0:00";
     const meta = clock && showRel ? `${clock} (+${rel})` : clock || "";
     const timeHtml = meta ? ` <span class="msg__time" title="${escapeHtml(t.ts)}">${escapeHtml(meta)}</span>` : "";
-
-    // While the job is running, keep a live counter on the latest chat entry so you can
-    // see how long it's been since the last message appeared.
-    let runningHtml = "";
-    if (running && isLast) {
-      const baseMs = Number.isFinite(t._ms) ? t._ms : jobStartMs(job);
-      if (Number.isFinite(baseMs)) {
-        const counter = fmtOffset(Math.max(0, nowMs - baseMs));
-        runningHtml = ` <span class="msg__time" data-msg-running-base-ms="${escapeHtml(String(baseMs))}" title="Time since last message">running ${escapeHtml(counter)}</span>`;
-      }
-    }
 	      return `
 	      <div class="msg ${isUser ? "msg--user" : "msg--assistant"}">
-		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}${runningHtml}</div>
+		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}</div>
 	        <div class="msg__text">${renderMarkdownSafeHtml(t.text)}</div>
 	        ${attachmentChipsHtml(t.images)}
 		      </div>
 		    `;
 		  });
-  // Keep queued follow-ups at the end so they stay visible with sticky bottom scroll.
-  const chatHtml = `${items.join("")}${queuedHtml}`;
+  let typingHtml = "";
+  if (running) {
+    const last = enriched.length > 0 ? enriched[enriched.length - 1] : null;
+    const baseMs = last && Number.isFinite(last._ms) ? Number(last._ms) : jobStartMs(job);
+    const runningHtml = Number.isFinite(baseMs)
+      ? ` <span class="msg__time" data-msg-running-base-ms="${escapeHtml(String(baseMs))}" title="Time since last chat update">running ${escapeHtml(fmtOffset(Math.max(0, nowMs - baseMs)))}</span>`
+      : "";
+    const typingLabel = `${agentName} is typing`;
+    typingHtml = `
+      <div class="msg msg--assistant msg--typing">
+        <div class="msg__role">${escapeHtml(agentName)}${runningHtml}</div>
+        <div class="msg__text">
+          <span class="msgtyping" role="status" aria-label="${escapeHtml(typingLabel)}" title="Typing…">
+            <span class="msgtyping__dot"></span>
+            <span class="msgtyping__dot"></span>
+            <span class="msgtyping__dot"></span>
+          </span>
+        </div>
+      </div>
+    `;
+  }
+  // Keep an explicit running indicator at the end so it's obvious the agent is still active.
+  const chatHtml = `${items.join("")}${queuedHtml}${typingHtml}`;
   els.jobDialogChat.innerHTML = chatHtml || `<div class="logline">No messages yet.</div>`;
   wireAttachmentThumbs(els.jobDialogChat);
 

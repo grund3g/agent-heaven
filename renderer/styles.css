@@ -2773,6 +2773,36 @@ body::before {
   border-bottom-left-radius: 6px;
 }
 
+.msg--typing {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.msgtyping {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 14px;
+  color: var(--muted);
+}
+
+.msgtyping__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+  animation: msgtyping-bounce 1s ease-in-out infinite;
+}
+
+.msgtyping__dot:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.msgtyping__dot:nth-child(3) {
+  animation-delay: 240ms;
+}
+
 .queued {
   margin-top: 14px;
   padding-top: 8px;
@@ -2882,6 +2912,19 @@ body::before {
   border-radius: 6px;
   border: 1px solid var(--stroke-soft);
   background: var(--surface4);
+}
+
+@keyframes msgtyping-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  40% {
+    transform: translateY(-2px);
+    opacity: 0.95;
+  }
 }
 
 .msg__text pre.md-code {
