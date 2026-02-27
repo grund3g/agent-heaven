@@ -2723,6 +2723,35 @@ body::before {
   padding-left: 0;
 }
 
+.msg--typing {
+  opacity: 0.9;
+}
+
+.msgtyping {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 14px;
+  color: var(--muted2);
+}
+
+.msgtyping__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.3;
+  animation: msgtyping-bounce 1s ease-in-out infinite;
+}
+
+.msgtyping__dot:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.msgtyping__dot:nth-child(3) {
+  animation-delay: 240ms;
+}
+
 .queued {
   border-bottom: 1px solid var(--stroke-faint);
   padding: 10px 0;
@@ -2850,6 +2879,19 @@ body::before {
   line-height: 1.55;
   color: var(--ink-code);
   white-space: pre;
+}
+
+@keyframes msgtyping-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  40% {
+    transform: translateY(-2px);
+    opacity: 0.95;
+  }
 }
 
 /* ── 28. Terminal Lines ─────────────────────────────────────────────────── */
