@@ -59,6 +59,7 @@ const api = window.agentHeaven;
   jobSearchClearBtn: document.getElementById("jobSearchClearBtn"),
   followupDropwrap: document.getElementById("followupDropwrap"),
   followupInput: document.getElementById("followupInput"),
+  followupPathSuggest: document.getElementById("followupPathSuggest"),
   followupBadge: document.getElementById("followupBadge"),
   followupAttachments: document.getElementById("followupAttachments"),
   sendFollowupBtn: document.getElementById("sendFollowupBtn"),
@@ -200,7 +201,9 @@ const api = window.agentHeaven;
 		  actionPromptDialog: document.getElementById("actionPromptDialog"),
 		  actionPromptDialogClose: document.getElementById("actionPromptDialogClose"),
 		  actionPromptDialogMeta: document.getElementById("actionPromptDialogMeta"),
+		  actionPromptDropwrap: document.getElementById("actionPromptDropwrap"),
 		  actionPromptInput: document.getElementById("actionPromptInput"),
+		  actionPromptPathSuggest: document.getElementById("actionPromptPathSuggest"),
 		  actionPromptGenerateBtn: document.getElementById("actionPromptGenerateBtn"),
 
 		  textPromptDialog: document.getElementById("textPromptDialog"),
@@ -257,7 +260,9 @@ const api = window.agentHeaven;
   helperNewSessionBtn: document.getElementById("helperNewSessionBtn"),
   helperClearSessionBtn: document.getElementById("helperClearSessionBtn"),
   helperMessages: document.getElementById("helperMessages"),
+  helperDropwrap: document.getElementById("helperDropwrap"),
   helperInput: document.getElementById("helperInput"),
+  helperPathSuggest: document.getElementById("helperPathSuggest"),
   helperSendBtn: document.getElementById("helperSendBtn"),
   helperToPromptBtn: document.getElementById("helperToPromptBtn")
 };
@@ -378,7 +383,10 @@ const promptPathSuggestState = {
   open: false,
   mode: "insert", // insert | attach
   items: [],
-  activeIndex: 0
+  activeIndex: 0,
+  inputEl: null,
+  menuEl: null,
+  dropwrapEl: null
 };
 const FOLLOWUP_AUTOSIZE_MAX_ROWS = 10;
 const LOG_UPSERT_DEBOUNCE_MS = 180;
@@ -2372,13 +2380,90 @@ function normalizePromptPathSuggestQuery(raw) {
   return q;
 }
 
+function projectForPathSuggestById(projectId) {
+  const id = String(projectId || "").trim();
+  if (!id || id === "auto") return null;
+  const project = state.projects.find((p) => p && p.id === id) || null;
+  if (!project || typeof project.path !== "string" || !project.path.trim()) return null;
+  return { id, path: project.path.trim() };
+}
+
 function selectedComposerProjectForPathSuggest() {
   if (!els.projectSelect) return null;
   const projectId = String(els.projectSelect.value || "").trim();
-  if (!projectId || projectId === "auto") return null;
-  const project = state.projects.find((p) => p && p.id === projectId) || null;
-  if (!project || typeof project.path !== "string" || !project.path.trim()) return null;
-  return { id: projectId, path: project.path.trim() };
+  return projectForPathSuggestById(projectId);
+}
+
+function selectedFollowupProjectForPathSuggest() {
+  const jobId = String(state.selectedJobId || "").trim();
+  if (!jobId) return null;
+  const job = state.jobs.get(jobId);
+  if (!job || isDemoJob(job)) return null;
+  return projectForPathSuggestById(job.projectId);
+}
+
+function selectedHelperProjectForPathSuggest() {
+  const project = helperSelectedProjectForContext();
+  if (project && project.id) {
+    const fromContext = projectForPathSuggestById(project.id);
+    if (fromContext) return fromContext;
+  }
+  return selectedComposerProjectForPathSuggest();
+}
+
+function selectedActionPromptProjectForPathSuggest() {
+  const composerProject = selectedComposerProjectForPathSuggest();
+  if (composerProject) return composerProject;
+  return selectedHelperProjectForPathSuggest();
+}
+
+function promptPathSuggestTargetForInput(inputEl) {
+  if (!inputEl) return null;
+  if (inputEl === els.promptInput) {
+    return {
+      inputEl,
+      menuEl: els.promptPathSuggest,
+      dropwrapEl: els.promptDropwrap,
+      selectProject: selectedComposerProjectForPathSuggest,
+      attachAbsPath: (absPath) => setComposerFiles(mergeFiles(state.composerFiles, [absPath]))
+    };
+  }
+  if (inputEl === els.followupInput) {
+    return {
+      inputEl,
+      menuEl: els.followupPathSuggest,
+      dropwrapEl: els.followupDropwrap,
+      selectProject: selectedFollowupProjectForPathSuggest,
+      attachAbsPath: (absPath) => setFollowupFiles(mergeFiles(state.followupFiles, [absPath]))
+    };
+  }
+  if (inputEl === els.helperInput) {
+    return {
+      inputEl,
+      menuEl: els.helperPathSuggest,
+      dropwrapEl: els.helperDropwrap,
+      selectProject: selectedHelperProjectForPathSuggest,
+      attachAbsPath: null
+    };
+  }
+  if (inputEl === els.actionPromptInput) {
+    return {
+      inputEl,
+      menuEl: els.actionPromptPathSuggest,
+      dropwrapEl: els.actionPromptDropwrap,
+      selectProject: selectedActionPromptProjectForPathSuggest,
+      attachAbsPath: null
+    };
+  }
+  return null;
+}
+
+function promptPathSuggestActiveInput() {
+  const active = document && document.activeElement ? document.activeElement : null;
+  const target = promptPathSuggestTargetForInput(active);
+  if (target) return target.inputEl;
+  if (promptPathSuggestState.inputEl) return promptPathSuggestState.inputEl;
+  return null;
 }
 
 function promptPathTokenAtCursor(inputEl) {
@@ -2472,14 +2557,20 @@ function closePromptPathSuggest() {
   promptPathSuggestState.mode = "insert";
   promptPathSuggestState.items = [];
   promptPathSuggestState.activeIndex = 0;
+  promptPathSuggestState.inputEl = null;
+  promptPathSuggestState.menuEl = null;
+  promptPathSuggestState.dropwrapEl = null;
 
-  if (!els.promptPathSuggest) return;
-  els.promptPathSuggest.hidden = true;
-  els.promptPathSuggest.innerHTML = "";
+  const menus = [els.promptPathSuggest, els.followupPathSuggest, els.helperPathSuggest, els.actionPromptPathSuggest];
+  for (const menuEl of menus) {
+    if (!menuEl) continue;
+    menuEl.hidden = true;
+    menuEl.innerHTML = "";
+  }
 }
 
 function renderPromptPathSuggest() {
-  const menuEl = els.promptPathSuggest;
+  const menuEl = promptPathSuggestState.menuEl;
   if (!menuEl) return;
 
   const items = Array.isArray(promptPathSuggestState.items) ? promptPathSuggestState.items : [];
@@ -2534,8 +2625,14 @@ function movePromptPathSuggestSelection(delta) {
 }
 
 function applyPromptPathSuggestSelection(indexOverride) {
-  const inputEl = els.promptInput;
-  if (!inputEl || !promptPathSuggestState.open) return false;
+  if (!promptPathSuggestState.open) return false;
+  const target = promptPathSuggestTargetForInput(promptPathSuggestState.inputEl);
+  if (!target) {
+    closePromptPathSuggest();
+    return false;
+  }
+  const inputEl = target.inputEl;
+  if (!inputEl) return false;
 
   const items = Array.isArray(promptPathSuggestState.items) ? promptPathSuggestState.items : [];
   if (items.length === 0) return false;
@@ -2564,36 +2661,44 @@ function applyPromptPathSuggestSelection(indexOverride) {
     // ignore
   }
 
-  if (token.mode === "attach" && item.absPath) {
-    setComposerFiles(mergeFiles(state.composerFiles, [item.absPath]));
+  if (token.mode === "attach" && item.absPath && typeof target.attachAbsPath === "function") {
+    target.attachAbsPath(item.absPath);
   }
 
   try {
     inputEl.dispatchEvent(new Event("input", { bubbles: true }));
   } catch {
-    storeComposerDraft(inputEl.value || "");
+    if (inputEl === els.promptInput) storeComposerDraft(inputEl.value || "");
   }
 
   closePromptPathSuggest();
   return true;
 }
 
-async function refreshPromptPathSuggest() {
-  const inputEl = els.promptInput;
-  if (!inputEl || !api || typeof api.projectsSuggestPaths !== "function") {
+async function refreshPromptPathSuggest(opts = {}) {
+  const inputEl = opts && opts.inputEl ? opts.inputEl : promptPathSuggestActiveInput();
+  const target = promptPathSuggestTargetForInput(inputEl);
+  if (!target || !target.inputEl || !target.menuEl || !target.dropwrapEl || typeof target.selectProject !== "function") {
     closePromptPathSuggest();
     return;
   }
+  if (!api || typeof api.projectsSuggestPaths !== "function") {
+    closePromptPathSuggest();
+    return;
+  }
+  if (promptPathSuggestState.open && promptPathSuggestState.inputEl && promptPathSuggestState.inputEl !== target.inputEl) {
+    closePromptPathSuggest();
+  }
 
-  const token = promptPathTokenAtCursor(inputEl);
+  const token = promptPathTokenAtCursor(target.inputEl);
   if (!token) {
-    closePromptPathSuggest();
+    if (promptPathSuggestState.inputEl === target.inputEl) closePromptPathSuggest();
     return;
   }
 
-  const project = selectedComposerProjectForPathSuggest();
+  const project = target.selectProject();
   if (!project) {
-    closePromptPathSuggest();
+    if (promptPathSuggestState.inputEl === target.inputEl) closePromptPathSuggest();
     return;
   }
 
@@ -2606,9 +2711,9 @@ async function refreshPromptPathSuggest() {
   }
   if (reqSeq !== promptPathSuggestReqSeq) return;
 
-  const currentToken = promptPathTokenAtCursor(inputEl);
+  const currentToken = promptPathTokenAtCursor(target.inputEl);
   if (!currentToken) {
-    closePromptPathSuggest();
+    if (promptPathSuggestState.inputEl === target.inputEl) closePromptPathSuggest();
     return;
   }
   if (currentToken.start !== token.start || currentToken.end !== token.end || currentToken.mode !== token.mode || currentToken.query !== token.query) {
@@ -2617,16 +2722,18 @@ async function refreshPromptPathSuggest() {
 
   const items = normalizePromptPathSuggestItems(rawItems);
   if (items.length === 0) {
-    closePromptPathSuggest();
+    if (promptPathSuggestState.inputEl === target.inputEl) closePromptPathSuggest();
     return;
   }
 
-  const prevPath =
-    promptPathSuggestState.items &&
-    promptPathSuggestState.items[promptPathSuggestState.activeIndex] &&
-    promptPathSuggestState.items[promptPathSuggestState.activeIndex].path
+  const canReuseSelection = promptPathSuggestState.inputEl === target.inputEl;
+  const prevPath = canReuseSelection
+    ? promptPathSuggestState.items &&
+      promptPathSuggestState.items[promptPathSuggestState.activeIndex] &&
+      promptPathSuggestState.items[promptPathSuggestState.activeIndex].path
       ? promptPathSuggestState.items[promptPathSuggestState.activeIndex].path
-      : "";
+      : ""
+    : "";
 
   let activeIndex = 0;
   if (prevPath) {
@@ -2638,27 +2745,36 @@ async function refreshPromptPathSuggest() {
   promptPathSuggestState.mode = currentToken.mode;
   promptPathSuggestState.items = items;
   promptPathSuggestState.activeIndex = activeIndex;
+  promptPathSuggestState.inputEl = target.inputEl;
+  promptPathSuggestState.menuEl = target.menuEl;
+  promptPathSuggestState.dropwrapEl = target.dropwrapEl;
   renderPromptPathSuggest();
 }
 
 function schedulePromptPathSuggestRefresh(opts = {}) {
   const immediate = !!(opts && opts.immediate);
+  const inputEl = opts && opts.inputEl ? opts.inputEl : promptPathSuggestActiveInput();
   if (promptPathSuggestTimer) {
     clearTimeout(promptPathSuggestTimer);
     promptPathSuggestTimer = null;
   }
+  if (!inputEl) {
+    closePromptPathSuggest();
+    return;
+  }
   if (immediate) {
-    void refreshPromptPathSuggest();
+    void refreshPromptPathSuggest({ inputEl });
     return;
   }
   promptPathSuggestTimer = window.setTimeout(() => {
     promptPathSuggestTimer = null;
-    void refreshPromptPathSuggest();
+    void refreshPromptPathSuggest({ inputEl });
   }, PROMPT_PATH_SUGGEST_DEBOUNCE_MS);
 }
 
-function handlePromptPathSuggestKeyDown(e) {
+function handlePromptPathSuggestKeyDown(e, inputEl = null) {
   if (!promptPathSuggestState.open) return false;
+  if (inputEl && promptPathSuggestState.inputEl && inputEl !== promptPathSuggestState.inputEl) return false;
   if (e.metaKey || e.ctrlKey || e.altKey) return false;
 
   if (e.key === "ArrowDown") {
@@ -8006,6 +8122,7 @@ function uiModelForMeta() {
 
 function openActionPromptDialog() {
   if (!els.actionPromptDialog) return;
+  closePromptPathSuggest();
 
   const model = uiModelForMeta();
   if (els.actionPromptDialogMeta) {
@@ -8036,6 +8153,7 @@ function openActionPromptDialog() {
 
 function closeActionPromptDialog() {
   if (!els.actionPromptDialog) return;
+  if (promptPathSuggestState.inputEl === els.actionPromptInput) closePromptPathSuggest();
   try {
     if (els.actionPromptDialog.open) els.actionPromptDialog.close();
   } catch {
@@ -8091,6 +8209,7 @@ function updateJobDialogActions(job) {
     if (els.followupInput) {
       els.followupInput.disabled = true;
       els.followupInput.placeholder = "Demo card (start a real run to chat)";
+      if (promptPathSuggestState.inputEl === els.followupInput) closePromptPathSuggest();
     }
     if (els.sendFollowupBtn) {
       els.sendFollowupBtn.disabled = true;
@@ -10489,6 +10608,7 @@ function setHelperOpen(open, opts = {}) {
   const nextOpen = !!open;
   if (!nextOpen && state.helperPending) state.helperReopenOnReply = true;
   if (nextOpen) state.helperReopenOnReply = false;
+  if (!nextOpen && promptPathSuggestState.inputEl === els.helperInput) closePromptPathSuggest();
   state.helperOpen = nextOpen;
   renderHelperPanel();
   if (state.helperOpen && opts && opts.focus && els.helperInput) {
@@ -10756,6 +10876,7 @@ async function sendFollowup() {
   const cmdLow = cmd.toLowerCase();
   if (job.status === "running" && (cmdLow === "stop" || cmdLow === "/stop")) {
     els.followupInput.value = "";
+    if (promptPathSuggestState.inputEl === els.followupInput) closePromptPathSuggest();
     scheduleAutosizeFollowupInput();
     setFollowupImages([]);
     setFollowupFiles([]);
@@ -10764,6 +10885,7 @@ async function sendFollowup() {
   }
   if (job.status !== "running" && (cmdLow === "rerun" || cmdLow === "/rerun")) {
     els.followupInput.value = "";
+    if (promptPathSuggestState.inputEl === els.followupInput) closePromptPathSuggest();
     scheduleAutosizeFollowupInput();
     setFollowupImages([]);
     setFollowupFiles([]);
@@ -10821,6 +10943,7 @@ async function sendFollowup() {
     if (sendRes && sendRes.ok === false) throw new Error(sendRes.error || "Failed to send follow-up");
 
     els.followupInput.value = "";
+    if (promptPathSuggestState.inputEl === els.followupInput) closePromptPathSuggest();
     scheduleAutosizeFollowupInput();
     setFollowupImages([]);
     setFollowupFiles([]);
@@ -11973,8 +12096,12 @@ function wireUi() {
     els.helperClearSessionBtn.addEventListener("click", () => clearHelperCurrentSessionNow());
   }
   if (els.helperInput) {
-    els.helperInput.addEventListener("input", () => autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS }));
+    els.helperInput.addEventListener("input", () => {
+      autosizeTextarea(els.helperInput, { maxRows: FOLLOWUP_AUTOSIZE_MAX_ROWS });
+      schedulePromptPathSuggestRefresh({ inputEl: els.helperInput });
+    });
     els.helperInput.addEventListener("keydown", (e) => {
+      if (handlePromptPathSuggestKeyDown(e, els.helperInput)) return;
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();
         askHelperFromInput();
@@ -11984,6 +12111,13 @@ function wireUi() {
         e.preventDefault();
         toggleHelperPanel({ open: false });
       }
+    });
+    els.helperInput.addEventListener("focus", () => schedulePromptPathSuggestRefresh({ inputEl: els.helperInput, immediate: true }));
+    els.helperInput.addEventListener("click", () => schedulePromptPathSuggestRefresh({ inputEl: els.helperInput, immediate: true }));
+    els.helperInput.addEventListener("keyup", (e) => {
+      if (!PROMPT_PATH_SUGGEST_CURSOR_KEYS.has(e.key)) return;
+      if (promptPathSuggestState.open && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;
+      schedulePromptPathSuggestRefresh({ inputEl: els.helperInput, immediate: true });
     });
   }
   if (els.helperSendBtn) {
@@ -12086,7 +12220,7 @@ function wireUi() {
   });
 
   els.promptInput.addEventListener("keydown", (e) => {
-    if (handlePromptPathSuggestKeyDown(e)) return;
+    if (handlePromptPathSuggestKeyDown(e, els.promptInput)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       startJobFromComposer();
@@ -12096,23 +12230,24 @@ function wireUi() {
   // Avoid losing the current prompt during dev live reloads (or accidental reloads).
   els.promptInput.addEventListener("input", () => {
     storeComposerDraft(els.promptInput.value || "");
-    schedulePromptPathSuggestRefresh();
+    schedulePromptPathSuggestRefresh({ inputEl: els.promptInput });
   });
-  els.promptInput.addEventListener("focus", () => schedulePromptPathSuggestRefresh({ immediate: true }));
-  els.promptInput.addEventListener("click", () => schedulePromptPathSuggestRefresh({ immediate: true }));
+  els.promptInput.addEventListener("focus", () => schedulePromptPathSuggestRefresh({ inputEl: els.promptInput, immediate: true }));
+  els.promptInput.addEventListener("click", () => schedulePromptPathSuggestRefresh({ inputEl: els.promptInput, immediate: true }));
   els.promptInput.addEventListener("keyup", (e) => {
     if (!PROMPT_PATH_SUGGEST_CURSOR_KEYS.has(e.key)) return;
     if (promptPathSuggestState.open && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;
-    schedulePromptPathSuggestRefresh({ immediate: true });
+    schedulePromptPathSuggestRefresh({ inputEl: els.promptInput, immediate: true });
   });
 
-  if (els.promptPathSuggest) {
-    els.promptPathSuggest.addEventListener("pointerdown", (e) => {
+  function wirePromptPathSuggestMenu(menuEl) {
+    if (!menuEl) return;
+    menuEl.addEventListener("pointerdown", (e) => {
       // Keep focus in textarea so selection/cursor stays stable when picking a suggestion.
       e.preventDefault();
     });
 
-    els.promptPathSuggest.addEventListener("click", (e) => {
+    menuEl.addEventListener("click", (e) => {
       const row = e.target && e.target.closest ? e.target.closest(".combo__item[data-idx]") : null;
       if (!row) return;
       const idx = Number(row.getAttribute("data-idx"));
@@ -12120,13 +12255,18 @@ function wireUi() {
       applyPromptPathSuggestSelection(idx);
     });
   }
+  wirePromptPathSuggestMenu(els.promptPathSuggest);
+  wirePromptPathSuggestMenu(els.followupPathSuggest);
+  wirePromptPathSuggestMenu(els.helperPathSuggest);
+  wirePromptPathSuggestMenu(els.actionPromptPathSuggest);
 
   document.addEventListener(
     "pointerdown",
     (e) => {
       if (!promptPathSuggestState.open) return;
       const t = e && e.target ? e.target : null;
-      if (t && els.promptDropwrap && els.promptDropwrap.contains(t)) return;
+      if (t && promptPathSuggestState.dropwrapEl && promptPathSuggestState.dropwrapEl.contains(t)) return;
+      if (t && promptPathSuggestState.menuEl && promptPathSuggestState.menuEl.contains(t)) return;
       closePromptPathSuggest();
     },
     true
@@ -12339,6 +12479,7 @@ function wireUi() {
 
   // Drop heavy arrays when the dialog closes to keep the board snappy with many jobs.
   els.jobDialog.addEventListener("close", () => {
+    if (promptPathSuggestState.inputEl === els.followupInput) closePromptPathSuggest();
     hideJobMoreMenu();
     clearJobSearch();
     jobDiffReqSeq += 1; // cancel in-flight diff requests
@@ -12450,11 +12591,26 @@ function wireUi() {
 	    els.actionPromptGenerateBtn.addEventListener("click", () => generateActionFromPrompt());
 	  }
 	  if (els.actionPromptInput) {
+	    els.actionPromptInput.addEventListener("input", () => {
+	      schedulePromptPathSuggestRefresh({ inputEl: els.actionPromptInput });
+	    });
 	    els.actionPromptInput.addEventListener("keydown", (e) => {
+	      if (handlePromptPathSuggestKeyDown(e, els.actionPromptInput)) return;
 	      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
 	        e.preventDefault();
 	        generateActionFromPrompt();
 	      }
+	    });
+	    els.actionPromptInput.addEventListener("focus", () =>
+	      schedulePromptPathSuggestRefresh({ inputEl: els.actionPromptInput, immediate: true })
+	    );
+	    els.actionPromptInput.addEventListener("click", () =>
+	      schedulePromptPathSuggestRefresh({ inputEl: els.actionPromptInput, immediate: true })
+	    );
+	    els.actionPromptInput.addEventListener("keyup", (e) => {
+	      if (!PROMPT_PATH_SUGGEST_CURSOR_KEYS.has(e.key)) return;
+	      if (promptPathSuggestState.open && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;
+	      schedulePromptPathSuggestRefresh({ inputEl: els.actionPromptInput, immediate: true });
 	    });
 	  }
 
@@ -12680,6 +12836,7 @@ function wireUi() {
 
   els.sendFollowupBtn.addEventListener("click", () => sendFollowup());
   els.followupInput.addEventListener("keydown", (e) => {
+    if (handlePromptPathSuggestKeyDown(e, els.followupInput)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       sendFollowup();
@@ -12687,11 +12844,23 @@ function wireUi() {
   });
   els.followupInput.addEventListener("input", () => {
     scheduleAutosizeFollowupInput();
+    schedulePromptPathSuggestRefresh({ inputEl: els.followupInput });
     const jobId = state.selectedJobId;
     if (!jobId) return;
     const job = state.jobs.get(jobId);
     if (!job) return;
     if (els.jobDialog && els.jobDialog.open) updateJobDialogActions(job);
+  });
+  els.followupInput.addEventListener("focus", () =>
+    schedulePromptPathSuggestRefresh({ inputEl: els.followupInput, immediate: true })
+  );
+  els.followupInput.addEventListener("click", () =>
+    schedulePromptPathSuggestRefresh({ inputEl: els.followupInput, immediate: true })
+  );
+  els.followupInput.addEventListener("keyup", (e) => {
+    if (!PROMPT_PATH_SUGGEST_CURSOR_KEYS.has(e.key)) return;
+    if (promptPathSuggestState.open && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;
+    schedulePromptPathSuggestRefresh({ inputEl: els.followupInput, immediate: true });
   });
 
   if (els.jobActionsMenu) {
