@@ -1537,18 +1537,11 @@ export async function startApp(): Promise<void> {
   const store = new Store(storePath);
   store.load();
 
-<<<<<<< HEAD
-  // CLI flag: --design=v1 forces v1 for this session.
-  {
-    const designFlag = String(app.commandLine.getSwitchValue("design") || "").trim().toLowerCase();
-    if (designFlag === "v1") {
-=======
   // CLI flag: --design=v1|v2 overrides the stored UI design for this session.
   // Without the flag, keep whatever is stored (defaults are handled by the Store).
   {
     const designFlag = String(app.commandLine.getSwitchValue("design") || "").trim().toLowerCase();
     if (designFlag === "v1" || designFlag === "v2") {
->>>>>>> de511f4 (fix(electron): only apply --design when set to v1 or v2)
       store.updateSettings({ uiDesignVersion: designFlag });
     }
   }
