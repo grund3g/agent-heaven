@@ -1,0 +1,377 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.AgentHeavenNativeApp-arm64-apple-macosx15.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/sources",
+      "importPath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/AgentHeavenNativeApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Models/AHModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/AppPaths.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/BridgeClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/LocalStateRepository.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/ViewModels/AppViewModel.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Views/ContentView.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "AgentHeavenNativeApp",
+      "moduleOutputPath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/Modules/AgentHeavenNativeApp.swiftmodule",
+      "objects" : [
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AgentHeavenNativeApp.swift.o",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AHModels.swift.o",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AppPaths.swift.o",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/BridgeClient.swift.o",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/LocalStateRepository.swift.o",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AppViewModel.swift.o",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/ContentView.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx14.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j12",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "AgentHeavenNativeApp_main",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "native_macos"
+      ],
+      "outputFileMapPath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AgentHeavenNativeApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AHModels.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AppPaths.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/BridgeClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/LocalStateRepository.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AppViewModel.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/ContentView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/Modules/AgentHeavenNativeApp.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/AgentHeavenNativeApp.swift",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Models/AHModels.swift",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/AppPaths.swift",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/BridgeClient.swift",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/LocalStateRepository.swift",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/ViewModels/AppViewModel.swift",
+        "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Views/ContentView.swift"
+      ],
+      "tempsPath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "AgentHeavenNativeApp" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "AgentHeavenNativeApp",
+      "-package-name",
+      "native_macos",
+      "-c",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/AgentHeavenNativeApp.swift",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Models/AHModels.swift",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/AppPaths.swift",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/BridgeClient.swift",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/LocalStateRepository.swift",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/ViewModels/AppViewModel.swift",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Views/ContentView.swift",
+      "-I",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx14.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j12",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "AgentHeavenNativeApp_main",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.0.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "native_macos",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "AgentHeavenNativeApp" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp-entitlement.plist" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<entitlement-plist>"
+        },
+        {
+          "kind" : "virtual",
+          "name" : "<com.apple.security.get-task-allow>"
+        }
+      ],
+      "outputFilePath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp-entitlement.plist"
+    },
+    "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/AgentHeavenNativeApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Models/AHModels.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/AppPaths.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/BridgeClient.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Services/LocalStateRepository.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/ViewModels/AppViewModel.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/Sources/AgentHeavenNativeApp/Views/ContentView.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/sources"
+    },
+    "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AHModels.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AgentHeavenNativeApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AppPaths.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/AppViewModel.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/BridgeClient.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/ContentView.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.build/LocalStateRepository.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/AgentHeavenNativeApp.product/Objects.LinkFileList"
+    },
+    "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/simonschnabl/Library/Application Support/Agent Heaven/checkouts/worktrees/bcbc4a93-fccb-4d57-8a00-18c1d7850443/1ec97535-5be5-446d-9f94-8d03767a9162/native-macos/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

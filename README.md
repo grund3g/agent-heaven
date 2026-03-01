@@ -56,6 +56,26 @@ npm run dev
 
 `npm run dev` runs `tsc -w` and Electron together. Live reload is enabled by default for `renderer/*` and the preload script (compiled to `build/preload.js`).
 
+## Native macOS Scaffold (Parallel)
+
+A parallel native macOS implementation now lives in `native-macos/` (SwiftUI).
+
+- Start optional read-only bridge from this repo:
+
+```bash
+npm run native:bridge
+```
+
+- Open `native-macos/Package.swift` in Xcode and run target `AgentHeavenNativeApp`.
+- Or run from terminal:
+
+```bash
+cd native-macos
+swift run AgentHeavenNativeApp
+```
+
+More details: `docs/native-macos.md`.
+
 ## Tests
 
 ```bash

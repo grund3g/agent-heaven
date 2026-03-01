@@ -16,6 +16,7 @@
     "dev": "node scripts/dev.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "native:bridge": "npm run build && node build/native-bridge.js",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },
