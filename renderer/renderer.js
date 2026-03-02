@@ -9443,12 +9443,14 @@ function renderJobDialogMeta(job) {
       const commit = async () => {
         const newModel = input.value.trim();
         input.removeEventListener("blur", commit);
-        if (newModel === currentModel) {
-          valueSpan.textContent = currentModel || "(default)";
-          return;
-        }
+        // Immediately remove the input so the re-render guard is cleared.
+        valueSpan.textContent = newModel || "(default)";
+        if (newModel === currentModel) return;
         try {
           await api.jobsPatch(jobId, { model: newModel });
+          // Re-render meta after successful patch to reflect the new state.
+          const updatedJob = state.jobs.get(jobId);
+          if (updatedJob) renderJobDialogMeta(updatedJob);
         } catch (err) {
           console.error("Failed to patch job model:", err);
           valueSpan.textContent = currentModel || "(default)";
