@@ -464,6 +464,19 @@ async function handleJobs(state: NativeBridgeState, req: http.IncomingMessage, r
     return;
   }
 
+  const patchMatch = routeMatch(pathname, /^\/jobs\/([^/]+)\/patch$/);
+  if (patchMatch && method === "POST") {
+    const id = decodeURIComponent(patchMatch[0]);
+    const body: JsonRecord = await readJsonBody(req).catch(() => ({} as JsonRecord));
+    const result = state.jobsManager.patchMeta(id, body);
+    if (isErrResult(result)) {
+      respondJson(res, 400, result);
+      return;
+    }
+    respondJson(res, 200, result);
+    return;
+  }
+
   respondJson(res, 404, { error: "Not found" });
 }
 

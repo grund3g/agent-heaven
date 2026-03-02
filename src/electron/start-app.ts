@@ -3180,6 +3180,11 @@ export async function startApp(): Promise<void> {
     assertTrustedIpcSender(evt);
     return jobsManager.cancel(jobId);
   });
+  ipcMain.handle("jobs:patch", async (evt, payload) => {
+    assertTrustedIpcSender(evt);
+    const p = payload && typeof payload === "object" ? (payload as any) : {};
+    return jobsManager.patchMeta(p.jobId, p.patch);
+  });
 
   ipcMain.handle("term:ensure", async (evt, payload) => {
     assertTrustedIpcSender(evt);

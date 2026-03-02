@@ -3458,6 +3458,32 @@ export class JobsManager {
     return { ok: true };
   }
 
+  patchMeta(jobId: unknown, patch: unknown) {
+    const id = String(jobId || "");
+    const job = this.jobs.get(id);
+    if (!job) return { ok: false, error: "Unknown job" };
+
+    const p = patch && typeof patch === "object" ? (patch as any) : {};
+    const applied: Record<string, any> = {};
+
+    if (typeof p.model === "string") {
+      job.model = p.model;
+      applied.model = job.model;
+    }
+
+    if (Object.keys(applied).length === 0) return { ok: false, error: "Nothing to patch" };
+
+    this.sendJobEvent({ jobId: id, kind: "meta", patch: applied });
+    this.markJobDirty(id);
+    try {
+      this.history.save(snapshotJob(job));
+      this.dirtyJobIds.delete(id);
+    } catch {
+      // ignore
+    }
+    return { ok: true };
+  }
+
   archive(params: { jobId: string; reason?: string }) {
     const jobId = params && params.jobId ? String(params.jobId) : "";
     const job = this.jobs.get(jobId);

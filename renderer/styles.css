@@ -2306,6 +2306,13 @@ body::before {
   box-shadow: 0 0 0 1px rgba(var(--danger-rgb), 0.12) inset;
 }
 
+.jobmeta__chip--editable {
+  cursor: pointer;
+}
+.jobmeta__chip--editable:hover {
+  border-color: rgba(var(--accent-rgb), 0.55);
+}
+
 .jobmeta__key {
   flex: 0 0 auto;
   padding: 4px 7px 4px 9px;
