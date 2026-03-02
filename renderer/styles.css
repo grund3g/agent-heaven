@@ -2313,6 +2313,21 @@ body::before {
   border-color: rgba(var(--accent-rgb), 0.55);
 }
 
+.jobmeta__edit-input {
+  background: var(--surface3);
+  color: var(--ink);
+  border: 1px solid var(--stroke);
+  border-radius: 4px;
+  font: inherit;
+  font-size: inherit;
+  padding: 0 4px;
+  width: 140px;
+  outline: none;
+}
+.jobmeta__edit-input:focus {
+  border-color: rgba(var(--accent-rgb), 0.6);
+}
+
 .jobmeta__key {
   flex: 0 0 auto;
   padding: 4px 7px 4px 9px;
