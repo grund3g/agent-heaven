@@ -8872,6 +8872,8 @@ async function openJobDialog(jobId) {
 
 function renderJobDialogMeta(job) {
   if (!els.jobDialogMeta) return;
+  // Skip re-render while an editable chip input is active (prevents destroying the input mid-edit).
+  if (els.jobDialogMeta.querySelector("[data-editable-field] input")) return;
   els.jobDialogMeta.removeAttribute(TOKEN_TOOLTIP_ATTR);
   els.jobDialogMeta.removeAttribute("title");
   const chips = [];
@@ -9007,9 +9009,9 @@ function renderJobDialogMeta(job) {
       const currentModel = jobObj.model || "";
       const input = document.createElement("input");
       input.type = "text";
+      input.className = "jobmeta__edit-input";
       input.value = currentModel;
       input.placeholder = "e.g. sonnet, opus";
-      input.style.cssText = "background:var(--surface-2,#1e1e2e);color:inherit;border:1px solid var(--border,#444);border-radius:3px;font:inherit;font-size:inherit;padding:0 4px;width:140px;outline:none;";
 
       valueSpan.textContent = "";
       valueSpan.appendChild(input);
