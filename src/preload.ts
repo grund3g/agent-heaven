@@ -191,6 +191,10 @@ contextBridge.exposeInMainWorld("agentHeaven", {
     await invokeOk("jobs:delete", jobId);
     return true;
   },
+  jobsPatch: async (jobId, patch) => {
+    await invokeOk("jobs:patch", { jobId, patch });
+    return true;
+  },
 
   termEnsure: async (jobId, cols, rows) => {
     const res = await invokeOk("term:ensure", { jobId, cols, rows });

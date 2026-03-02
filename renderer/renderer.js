@@ -8887,7 +8887,8 @@ function renderJobDialogMeta(job) {
       value: v,
       title,
       tone: opts && opts.tone ? String(opts.tone) : "",
-      long: !!(opts && opts.long)
+      long: !!(opts && opts.long),
+      editable: !!(opts && opts.editable)
     });
   };
   const fmtTokMeta = (raw) => {
@@ -8948,7 +8949,7 @@ function renderJobDialogMeta(job) {
     const threadRaw = String(job.threadId);
     pushChip("thread", middleEllipsis(threadRaw, { head: 12, tail: 10 }), { title: threadRaw, long: true });
   }
-  if (job.model) pushChip("model", job.model);
+  pushChip("model", job.model || "(default)", { editable: true });
   const ut = job.usageTotal && typeof job.usageTotal === "object" ? job.usageTotal : null;
   if (ut && toIntOrZero(ut.turns) > 0) {
     const turns = toIntOrZero(ut.turns);
@@ -8979,12 +8980,70 @@ function renderJobDialogMeta(job) {
     .map((chip) => {
       const classes = ["jobmeta__chip"];
       if (chip.long) classes.push("jobmeta__chip--long");
+      if (chip.editable) classes.push("jobmeta__chip--editable");
       if (chip.tone === "run" || chip.tone === "done" || chip.tone === "attn") classes.push(`jobmeta__chip--${chip.tone}`);
       const tooltipAttr = chip.title ? ` ${TOKEN_TOOLTIP_ATTR}="${escapeHtml(chip.title)}"` : "";
-      return `<span class="${classes.join(" ")}"${tooltipAttr}><span class="jobmeta__key">${escapeHtml(chip.key)}</span><span class="jobmeta__value">${escapeHtml(chip.value)}</span></span>`;
+      const editAttr = chip.editable ? ` data-editable-field="${escapeHtml(chip.key)}"` : "";
+      return `<span class="${classes.join(" ")}"${tooltipAttr}${editAttr}><span class="jobmeta__key">${escapeHtml(chip.key)}</span><span class="jobmeta__value">${escapeHtml(chip.value)}</span></span>`;
     })
     .join("");
   els.jobDialogMeta.innerHTML = `<div class="jobmeta">${chipsHtml}</div>`;
+
+  // Wire up editable chips (model inline editing)
+  els.jobDialogMeta.querySelectorAll("[data-editable-field]").forEach((chipEl) => {
+    chipEl.style.cursor = "pointer";
+    chipEl.addEventListener("click", () => {
+      const field = chipEl.getAttribute("data-editable-field");
+      if (field !== "model") return;
+      const jobId = state.selectedJobId;
+      if (!jobId) return;
+      const jobObj = state.jobs.get(jobId);
+      if (!jobObj) return;
+
+      const valueSpan = chipEl.querySelector(".jobmeta__value");
+      if (!valueSpan) return;
+      if (chipEl.querySelector("input")) return; // already editing
+
+      const currentModel = jobObj.model || "";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = currentModel;
+      input.placeholder = "e.g. sonnet, opus";
+      input.style.cssText = "background:var(--surface-2,#1e1e2e);color:inherit;border:1px solid var(--border,#444);border-radius:3px;font:inherit;font-size:inherit;padding:0 4px;width:140px;outline:none;";
+
+      valueSpan.textContent = "";
+      valueSpan.appendChild(input);
+      input.focus();
+      input.select();
+
+      const commit = async () => {
+        const newModel = input.value.trim();
+        input.removeEventListener("blur", commit);
+        if (newModel === currentModel) {
+          valueSpan.textContent = currentModel || "(default)";
+          return;
+        }
+        try {
+          await api.jobsPatch(jobId, { model: newModel });
+        } catch (err) {
+          console.error("Failed to patch job model:", err);
+          valueSpan.textContent = currentModel || "(default)";
+        }
+      };
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          input.removeEventListener("blur", commit);
+          valueSpan.textContent = currentModel || "(default)";
+        }
+      });
+      input.addEventListener("blur", commit);
+    });
+  });
 }
 
 function setActiveTab(tab) {
