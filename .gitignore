@@ -6,3 +6,7 @@ build/
 # Electron build artifacts
 *.log
 *.tsbuildinfo
+
+# SwiftPM build artifacts
+native-macos/.build/
+native-macos/.swiftpm/
