@@ -2327,7 +2327,6 @@ body::before {
 .jobmeta__edit-input:focus {
   border-color: rgba(var(--accent-rgb), 0.6);
 }
-
 .jobmeta__key {
   flex: 0 0 auto;
   padding: 4px 7px 4px 9px;
