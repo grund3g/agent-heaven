@@ -67,6 +67,7 @@ const api = window.agentHeaven;
   jobMoreBtn: document.getElementById("jobMoreBtn"),
   jobMoreMenu: document.getElementById("jobMoreMenu"),
   jobActionsMenu: document.getElementById("jobActionsMenu"),
+  jobRecheckMenu: document.getElementById("jobRecheckMenu"),
 
   rerunDialog: document.getElementById("rerunDialog"),
   rerunDialogClose: document.getElementById("rerunDialogClose"),
@@ -5350,6 +5351,17 @@ function lastAssistantPreview(job) {
   return "";
 }
 
+function lastAssistantMessageText(job) {
+  const msgs = Array.isArray(job && job.messages) ? job.messages : [];
+  for (let i = msgs.length - 1; i >= 0; i -= 1) {
+    const m = msgs[i];
+    if (!m || m.role !== "assistant") continue;
+    const text = typeof m.text === "string" ? m.text.trimEnd() : "";
+    if (text) return text;
+  }
+  return "";
+}
+
 function lastUserPromptPreview(job) {
   const prompts = job && Array.isArray(job.prompts) ? job.prompts : [];
   for (let i = prompts.length - 1; i >= 0; i -= 1) {
@@ -7085,10 +7097,22 @@ function jobActionsFromSettings() {
   return normalizeActions(s.actions);
 }
 
+function recheckTargetAgentsForJob(job) {
+  const src = normalizeAgentKey(job && job.agent ? job.agent : "");
+  const all = ["codex", "claude", "gemini"];
+  return all.filter((a) => a !== src);
+}
+
 function hideJobActionsMenu() {
   if (!els.jobActionsMenu) return;
   if (els.jobActionsMenu.hidden) return;
   els.jobActionsMenu.hidden = true;
+}
+
+function hideJobRecheckMenu() {
+  if (!els.jobRecheckMenu) return;
+  if (els.jobRecheckMenu.hidden) return;
+  els.jobRecheckMenu.hidden = true;
 }
 
 function renderJobActionsMenu() {
@@ -7112,6 +7136,7 @@ function renderJobActionsMenu() {
 
 function openJobActionsMenu(anchorEl) {
   if (!els.jobActionsMenu) return;
+  hideJobRecheckMenu();
 
   renderJobActionsMenu();
 
@@ -7140,6 +7165,58 @@ function openJobActionsMenu(anchorEl) {
   const x = clampNumber(idealX, pad, maxX, pad);
 
   // Align with the clicked row; clamp to viewport.
+  const y = clampNumber(aTop - 6, pad, maxY, pad);
+
+  menu.style.left = `${Math.round(x)}px`;
+  menu.style.top = `${Math.round(y)}px`;
+}
+
+function renderJobRecheckMenu(jobId) {
+  if (!els.jobRecheckMenu) return;
+  const id = String(jobId || "").trim();
+  const job = id ? state.jobs.get(id) : null;
+  const agents = recheckTargetAgentsForJob(job);
+  const out = [];
+
+  for (const agent of agents) {
+    const key = escapeHtml(agent);
+    const label = escapeHtml(agentDisplayName(agent));
+    out.push(`<button type="button" class="ctxmenu__item" data-jobrecheck-agent="${key}">${label}</button>`);
+  }
+
+  if (out.length === 0) out.push(`<div class="ctxmenu__item" aria-disabled="true">No other agents available</div>`);
+  els.jobRecheckMenu.innerHTML = out.join("");
+}
+
+function openJobRecheckMenu(anchorEl, jobId) {
+  if (!els.jobRecheckMenu) return;
+  hideJobActionsMenu();
+
+  renderJobRecheckMenu(jobId);
+
+  const menu = els.jobRecheckMenu;
+  menu.hidden = false;
+
+  // Start at a safe origin so we can measure reliably.
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+
+  const ar = anchorEl && typeof anchorEl.getBoundingClientRect === "function" ? anchorEl.getBoundingClientRect() : null;
+  const rect = menu.getBoundingClientRect();
+  const pad = 8;
+
+  const maxX = Math.max(pad, window.innerWidth - rect.width - pad);
+  const maxY = Math.max(pad, window.innerHeight - rect.height - pad);
+
+  const aLeft = ar ? ar.left : window.innerWidth / 2;
+  const aRight = ar ? ar.right : window.innerWidth / 2;
+  const aTop = ar ? ar.top : window.innerHeight / 2;
+
+  const spaceRight = window.innerWidth - aRight;
+  const openRight = spaceRight >= rect.width + 12;
+
+  const idealX = openRight ? aRight + 8 : aLeft - rect.width - 8;
+  const x = clampNumber(idealX, pad, maxX, pad);
   const y = clampNumber(aTop - 6, pad, maxY, pad);
 
   menu.style.left = `${Math.round(x)}px`;
@@ -7890,12 +7967,15 @@ function hideJobMoreMenu() {
   els.jobMoreMenu.hidden = true;
   els.jobMoreBtn.setAttribute("aria-expanded", "false");
   hideJobActionsMenu();
+  hideJobRecheckMenu();
 }
 
 function openJobMoreMenu() {
   if (!els.jobMoreMenu || !els.jobMoreBtn) return;
   const btn = els.jobMoreBtn;
   const menu = els.jobMoreMenu;
+  hideJobActionsMenu();
+  hideJobRecheckMenu();
 
   const jobId = state.selectedJobId;
   const job = jobId ? state.jobs.get(jobId) : null;
@@ -7952,6 +8032,9 @@ function updateJobMoreMenuActions(job) {
   const canDelete = b === "trash" && !running;
   const canRestore = b === "archive" || b === "trash";
   const canRerun = !running;
+  const hasAssistantText =
+    !!lastAssistantMessageText(job) || !!lastAssistantPreview(job) || !!(job && typeof job.previewText === "string" && job.previewText.trim());
+  const canRecheck = !running && hasAssistantText;
 
   const byAction = (name) => menu.querySelector(`[data-jobmore-action="${name}"]`);
   const setActionHidden = (name, hidden) => {
@@ -7960,6 +8043,7 @@ function updateJobMoreMenuActions(job) {
   };
 
   setActionHidden("actions", false);
+  setActionHidden("recheck", !canRecheck);
   setActionHidden("rerun", !canRerun);
   setActionHidden("restore", !canRestore);
   setActionHidden("archive", !canFile);
@@ -7969,7 +8053,7 @@ function updateJobMoreMenuActions(job) {
   const sep = menu.querySelector('[data-jobmore-sep="danger"]');
   if (sep) sep.hidden = !canDelete;
 
-  const anyVisible = ["actions", "rerun", "restore", "archive", "trash", "delete"].some((a) => {
+  const anyVisible = ["actions", "recheck", "rerun", "restore", "archive", "trash", "delete"].some((a) => {
     const el = byAction(a);
     return !!el && !el.hidden;
   });
@@ -11100,6 +11184,87 @@ function jobPromptTextAndImagesForRerun(job, promptSource) {
   return { prompt: parts.join("\n\n"), images };
 }
 
+function buildPromptForAgentRecheck({ sourceJob, originalPromptText, assistantText }) {
+  const original = String(originalPromptText || "").trim();
+  const answer = String(assistantText || "").trim();
+  const sourceAgent = agentDisplayName(sourceJob && sourceJob.agent ? sourceJob.agent : "");
+  const sourceModel = sourceJob && sourceJob.model ? String(sourceJob.model).trim() : "";
+  const answerLabel = sourceModel ? `${sourceAgent} (${sourceModel})` : sourceAgent;
+
+  const originalBlock = original || "(no prompt text available)";
+  const answerBlock = answer || "(no assistant response available)";
+
+  return [
+    "Validate the following agent response.",
+    "",
+    "Original user request:",
+    "```",
+    originalBlock,
+    "```",
+    "",
+    `Response to validate (${answerLabel}):`,
+    "```",
+    answerBlock,
+    "```",
+    "",
+    "Please do all of the following:",
+    "1. Identify concrete mistakes, risky assumptions, or missing edge cases.",
+    "2. Provide a corrected/improved final answer.",
+    "3. If uncertainty remains, list specific checks to run.",
+    "",
+    "Reply in the same language as the original user request."
+  ].join("\n");
+}
+
+async function startAgentRecheckJob(sourceJobId, targetAgent) {
+  const id = String(sourceJobId || "").trim();
+  if (!id) return;
+
+  const agent = normalizeAgentKey(targetAgent);
+  const sourceJob = await ensureJobDetailsLoaded(id);
+  if (!sourceJob) {
+    showToast("Could not load job details for recheck.");
+    return;
+  }
+  if (jobStatusForUi(sourceJob) === "running") {
+    showToast("Stop the job before rechecking.");
+    return;
+  }
+
+  const sourceAgent = normalizeAgentKey(sourceJob.agent);
+  if (agent === sourceAgent) {
+    showToast("Select a different agent for recheck.");
+    return;
+  }
+
+  const assistantText = lastAssistantMessageText(sourceJob);
+  if (!assistantText) {
+    showToast("No assistant response found to recheck.");
+    return;
+  }
+
+  const { prompt: originalPromptText, images } = jobPromptTextAndImagesForRerun(sourceJob, "all");
+  const recheckPrompt = buildPromptForAgentRecheck({
+    sourceJob,
+    originalPromptText,
+    assistantText
+  });
+
+  try {
+    setView("board");
+    await api.jobsStart({
+      prompt: recheckPrompt,
+      projectId: sourceJob.projectId,
+      agent,
+      model: "",
+      images
+    });
+    showToast(`Recheck started (${agentDisplayName(agent)})`);
+  } catch (err) {
+    showToast(String(err && err.message ? err.message : err));
+  }
+}
+
 async function ensureJobDetailsLoaded(jobId) {
   const id = String(jobId || "");
   if (!id) return null;
@@ -11651,6 +11816,10 @@ function wireUi() {
 		        openJobActionsMenu(btn);
 		        return;
 		      }
+		      if (action === "recheck") {
+		        openJobRecheckMenu(btn, state.selectedJobId);
+		        return;
+		      }
 		
 		      hideJobMoreMenu();
 		
@@ -11679,13 +11848,14 @@ function wireUi() {
 		    // Click-out closes the menu.
 		    document.addEventListener(
 		      "click",
-		      (e) => {
-		        if (!els.jobMoreMenu || els.jobMoreMenu.hidden) return;
-		        if (els.jobMoreMenu.contains(e.target)) return;
-		        if (els.jobActionsMenu && els.jobActionsMenu.contains(e.target)) return;
-		        if (els.jobMoreBtn && els.jobMoreBtn.contains(e.target)) return;
-		        hideJobMoreMenu();
-		      },
+			      (e) => {
+			        if (!els.jobMoreMenu || els.jobMoreMenu.hidden) return;
+			        if (els.jobMoreMenu.contains(e.target)) return;
+			        if (els.jobActionsMenu && els.jobActionsMenu.contains(e.target)) return;
+			        if (els.jobRecheckMenu && els.jobRecheckMenu.contains(e.target)) return;
+			        if (els.jobMoreBtn && els.jobMoreBtn.contains(e.target)) return;
+			        hideJobMoreMenu();
+			      },
 		      true
 		    );
 		
@@ -12942,6 +13112,17 @@ function wireUi() {
       runJobActionById(id).catch((err) => {
         showToast(String(err && err.message ? err.message : err) || "Failed to run action.");
       });
+    });
+  }
+  if (els.jobRecheckMenu) {
+    els.jobRecheckMenu.addEventListener("click", (e) => {
+      const act = e.target && e.target.closest ? e.target.closest("[data-jobrecheck-agent]") : null;
+      if (!act) return;
+      e.preventDefault();
+      const agent = normalizeAgentKey(act.getAttribute("data-jobrecheck-agent") || "");
+      const jobId = state.selectedJobId;
+      hideJobMoreMenu();
+      startAgentRecheckJob(jobId, agent);
     });
   }
   els.cancelJobBtn.addEventListener("click", () => cancelSelectedJob());
