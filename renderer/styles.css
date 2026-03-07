@@ -2701,6 +2701,7 @@ body::before {
   display: none;
   /* Allow this grid item to shrink within dialogs (prevents horizontal overflow). */
   min-width: 0;
+  min-height: 0;
 }
 
 .panel--terminal {
@@ -4715,5 +4716,191 @@ body::before {
 @media (prefers-reduced-motion: reduce) {
   .tour__spotlight {
     transition: none;
+  }
+}
+
+/* ---------------------------
+   Timeline Sidebar (Job Dialog)
+   --------------------------- */
+
+.dialog__panels {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dialog__panels--with-timeline {
+  grid-template-columns: 44px 1fr;
+}
+
+.tlsidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 0;
+  min-height: 0;
+  position: relative;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tlsidebar::-webkit-scrollbar {
+  display: none;
+}
+
+.tlsidebar::before {
+  content: "";
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  background: var(--stroke-soft);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --- Timeline node / bubble --- */
+
+.tlnode {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--stroke-strong);
+  background: var(--surface3);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 6px 0;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+/* Larger hit area */
+.tlnode::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+}
+
+.tlnode:hover {
+  transform: scale(1.4);
+  border-color: rgba(var(--accent2-rgb), 0.72);
+  background: rgba(var(--accent2-rgb), 0.22);
+  box-shadow: 0 0 0 3px rgba(var(--accent2-rgb), 0.12);
+}
+
+.tlnode--user {
+  border-color: rgba(var(--accent-rgb), 0.52);
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+.tlnode--user:hover {
+  border-color: rgba(var(--accent-rgb), 0.82);
+  background: rgba(var(--accent-rgb), 0.32);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
+}
+
+.tlnode--assistant {
+  border-color: rgba(var(--accent2-rgb), 0.42);
+  background: rgba(var(--accent2-rgb), 0.14);
+}
+
+.tlnode--final {
+  width: 14px;
+  height: 14px;
+  border-color: rgba(var(--accent2-rgb), 0.72);
+  background: rgba(var(--accent2-rgb), 0.38);
+  box-shadow: 0 0 6px rgba(var(--accent2-rgb), 0.22);
+}
+
+.tlnode--typing {
+  border-style: dashed;
+  animation: tlnode-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tlnode-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+
+/* --- Tooltip --- */
+
+.tltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke-soft);
+  background: var(--surface2);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.tltip__role {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  margin-bottom: 2px;
+}
+
+.tltip__preview {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.tltip__time {
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tlnode:hover .tltip {
+  opacity: 1;
+}
+
+/* --- Message highlight on click-to-scroll --- */
+
+.msg--highlight {
+  animation: msg-highlight-flash 1.2s ease-out;
+}
+
+@keyframes msg-highlight-flash {
+  0%   { box-shadow: 0 0 0 2px rgba(var(--accent2-rgb), 0.52); }
+  100% { box-shadow: 0 0 0 2px rgba(var(--accent2-rgb), 0); }
+}
+
+/* --- Responsive: hide sidebar on narrow viewports --- */
+
+@media (max-width: 900px) {
+  .tlsidebar {
+    display: none !important;
+  }
+
+  .dialog__panels--with-timeline {
+    grid-template-columns: 1fr;
   }
 }
