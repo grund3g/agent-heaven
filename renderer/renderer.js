@@ -1016,10 +1016,11 @@ function timelineTooltipDataFromNode(node) {
   return { role, preview, time };
 }
 
-function ensureTimelineTooltipEl() {
+function ensureTimelineTooltipEl(hostEl) {
   if (!document || !document.body) return null;
+  const host = hostEl && hostEl.nodeType === Node.ELEMENT_NODE ? hostEl : document.body;
   if (timelineTooltip.root) {
-    if (timelineTooltip.root.parentElement !== document.body) document.body.appendChild(timelineTooltip.root);
+    if (timelineTooltip.root.parentElement !== host) host.appendChild(timelineTooltip.root);
     return timelineTooltip.root;
   }
   const wrap = document.createElement("div");
@@ -1039,7 +1040,7 @@ function ensureTimelineTooltipEl() {
   time.className = "tltip__time";
   wrap.appendChild(time);
 
-  document.body.appendChild(wrap);
+  host.appendChild(wrap);
   timelineTooltip.root = wrap;
   timelineTooltip.roleEl = role;
   timelineTooltip.previewEl = preview;
@@ -1075,7 +1076,7 @@ function positionTimelineTooltip() {
     return;
   }
 
-  const root = ensureTimelineTooltipEl();
+  const root = ensureTimelineTooltipEl(tooltipHostForElement(node));
   if (!root) return;
   if (timelineTooltip.roleEl) {
     timelineTooltip.roleEl.textContent = data.role;
@@ -1123,7 +1124,7 @@ function showTimelineTooltipFor(node) {
     hideTimelineTooltip();
     return;
   }
-  if (!ensureTimelineTooltipEl()) return;
+  if (!ensureTimelineTooltipEl(tooltipHostForElement(node))) return;
   timelineTooltip.activeNode = node;
   scheduleTimelineTooltipPosition();
 }
