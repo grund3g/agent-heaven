@@ -126,6 +126,8 @@ export const DEFAULT_STATE = {
       claude: {
         path: "", // empty => use PATH resolution ("claude")
         model: "",
+        apiKey: "",
+        apiKeyEnvVar: "ANTHROPIC_API_KEY",
         permissionMode: "acceptEdits", // default | acceptEdits | bypassPermissions | plan
         dangerouslySkipPermissions: false
       },
@@ -472,6 +474,18 @@ function ensureAgentSettings(settings) {
   if (typeof claude.model !== "string") {
     claude.model = "";
     changed = true;
+  }
+  if (typeof claude.apiKey !== "string") {
+    claude.apiKey = "";
+    changed = true;
+  }
+  {
+    const raw = typeof claude.apiKeyEnvVar === "string" ? claude.apiKeyEnvVar.trim() : "";
+    const nextEnvVar = raw || "ANTHROPIC_API_KEY";
+    if (claude.apiKeyEnvVar !== nextEnvVar) {
+      claude.apiKeyEnvVar = nextEnvVar;
+      changed = true;
+    }
   }
   {
     const raw = typeof claude.permissionMode === "string" ? claude.permissionMode.trim() : "";

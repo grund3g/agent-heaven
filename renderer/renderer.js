@@ -144,6 +144,8 @@ const api = window.agentHeaven;
 	  settingsCodexColor: document.getElementById("settingsCodexColor"),
 	  settingsClaudePath: document.getElementById("settingsClaudePath"),
 	  settingsClaudeModel: document.getElementById("settingsClaudeModel"),
+	  settingsClaudeApiKey: document.getElementById("settingsClaudeApiKey"),
+	  settingsClaudeApiKeyEnvVar: document.getElementById("settingsClaudeApiKeyEnvVar"),
 	  settingsClaudePermissionMode: document.getElementById("settingsClaudePermissionMode"),
 	  settingsClaudeSkipPermissions: document.getElementById("settingsClaudeSkipPermissions"),
 	  settingsGeminiPath: document.getElementById("settingsGeminiPath"),
@@ -2009,6 +2011,51 @@ function sanitizeExternalUrl(rawUrl) {
   return "";
 }
 
+function decodeFileUrlToPath(rawUrl) {
+  try {
+    const u = new URL(String(rawUrl || "").trim());
+    if (u.protocol !== "file:") return "";
+
+    const host = decodeURIComponent(u.host || "");
+    let pathname = decodeURIComponent(u.pathname || "");
+
+    if (host) {
+      const sharePath = pathname.replaceAll("/", "\\");
+      return `\\\\${host}${sharePath}`;
+    }
+
+    if (/^\/[a-zA-Z]:/.test(pathname)) pathname = pathname.slice(1);
+    if (/^[a-zA-Z]:/.test(pathname)) return pathname.replaceAll("/", "\\");
+    return pathname || "";
+  } catch {
+    return "";
+  }
+}
+
+function stripFileReferenceSuffix(rawPath) {
+  let s = String(rawPath || "").trim();
+  if (!s) return "";
+
+  s = s.replace(/#L\d+(?:C\d+)?$/i, "");
+  s = s.replace(/:(\d+)(?::(\d+))?$/u, "");
+  return s.trim();
+}
+
+function sanitizeMarkdownFilePath(rawUrl) {
+  let s = String(rawUrl || "").trim();
+  if (!s) return "";
+
+  if (/^file:\/\//i.test(s)) s = decodeFileUrlToPath(s);
+  if (!s) return "";
+
+  const isPosixAbsolute = s.startsWith("/");
+  const isWindowsAbsolute = /^[a-zA-Z]:[\\/]/.test(s);
+  const isUncPath = s.startsWith("\\\\");
+  if (!isPosixAbsolute && !isWindowsAbsolute && !isUncPath) return "";
+
+  return stripFileReferenceSuffix(s);
+}
+
 function applyMarkdownInlineFormatting(escapedText) {
   let s = String(escapedText || "");
   // Bold before italics to support **_both_** patterns.
@@ -2041,6 +2088,16 @@ function renderMarkdownInlineTextSafeHtml(text) {
 
     if (at > i) {
       out.push(applyMarkdownInlineFormatting(escapeHtml(s.slice(i, at))));
+    }
+
+    const filePath = sanitizeMarkdownFilePath(urlRaw);
+    if (filePath) {
+      const fileLabel = String(label || "").trim() || pathBaseName(filePath);
+      out.push(
+        `<a class="md-link md-link--file" href="#" data-file-path="${escapeHtml(filePath)}" title="${escapeHtml(filePath)}">${applyMarkdownInlineFormatting(escapeHtml(fileLabel))}</a>`
+      );
+      i = at + whole.length;
+      continue;
     }
 
     const url = sanitizeExternalUrl(urlRaw);
@@ -6436,6 +6493,31 @@ function jobPathForEditor(job) {
   const project = projectById(job.projectId);
   const basePath = project && typeof project.path === "string" ? project.path.trim() : "";
   return basePath || "";
+}
+
+async function openMarkdownFilePath(targetPath) {
+  const p = String(targetPath || "").trim();
+  if (!p || !api) return;
+
+  if (hasConfiguredEditorCommand() && typeof api.editorOpenPath === "function") {
+    try {
+      await api.editorOpenPath(p);
+      return;
+    } catch {
+      // Fall through to the OS shell when the editor launch fails.
+    }
+  }
+
+  if (typeof api.shellOpenPath === "function") {
+    try {
+      await api.shellOpenPath(p);
+      return;
+    } catch {
+      // ignore and surface a single toast below
+    }
+  }
+
+  showToast("Failed to open file reference.");
 }
 
 function integratedBadgeForJob(job) {
@@ -11639,6 +11721,16 @@ function wireUi() {
 
   // Prevent the Electron window from navigating away when users click Markdown links.
   document.addEventListener("click", (e) => {
+    const fileLink = e.target && e.target.closest ? e.target.closest("a.md-link--file") : null;
+    if (fileLink) {
+      const filePath = fileLink.getAttribute("data-file-path") || "";
+      if (!filePath) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void openMarkdownFilePath(filePath);
+      return;
+    }
+
     const a = e.target && e.target.closest ? e.target.closest("a.md-link") : null;
     if (!a) return;
     const href = a.getAttribute("href") || "";
@@ -13360,6 +13452,8 @@ function wireUi() {
 			        claude: {
 			          path: els.settingsClaudePath.value.trim(),
 			          model: els.settingsClaudeModel.value.trim(),
+			          apiKey: els.settingsClaudeApiKey ? els.settingsClaudeApiKey.value.trim() : "",
+			          apiKeyEnvVar: els.settingsClaudeApiKeyEnvVar ? els.settingsClaudeApiKeyEnvVar.value.trim() : "ANTHROPIC_API_KEY",
 			          permissionMode: els.settingsClaudePermissionMode ? els.settingsClaudePermissionMode.value : "acceptEdits",
 			          dangerouslySkipPermissions: !!(els.settingsClaudeSkipPermissions && els.settingsClaudeSkipPermissions.checked)
 			        },
@@ -14338,6 +14432,8 @@ function openSettingsDialog() {
   els.settingsCodexColor.value = codex.color || "auto";
   els.settingsClaudePath.value = claude.path || "";
   els.settingsClaudeModel.value = claude.model || "";
+  if (els.settingsClaudeApiKey) els.settingsClaudeApiKey.value = claude.apiKey || "";
+  if (els.settingsClaudeApiKeyEnvVar) els.settingsClaudeApiKeyEnvVar.value = claude.apiKeyEnvVar || "ANTHROPIC_API_KEY";
   if (els.settingsClaudePermissionMode) els.settingsClaudePermissionMode.value = claude.permissionMode || "acceptEdits";
   if (els.settingsClaudeSkipPermissions) els.settingsClaudeSkipPermissions.checked = !!claude.dangerouslySkipPermissions;
   if (els.settingsGeminiPath) els.settingsGeminiPath.value = gemini.path || "";

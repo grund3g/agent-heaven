@@ -395,6 +395,121 @@ describe("electron/jobs-manager", () => {
     expect(resumeOpts.sessionId).toBe("s123");
   });
 
+  it("prepares Claude image attachments via Messages API on job start", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-claude-img-start-"));
+    const imagePath = path.join(tmpDir, "screen.png");
+    fs.writeFileSync(imagePath, "fake");
+
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: tmpDir }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+    let execOpts: any = null;
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec: (opts: any) => {
+        execOpts = opts;
+        return new FakeChild() as any;
+      },
+      runClaudeResume: () => new FakeChild() as any,
+      summarizeClaudeImages: async () => ({
+        text: "Image 1 shows a failing OIDC form with a validation error banner.",
+        model: "claude-sonnet-4-0",
+        usage: { input_tokens: 12, output_tokens: 34 }
+      }),
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    await expect(jm.start({ prompt: "Check the screenshot", projectId: "p1", agent: "claude", images: [imagePath] })).resolves.toEqual({
+      ok: true,
+      jobId: "job1"
+    });
+    expect(execOpts && typeof execOpts.prompt === "string").toBe(true);
+    expect(execOpts.prompt).toContain("Check the screenshot");
+    expect(execOpts.prompt).toContain("Attached image context");
+    expect(execOpts.prompt).toContain("Image 1 shows a failing OIDC form");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("prepares Claude image attachments via Messages API on follow-up prompts", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-claude-img-send-"));
+    const imagePath = path.join(tmpDir, "screen.png");
+    fs.writeFileSync(imagePath, "fake");
+
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: tmpDir }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runClaudeExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const runClaudeResume = (opts: any) => {
+      resumeOpts = opts;
+      return new FakeChild() as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec,
+      runClaudeResume,
+      summarizeClaudeImages: async () => ({
+        text: "Image 1 shows a modal with dense metadata chips and hard-to-read filenames.",
+        model: "claude-sonnet-4-0",
+        usage: { input_tokens: 10, output_tokens: 22 }
+      }),
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
+    });
+    execChild.emit("close", 0, null);
+
+    await expect(jm.send({ jobId: "job1", prompt: "Check this image", images: [imagePath] })).resolves.toEqual({ ok: true });
+    expect(resumeOpts && typeof resumeOpts.prompt === "string").toBe(true);
+    expect(resumeOpts.prompt).toContain("Check this image");
+    expect(resumeOpts.prompt).toContain("Attached image context");
+    expect(resumeOpts.prompt).toContain("dense metadata chips");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("applies AH_STATUS hints for claude output too", async () => {
     const store = {
       getSettings: () => ({

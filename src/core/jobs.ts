@@ -5,7 +5,7 @@ export type JobBox = "board" | "archive" | "trash";
 export type JobStatus = "running" | "done" | "failed" | "cancelled" | "needs_attention" | "unknown";
 export type JobRunMode = "single" | "war_room";
 
-export type JobPrompt = { ts: string; text: string; images?: string[] };
+export type JobPrompt = { ts: string; text: string; images?: string[]; preparedText?: string };
 export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string };
 export type JobLogEntry =
   | { ts: string; stream: "stdout" | "stderr"; kind: "log"; text: string }

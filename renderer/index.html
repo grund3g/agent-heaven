@@ -497,6 +497,14 @@
                     <input id="settingsClaudeModel" class="input" placeholder="e.g. opus, sonnet, ..." />
                   </label>
                   <label class="field">
+                    <div class="field__label">Messages API key (for image attachments)</div>
+                    <input id="settingsClaudeApiKey" class="input" type="password" placeholder="Optional; falls back to env var" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <div class="field__label">Messages API key env var</div>
+                    <input id="settingsClaudeApiKeyEnvVar" class="input" placeholder="ANTHROPIC_API_KEY" autocomplete="off" />
+                  </label>
+                  <label class="field">
                     <div class="field__label">Permission mode</div>
                     <select id="settingsClaudePermissionMode" class="select">
                       <option value="acceptEdits">acceptEdits (recommended)</option>
@@ -509,6 +517,7 @@
                     <input id="settingsClaudeSkipPermissions" type="checkbox" />
                     <div class="field__label field__label--inline">Danger: skip permissions (--dangerously-skip-permissions)</div>
                   </label>
+                  <div class="settings__note">Claude image attachments are summarized via Anthropic Messages API first, then passed into the normal Claude CLI session as text context.</div>
                 </div>
               </div>
 

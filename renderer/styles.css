@@ -2923,6 +2923,28 @@ body::before {
   text-decoration-thickness: 2px;
 }
 
+.md-link--file,
+.md-link--file:visited {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(var(--accent-rgb), 0.20);
+  background: rgba(var(--accent-rgb), 0.10);
+  color: var(--ink-code);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+.md-link--file:hover {
+  background: rgba(var(--accent-rgb), 0.14);
+  border-color: rgba(var(--accent-rgb), 0.28);
+  text-decoration: none;
+}
+
 .msg__text strong {
   font-weight: 650;
 }

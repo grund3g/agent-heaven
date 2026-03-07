@@ -16,6 +16,7 @@ import { resolveClaudeCliPathFromSettings, resolveCodexCliPathFromSettings, reso
 import type { IntegrationRuntime } from "../integrations";
 import type { McpServerManager } from "../mcp-server";
 import { writeMcpConfig, cleanupMcpConfig } from "../mcp-server";
+import { summarizeClaudeImagesWithMessagesApi } from "../claude-messages-api";
 import {
   addWorktree,
   cloneRepo,
@@ -23,7 +24,8 @@ import {
   detectDefaultBranch,
   getGitCommonDir,
   getGitInfo,
-  listCommitsInRange
+  listCommitsInRange,
+  removeWorktree
 } from "./git";
 
 type SendJobEvent = (payload: any) => void;
@@ -34,6 +36,7 @@ type RunClaudeExec = (opts: any) => ChildProcess;
 type RunClaudeResume = (opts: any) => ChildProcess;
 type RunGeminiExec = (opts: any) => ChildProcess;
 type RunGeminiResume = (opts: any) => ChildProcess;
+type SummarizeClaudeImages = (opts: any) => Promise<{ text: string; model: string; usage: any }>;
 type NeedsAttentionHeuristic = (text: unknown) => boolean;
 
 const WRITE_INTENT_PATTERNS = [
@@ -104,6 +107,7 @@ export class JobsManager {
   private runClaudeResume: RunClaudeResume | null;
   private runGeminiExec: RunGeminiExec | null;
   private runGeminiResume: RunGeminiResume | null;
+  private summarizeClaudeImages: SummarizeClaudeImages;
   private needsAttentionHeuristic: NeedsAttentionHeuristic;
   private createId: () => string;
   private integrationRuntime: IntegrationRuntime | null;
@@ -143,6 +147,7 @@ export class JobsManager {
     runClaudeResume?: RunClaudeResume;
     runGeminiExec?: RunGeminiExec;
     runGeminiResume?: RunGeminiResume;
+    summarizeClaudeImages?: SummarizeClaudeImages;
     needsAttentionHeuristic: NeedsAttentionHeuristic;
     integrationRuntime?: IntegrationRuntime | null;
     mcpServerManager?: McpServerManager | null;
@@ -158,6 +163,8 @@ export class JobsManager {
     this.runClaudeResume = typeof opts.runClaudeResume === "function" ? opts.runClaudeResume : null;
     this.runGeminiExec = typeof opts.runGeminiExec === "function" ? opts.runGeminiExec : null;
     this.runGeminiResume = typeof opts.runGeminiResume === "function" ? opts.runGeminiResume : null;
+    this.summarizeClaudeImages =
+      typeof opts.summarizeClaudeImages === "function" ? opts.summarizeClaudeImages : summarizeClaudeImagesWithMessagesApi;
     this.needsAttentionHeuristic = opts.needsAttentionHeuristic;
     this.integrationRuntime = opts.integrationRuntime || null;
     this.mcpServerManager = opts.mcpServerManager || null;
@@ -305,6 +312,20 @@ export class JobsManager {
       // If branch creation fails, it's still usable on the cloned branch; treat as best-effort.
     }
     return { projectPath: dest, checkoutMode: "clone", checkoutBranch: branchName };
+  }
+
+  private async cleanupPreparedCheckout(project: any, run: { projectPath: string; checkoutMode: string }) {
+    if (!run || !run.projectPath || run.checkoutMode === "inplace") return;
+    try {
+      if (run.checkoutMode === "worktree") {
+        const repoDir = project && typeof project.path === "string" ? String(project.path || "").trim() : "";
+        if (repoDir) await removeWorktree({ repoDir, worktreeDir: run.projectPath });
+        return;
+      }
+      fs.rmSync(run.projectPath, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures; the original error is more important
+    }
   }
 
   private flushPersist() {
@@ -810,6 +831,47 @@ export class JobsManager {
     if (s === "claude" || s === "anthropic") return "claude";
     if (s === "gemini" || s === "google") return "gemini";
     return "codex";
+  }
+
+  private async prepareClaudePromptWithImages(opts: {
+    settings: any;
+    model: string;
+    prompt: string;
+    images: string[];
+  }): Promise<{ prompt: string; processMessage: any | null }> {
+    const images = Array.isArray(opts.images) ? opts.images : [];
+    const prompt = typeof opts.prompt === "string" ? String(opts.prompt || "") : "";
+    if (images.length === 0) return { prompt, processMessage: null };
+
+    const res = await this.summarizeClaudeImages({
+      settings: opts.settings,
+      model: opts.model,
+      prompt,
+      images
+    });
+
+    const summary = typeof res.text === "string" ? res.text.trim() : "";
+    if (!summary) throw new Error("Anthropic Messages API returned no image summary text.");
+
+    const usedModel = typeof res.model === "string" && res.model.trim() ? res.model.trim() : "Anthropic Messages API";
+    const enrichedPrompt = [
+      prompt.trimEnd(),
+      "",
+      "Attached image context (generated from the uploaded images via Anthropic Messages API):",
+      summary,
+      "",
+      "Treat the summary above as the visual context from the uploaded image attachments."
+    ].join("\n");
+    if (enrichedPrompt.length > 220_000) throw new Error("Prompt + image context is too large.");
+
+    return {
+      prompt: enrichedPrompt,
+      processMessage: {
+        connectorId: "claude-messages-api",
+        level: "info",
+        text: `Analyzed ${images.length} attached image${images.length === 1 ? "" : "s"} via Anthropic Messages API (${usedModel}).`
+      }
+    };
   }
 
   private normalizeJobRunMode(value: unknown): JobRunMode {
@@ -2923,7 +2985,11 @@ export class JobsManager {
 
     const next = job.queuedPrompts[0];
     if (!next) return { ok: false, error: "No queued prompts" };
-    const runPrompt = this.wrapPromptWithStatusHint(next.text);
+    const queuedPrompt =
+      typeof (next as any).preparedText === "string" && String((next as any).preparedText || "").trim()
+        ? String((next as any).preparedText || "")
+        : next.text;
+    const runPrompt = this.wrapPromptWithStatusHint(queuedPrompt);
 
     const settings = this.store.getSettings();
     const codexSettings = this.getCodexSettingsFrom(settings);
@@ -3144,7 +3210,6 @@ export class JobsManager {
     if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
-
     const jobId = this.createId();
     const checkoutModeOverride = this.normalizeCheckoutModeOverride(params && typeof params === "object" ? (params as any).checkoutMode : "");
     const checkoutModePreference = this.normalizeCheckoutMode(
@@ -3212,8 +3277,6 @@ export class JobsManager {
       }
     }
 
-    const runPrompt = this.wrapPromptWithStatusHint(enrichedPrompt);
-
     const modelOverride = (params && params.model ? String(params.model) : "").trim();
     let model = modelOverride;
     if (!model) {
@@ -3222,6 +3285,27 @@ export class JobsManager {
       else model = String(codexSettings.model || settings.agentModel || "").trim();
     }
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
+
+    let preparedPrompt = enrichedPrompt;
+    const needsClaudeImageContext = images.length > 0 && (agent === "claude" || (mode === "war_room" && warRoomParticipants.includes("claude")));
+    if (needsClaudeImageContext) {
+      const claudeImageModel = String((claudeSettings as any).model || "").trim() || model;
+      try {
+        const prepared = await this.prepareClaudePromptWithImages({
+          settings: claudeSettings,
+          model: claudeImageModel,
+          prompt: enrichedPrompt,
+          images
+        });
+        preparedPrompt = prepared.prompt;
+        if (prepared.processMessage) processMessages.push(prepared.processMessage);
+      } catch (err: any) {
+        await this.cleanupPreparedCheckout(project, run);
+        return { ok: false, error: String(err && err.message ? err.message : err) };
+      }
+    }
+
+    const runPrompt = this.wrapPromptWithStatusHint(preparedPrompt);
 
     const threadId = mode === "single" && agent === "claude" ? randomUUID() : "";
 
@@ -3424,6 +3508,27 @@ export class JobsManager {
     if (images.length > 16) images = images.slice(0, 16);
     const imgErr = validateImagePaths(images);
     if (imgErr) return { ok: false, error: imgErr };
+    const agent = this.normalizeAgentKey(job.agent);
+
+    let preparedText = "";
+    if (agent === "claude" && images.length > 0) {
+      const settings = this.store.getSettings();
+      const claudeSettings = this.getClaudeSettingsFrom(settings);
+      let model = String(job.model || "").trim();
+      if (!model) model = String((claudeSettings as any).model || "").trim();
+      try {
+        const prepared = await this.prepareClaudePromptWithImages({
+          settings: claudeSettings,
+          model,
+          prompt: text,
+          images
+        });
+        preparedText = prepared.prompt;
+        if (prepared.processMessage) this.appendProcessEvent(job, prepared.processMessage);
+      } catch (err: any) {
+        return { ok: false, error: String(err && err.message ? err.message : err) };
+      }
+    }
 
     if (this.clearIntegratedToDefault(job)) {
       this.sendJobEvent({
@@ -3439,7 +3544,7 @@ export class JobsManager {
 
     const queuedAt = new Date().toISOString();
     job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
-    job.queuedPrompts.push({ ts: queuedAt, text, images });
+    job.queuedPrompts.push({ ts: queuedAt, text, images, preparedText });
     const MAX_QUEUED = 50;
     if (job.queuedPrompts.length > MAX_QUEUED) {
       job.queuedPrompts.splice(0, job.queuedPrompts.length - MAX_QUEUED);
