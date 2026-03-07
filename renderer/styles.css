@@ -4830,13 +4830,10 @@ body::before {
   50%      { opacity: 1;   transform: scale(1.2); }
 }
 
-/* --- Tooltip --- */
+/* --- Tooltip (fixed positioning to escape overflow clipping) --- */
 
 .tltip {
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
+  position: fixed;
   width: max-content;
   max-width: 260px;
   padding: 6px 10px;
@@ -4849,8 +4846,11 @@ body::before {
   pointer-events: none;
   opacity: 0;
   transition: opacity 120ms ease;
-  z-index: 100;
+  z-index: 9999;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  /* Default offscreen; JS positions it on hover */
+  top: 0;
+  left: 0;
 }
 
 .tltip__role {
