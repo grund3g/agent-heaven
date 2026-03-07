@@ -48,6 +48,7 @@ const api = window.agentHeaven;
   jobDialogPopout: document.getElementById("jobDialogPopout"),
   jobDialogMove: document.getElementById("jobDialogMove"),
   jobDialogChat: document.getElementById("jobDialogChat"),
+  jobTimelineSidebar: document.getElementById("jobTimelineSidebar"),
   jobDialogLive: document.getElementById("jobDialogLive"),
   jobDialogLogs: document.getElementById("jobDialogLogs"),
   jobDialogDiff: document.getElementById("jobDialogDiff"),
@@ -9144,6 +9145,12 @@ function setActiveTab(tab) {
   els.jobDialogLogs.classList.toggle("panel--active", nextTab === "logs");
   if (els.jobDialogDiff) els.jobDialogDiff.classList.toggle("panel--active", nextTab === "diff");
   if (els.jobDialogTerm) els.jobDialogTerm.classList.toggle("panel--active", nextTab === "term");
+  if (els.jobTimelineSidebar) {
+    const showTimeline = nextTab === "chat";
+    els.jobTimelineSidebar.hidden = !showTimeline;
+    const panelsWrap = els.jobTimelineSidebar.parentElement;
+    if (panelsWrap) panelsWrap.classList.toggle("dialog__panels--with-timeline", showTimeline);
+  }
   if (els.jobDialog && els.jobDialog.open) applyJobSearchToActivePanel({ preserveIndex: true, scroll: false });
   if (nextTab === "term") maybeEnsureTerminalForSelectedJob();
   if (nextTab === "diff") loadSelectedJobDiff({ force: false }).catch(() => {});
@@ -10044,6 +10051,43 @@ async function loadSelectedJobDiff(opts = {}) {
   }
 }
 
+function renderTimelineSidebar(enriched, job, agentName) {
+  const el = els.jobTimelineSidebar;
+  if (!el) return;
+
+  const isRunning = job && job.status === "running";
+  const isFinalDone = !isRunning;
+
+  let html = "";
+  for (let i = 0; i < enriched.length; i++) {
+    const t = enriched[i];
+    const isUser = t.role === "user";
+    const isLast = i === enriched.length - 1;
+    const isFinal = !isUser && isLast && isFinalDone;
+
+    const roleLabel = isUser ? "You" : escapeHtml(agentName);
+    const clock = fmtClock(t._ms);
+    const preview = escapeHtml(
+      (t.text || "").replace(/\s+/g, " ").trim().slice(0, 120)
+    );
+
+    const classes = [
+      "tlnode",
+      isUser ? "tlnode--user" : "tlnode--assistant",
+      isFinal ? "tlnode--final" : ""
+    ].filter(Boolean).join(" ");
+
+    html += `<div class="${classes}" data-tl-index="${i}"><div class="tltip"><div class="tltip__role">${roleLabel}</div><div class="tltip__preview">${preview || "(empty)"}</div>${clock ? `<div class="tltip__time">${escapeHtml(clock)}</div>` : ""}</div></div>`;
+  }
+
+  if (isRunning) {
+    html += `<div class="tlnode tlnode--assistant tlnode--typing" data-tl-index="typing"></div>`;
+  }
+
+  el.innerHTML = html;
+  el.hidden = false;
+}
+
 function renderJobDialogPanels(job) {
   const stickChat = isNearBottom(els.jobDialogChat);
   const stickLive = isNearBottom(els.jobDialogLive);
@@ -10111,7 +10155,7 @@ function renderJobDialogPanels(job) {
     enriched.push({ ...t, _ms: tMs, _baseMs: lastPromptMs });
   }
 
-  const items = enriched.map((t) => {
+  const items = enriched.map((t, idx) => {
     const isUser = t.role === "user";
     const clock = fmtClock(t._ms);
     const relMs =
@@ -10121,7 +10165,7 @@ function renderJobDialogPanels(job) {
     const meta = clock && showRel ? `${clock} (+${rel})` : clock || "";
     const timeHtml = meta ? ` <span class="msg__time" title="${escapeHtml(t.ts)}">${escapeHtml(meta)}</span>` : "";
 	      return `
-	      <div class="msg ${isUser ? "msg--user" : "msg--assistant"}">
+	      <div class="msg ${isUser ? "msg--user" : "msg--assistant"}" data-msg-index="${idx}">
 		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}</div>
 	        <div class="msg__text">${renderMarkdownSafeHtml(t.text)}</div>
 	        ${attachmentChipsHtml(t.images)}
@@ -10153,6 +10197,7 @@ function renderJobDialogPanels(job) {
   const chatHtml = `${items.join("")}${queuedHtml}${typingHtml}`;
   els.jobDialogChat.innerHTML = chatHtml || `<div class="logline">No messages yet.</div>`;
   wireAttachmentThumbs(els.jobDialogChat);
+  renderTimelineSidebar(enriched, job, agentName);
 
   // live feed (terminal-ish tail)
   {
@@ -12657,6 +12702,25 @@ function wireUi() {
     if (!thumb) return;
     openImageDialogForThumbEl(e.target);
   });
+
+  // Timeline sidebar: click a node to scroll to the corresponding message.
+  if (els.jobTimelineSidebar) {
+    els.jobTimelineSidebar.addEventListener("click", (e) => {
+      const node = e.target.closest(".tlnode");
+      if (!node) return;
+      const idx = node.getAttribute("data-tl-index");
+      if (idx === "typing" || idx == null) return;
+      const target = els.jobDialogChat.querySelector(`[data-msg-index="${idx}"]`);
+      if (target && typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.remove("msg--highlight");
+        void target.offsetWidth;
+        target.classList.add("msg--highlight");
+        setTimeout(() => target.classList.remove("msg--highlight"), 1200);
+      }
+    });
+  }
+
   if (els.jobDialogDiff) {
     els.jobDialogDiff.addEventListener("click", (e) => {
       const refreshBtn = e.target && e.target.closest ? e.target.closest("[data-job-diff-refresh]") : null;
