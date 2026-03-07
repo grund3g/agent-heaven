@@ -12719,6 +12719,18 @@ function wireUi() {
         setTimeout(() => target.classList.remove("msg--highlight"), 1200);
       }
     });
+
+    // Position tooltip with fixed positioning to escape overflow clipping.
+    els.jobTimelineSidebar.addEventListener("mouseover", (e) => {
+      const node = e.target.closest(".tlnode");
+      if (!node) return;
+      const tip = node.querySelector(".tltip");
+      if (!tip) return;
+      const rect = node.getBoundingClientRect();
+      tip.style.left = (rect.right + 10) + "px";
+      tip.style.top = (rect.top + rect.height / 2) + "px";
+      tip.style.transform = "translateY(-50%)";
+    });
   }
 
   if (els.jobDialogDiff) {
