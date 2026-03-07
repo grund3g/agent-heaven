@@ -4878,10 +4878,6 @@ body::before {
   font-variant-numeric: tabular-nums;
 }
 
-.tlnode:hover .tltip {
-  opacity: 1;
-}
-
 /* --- Message highlight on click-to-scroll --- */
 
 .msg--highlight {

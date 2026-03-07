@@ -49,6 +49,7 @@ const api = window.agentHeaven;
   jobDialogMove: document.getElementById("jobDialogMove"),
   jobDialogChat: document.getElementById("jobDialogChat"),
   jobTimelineSidebar: document.getElementById("jobTimelineSidebar"),
+  tlTip: document.getElementById("tlTip"),
   jobDialogLive: document.getElementById("jobDialogLive"),
   jobDialogLogs: document.getElementById("jobDialogLogs"),
   jobDialogDiff: document.getElementById("jobDialogDiff"),
@@ -10077,7 +10078,7 @@ function renderTimelineSidebar(enriched, job, agentName) {
       isFinal ? "tlnode--final" : ""
     ].filter(Boolean).join(" ");
 
-    html += `<div class="${classes}" data-tl-index="${i}"><div class="tltip"><div class="tltip__role">${roleLabel}</div><div class="tltip__preview">${preview || "(empty)"}</div>${clock ? `<div class="tltip__time">${escapeHtml(clock)}</div>` : ""}</div></div>`;
+    html += `<div class="${classes}" data-tl-index="${i}" data-tl-role="${roleLabel}" data-tl-preview="${preview || "(empty)"}" data-tl-time="${clock ? escapeHtml(clock) : ""}"></div>`;
   }
 
   if (isRunning) {
@@ -11509,6 +11510,7 @@ function wireOfflineToast() {
 function closeJobDialog() {
   if (!els.jobDialog) return;
   if (els.jobDialog.open) els.jobDialog.close();
+  if (els.tlTip) els.tlTip.style.opacity = "0";
   state.selectedJobId = null;
 }
 
@@ -12720,16 +12722,28 @@ function wireUi() {
       }
     });
 
-    // Position tooltip with fixed positioning to escape overflow clipping.
+    // Show/hide the shared tooltip element positioned outside overflow containers.
     els.jobTimelineSidebar.addEventListener("mouseover", (e) => {
       const node = e.target.closest(".tlnode");
-      if (!node) return;
-      const tip = node.querySelector(".tltip");
-      if (!tip) return;
+      if (!node || !els.tlTip) return;
+      const role = node.getAttribute("data-tl-role") || "";
+      const preview = node.getAttribute("data-tl-preview") || "";
+      const time = node.getAttribute("data-tl-time") || "";
+      els.tlTip.querySelector(".tltip__role").textContent = role;
+      els.tlTip.querySelector(".tltip__preview").textContent = preview;
+      const timeEl = els.tlTip.querySelector(".tltip__time");
+      timeEl.textContent = time;
+      timeEl.hidden = !time;
       const rect = node.getBoundingClientRect();
-      tip.style.left = (rect.right + 10) + "px";
-      tip.style.top = (rect.top + rect.height / 2) + "px";
-      tip.style.transform = "translateY(-50%)";
+      els.tlTip.style.left = (rect.right + 10) + "px";
+      els.tlTip.style.top = (rect.top + rect.height / 2) + "px";
+      els.tlTip.style.transform = "translateY(-50%)";
+      els.tlTip.style.opacity = "1";
+    });
+    els.jobTimelineSidebar.addEventListener("mouseout", (e) => {
+      const node = e.target.closest(".tlnode");
+      if (!node || !els.tlTip) return;
+      els.tlTip.style.opacity = "0";
     });
   }
 
