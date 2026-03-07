@@ -4751,76 +4751,93 @@ body::before {
   display: none;
 }
 
-.tlsidebar::before {
-  content: "";
-  position: absolute;
-  top: 20px;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 2px;
-  background: var(--stroke-soft);
-  border-radius: 1px;
-  pointer-events: none;
-  z-index: 0;
-}
-
 /* --- Timeline node / bubble --- */
 
 .tlnode {
+  --tlnode-size: 12px;
   position: relative;
   z-index: 1;
-  width: 12px;
-  height: 12px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tlnode::before,
+.tlnode::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 2px;
+  background: var(--stroke-soft);
+  border-radius: 1px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.tlnode::before {
+  top: 0;
+  height: calc(50% - (var(--tlnode-size) / 2));
+}
+
+.tlnode::after {
+  bottom: 0;
+  height: calc(50% - (var(--tlnode-size) / 2));
+}
+
+.tlnode:first-child::before,
+.tlnode:last-child::after {
+  display: none;
+}
+
+.tlnode__dot {
+  position: relative;
+  z-index: 1;
+  width: var(--tlnode-size);
+  height: var(--tlnode-size);
   border-radius: 50%;
   border: 2px solid var(--stroke-strong);
   background: var(--surface3);
-  cursor: pointer;
-  flex-shrink: 0;
-  margin: 6px 0;
   transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }
 
-/* Larger hit area */
-.tlnode::before {
-  content: "";
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-}
-
-.tlnode:hover {
+.tlnode:hover .tlnode__dot {
   transform: scale(1.4);
   border-color: rgba(var(--accent2-rgb), 0.72);
   background: rgba(var(--accent2-rgb), 0.22);
   box-shadow: 0 0 0 3px rgba(var(--accent2-rgb), 0.12);
 }
 
-.tlnode--user {
+.tlnode--user .tlnode__dot {
   border-color: rgba(var(--accent-rgb), 0.52);
   background: rgba(var(--accent-rgb), 0.18);
 }
 
-.tlnode--user:hover {
+.tlnode--user:hover .tlnode__dot {
   border-color: rgba(var(--accent-rgb), 0.82);
   background: rgba(var(--accent-rgb), 0.32);
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
 }
 
-.tlnode--assistant {
+.tlnode--assistant .tlnode__dot {
   border-color: rgba(var(--accent2-rgb), 0.42);
   background: rgba(var(--accent2-rgb), 0.14);
 }
 
 .tlnode--final {
-  width: 14px;
-  height: 14px;
+  --tlnode-size: 14px;
+}
+
+.tlnode--final .tlnode__dot {
   border-color: rgba(var(--accent2-rgb), 0.72);
   background: rgba(var(--accent2-rgb), 0.38);
   box-shadow: 0 0 6px rgba(var(--accent2-rgb), 0.22);
 }
 
-.tlnode--typing {
+.tlnode--typing .tlnode__dot {
   border-style: dashed;
   animation: tlnode-pulse 1.6s ease-in-out infinite;
 }
@@ -4834,8 +4851,10 @@ body::before {
 
 .tltip {
   position: fixed;
+  left: 0;
+  top: 0;
   width: max-content;
-  max-width: 260px;
+  max-width: min(260px, calc(100vw - 16px));
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--stroke-soft);
@@ -4845,12 +4864,15 @@ body::before {
   line-height: 1.35;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 120ms ease;
-  z-index: 9999;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 12060;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  /* Default offscreen; JS positions it on hover */
-  top: 0;
-  left: 0;
+}
+
+.tltip[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .tltip__role {
@@ -4876,10 +4898,6 @@ body::before {
   color: var(--muted);
   margin-top: 3px;
   font-variant-numeric: tabular-nums;
-}
-
-.tlnode:hover .tltip {
-  opacity: 1;
 }
 
 /* --- Message highlight on click-to-scroll --- */

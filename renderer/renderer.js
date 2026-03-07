@@ -593,6 +593,14 @@ const tokenTooltip = {
   raf: 0,
   observer: null
 };
+const timelineTooltip = {
+  root: null,
+  roleEl: null,
+  previewEl: null,
+  timeEl: null,
+  activeNode: null,
+  raf: 0
+};
 
 function normalizeLaneKey(value) {
   const v = String(value || "")
@@ -997,6 +1005,127 @@ function showTokenTooltipFor(target) {
   tokenTooltip.activeEl = target;
   if (tokenTooltip.textEl) tokenTooltip.textEl.textContent = text;
   scheduleTokenTooltipPosition();
+}
+
+function timelineTooltipDataFromNode(node) {
+  if (!node || typeof node.getAttribute !== "function") return null;
+  const role = String(node.getAttribute("data-tl-role") || "").trim();
+  const preview = String(node.getAttribute("data-tl-preview") || "").trim();
+  const time = String(node.getAttribute("data-tl-time") || "").trim();
+  if (!role && !preview && !time) return null;
+  return { role, preview, time };
+}
+
+function ensureTimelineTooltipEl() {
+  if (!document || !document.body) return null;
+  if (timelineTooltip.root) {
+    if (timelineTooltip.root.parentElement !== document.body) document.body.appendChild(timelineTooltip.root);
+    return timelineTooltip.root;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "tltip";
+  wrap.setAttribute("role", "tooltip");
+  wrap.hidden = true;
+
+  const role = document.createElement("div");
+  role.className = "tltip__role";
+  wrap.appendChild(role);
+
+  const preview = document.createElement("div");
+  preview.className = "tltip__preview";
+  wrap.appendChild(preview);
+
+  const time = document.createElement("div");
+  time.className = "tltip__time";
+  wrap.appendChild(time);
+
+  document.body.appendChild(wrap);
+  timelineTooltip.root = wrap;
+  timelineTooltip.roleEl = role;
+  timelineTooltip.previewEl = preview;
+  timelineTooltip.timeEl = time;
+  return wrap;
+}
+
+function hideTimelineTooltip() {
+  if (timelineTooltip.raf) {
+    try {
+      window.cancelAnimationFrame(timelineTooltip.raf);
+    } catch {
+      // ignore
+    }
+    timelineTooltip.raf = 0;
+  }
+  timelineTooltip.activeNode = null;
+  if (!timelineTooltip.root) return;
+  timelineTooltip.root.hidden = true;
+  timelineTooltip.root.removeAttribute("data-open");
+}
+
+function positionTimelineTooltip() {
+  const node = timelineTooltip.activeNode;
+  if (!node) return;
+  if (!document.body || !document.body.contains(node)) {
+    hideTimelineTooltip();
+    return;
+  }
+  const data = timelineTooltipDataFromNode(node);
+  if (!data) {
+    hideTimelineTooltip();
+    return;
+  }
+
+  const root = ensureTimelineTooltipEl();
+  if (!root) return;
+  if (timelineTooltip.roleEl) {
+    timelineTooltip.roleEl.textContent = data.role;
+    timelineTooltip.roleEl.hidden = !data.role;
+  }
+  if (timelineTooltip.previewEl) {
+    timelineTooltip.previewEl.textContent = data.preview || "(empty)";
+  }
+  if (timelineTooltip.timeEl) {
+    timelineTooltip.timeEl.textContent = data.time;
+    timelineTooltip.timeEl.hidden = !data.time;
+  }
+
+  root.hidden = false;
+  root.setAttribute("data-open", "true");
+  root.style.left = "0px";
+  root.style.top = "0px";
+
+  const gap = 12;
+  const pad = 8;
+  const rect = node.getBoundingClientRect();
+  const tipRect = root.getBoundingClientRect();
+
+  let left = rect.right + gap;
+  if (left + tipRect.width > window.innerWidth - pad) left = rect.left - tipRect.width - gap;
+  left = clampNumber(left, pad, window.innerWidth - tipRect.width - pad, pad);
+
+  let top = rect.top + rect.height / 2 - tipRect.height / 2;
+  top = clampNumber(top, pad, window.innerHeight - tipRect.height - pad, pad);
+
+  root.style.left = `${Math.round(left)}px`;
+  root.style.top = `${Math.round(top)}px`;
+}
+
+function scheduleTimelineTooltipPosition() {
+  if (timelineTooltip.raf) return;
+  timelineTooltip.raf = window.requestAnimationFrame(() => {
+    timelineTooltip.raf = 0;
+    positionTimelineTooltip();
+  });
+}
+
+function showTimelineTooltipFor(node) {
+  if (!timelineTooltipDataFromNode(node)) {
+    hideTimelineTooltip();
+    return;
+  }
+  if (!ensureTimelineTooltipEl()) return;
+  timelineTooltip.activeNode = node;
+  scheduleTimelineTooltipPosition();
 }
 
 function removedNodeContains(node, target) {
@@ -10054,6 +10183,7 @@ async function loadSelectedJobDiff(opts = {}) {
 function renderTimelineSidebar(enriched, job, agentName) {
   const el = els.jobTimelineSidebar;
   if (!el) return;
+  hideTimelineTooltip();
 
   const isRunning = job && job.status === "running";
   const isFinalDone = !isRunning;
@@ -10077,11 +10207,11 @@ function renderTimelineSidebar(enriched, job, agentName) {
       isFinal ? "tlnode--final" : ""
     ].filter(Boolean).join(" ");
 
-    html += `<div class="${classes}" data-tl-index="${i}"><div class="tltip"><div class="tltip__role">${roleLabel}</div><div class="tltip__preview">${preview || "(empty)"}</div>${clock ? `<div class="tltip__time">${escapeHtml(clock)}</div>` : ""}</div></div>`;
+    html += `<div class="${classes}" data-tl-index="${i}" data-tl-role="${roleLabel}" data-tl-preview="${preview}"${clock ? ` data-tl-time="${escapeHtml(clock)}"` : ""}><div class="tlnode__dot"></div></div>`;
   }
 
   if (isRunning) {
-    html += `<div class="tlnode tlnode--assistant tlnode--typing" data-tl-index="typing"></div>`;
+    html += `<div class="tlnode tlnode--assistant tlnode--typing" data-tl-index="typing"><div class="tlnode__dot"></div></div>`;
   }
 
   el.innerHTML = html;
@@ -12719,18 +12849,30 @@ function wireUi() {
         setTimeout(() => target.classList.remove("msg--highlight"), 1200);
       }
     });
-    // Position tooltip with fixed positioning to escape overflow clipping.
-    els.jobTimelineSidebar.addEventListener("mouseover", (e) => {
+    els.jobTimelineSidebar.addEventListener("pointerover", (e) => {
       const node = e.target.closest(".tlnode");
-      if (!node) return;
-      const tip = node.querySelector(".tltip");
-      if (!tip) return;
-      const rect = node.getBoundingClientRect();
-      tip.style.left = (rect.right + 10) + "px";
-      tip.style.top = (rect.top + rect.height / 2) + "px";
-      tip.style.transform = "translateY(-50%)";
+      if (!node || !els.jobTimelineSidebar.contains(node)) return;
+      showTimelineTooltipFor(node);
+    });
+    els.jobTimelineSidebar.addEventListener("pointerout", (e) => {
+      if (!timelineTooltip.activeNode) return;
+      const next = e.relatedTarget;
+      const nextNode = next && typeof next.closest === "function" ? next.closest(".tlnode") : null;
+      if (nextNode && els.jobTimelineSidebar.contains(nextNode)) {
+        showTimelineTooltipFor(nextNode);
+        return;
+      }
+      hideTimelineTooltip();
+    });
+    els.jobTimelineSidebar.addEventListener("scroll", () => {
+      if (!timelineTooltip.activeNode) return;
+      scheduleTimelineTooltipPosition();
     });
   }
+  window.addEventListener("resize", () => {
+    if (!timelineTooltip.activeNode) return;
+    scheduleTimelineTooltipPosition();
+  });
 
   if (els.jobDialogDiff) {
     els.jobDialogDiff.addEventListener("click", (e) => {
@@ -12787,6 +12929,7 @@ function wireUi() {
   els.jobDialog.addEventListener("close", () => {
     if (promptPathSuggestState.inputEl === els.followupInput) closePromptPathSuggest();
     hideJobMoreMenu();
+    hideTimelineTooltip();
     clearJobSearch();
     jobDiffReqSeq += 1; // cancel in-flight diff requests
 
