@@ -1018,11 +1018,18 @@ function timelineTooltipDataFromNode(node) {
   return { role, preview, time };
 }
 
+<<<<<<< HEAD
 function ensureTimelineTooltipEl(hostEl) {
   if (!document || !document.body) return null;
   const host = hostEl && hostEl.nodeType === Node.ELEMENT_NODE ? hostEl : document.body;
   if (timelineTooltip.root) {
     if (timelineTooltip.root.parentElement !== host) host.appendChild(timelineTooltip.root);
+=======
+function ensureTimelineTooltipEl() {
+  if (!document || !document.body) return null;
+  if (timelineTooltip.root) {
+    if (timelineTooltip.root.parentElement !== document.body) document.body.appendChild(timelineTooltip.root);
+>>>>>>> 4c6e6c7 (chore(renderer): update files)
     return timelineTooltip.root;
   }
   const wrap = document.createElement("div");
@@ -1042,7 +1049,11 @@ function ensureTimelineTooltipEl(hostEl) {
   time.className = "tltip__time";
   wrap.appendChild(time);
 
+<<<<<<< HEAD
   host.appendChild(wrap);
+=======
+  document.body.appendChild(wrap);
+>>>>>>> 4c6e6c7 (chore(renderer): update files)
   timelineTooltip.root = wrap;
   timelineTooltip.roleEl = role;
   timelineTooltip.previewEl = preview;
@@ -1078,7 +1089,11 @@ function positionTimelineTooltip() {
     return;
   }
 
+<<<<<<< HEAD
   const root = ensureTimelineTooltipEl(tooltipHostForElement(node));
+=======
+  const root = ensureTimelineTooltipEl();
+>>>>>>> 4c6e6c7 (chore(renderer): update files)
   if (!root) return;
   if (timelineTooltip.roleEl) {
     timelineTooltip.roleEl.textContent = data.role;
@@ -1126,7 +1141,11 @@ function showTimelineTooltipFor(node) {
     hideTimelineTooltip();
     return;
   }
+<<<<<<< HEAD
   if (!ensureTimelineTooltipEl(tooltipHostForElement(node))) return;
+=======
+  if (!ensureTimelineTooltipEl()) return;
+>>>>>>> 4c6e6c7 (chore(renderer): update files)
   timelineTooltip.activeNode = node;
   scheduleTimelineTooltipPosition();
 }
