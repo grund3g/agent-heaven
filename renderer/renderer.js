@@ -12719,7 +12719,6 @@ function wireUi() {
         setTimeout(() => target.classList.remove("msg--highlight"), 1200);
       }
     });
-
     // Position tooltip with fixed positioning to escape overflow clipping.
     els.jobTimelineSidebar.addEventListener("mouseover", (e) => {
       const node = e.target.closest(".tlnode");
