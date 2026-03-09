@@ -298,6 +298,7 @@ const state = {
   cardCtxOpenedAt: 0,
   statusRenderTimer: null,
   durationTimer: null,
+  activityAgeTimer: null,
   deferredLogUpsertTimer: null,
   deferredLogUpsertIds: new Set(),
   projectRefreshTimer: null,
@@ -5877,6 +5878,95 @@ function fmtAge(ms) {
   return `${fmtElapsed(age)} ago`;
 }
 
+function fmtRelativeAgeShort(ms, nowMs = Date.now()) {
+  const t = Number(ms);
+  if (!Number.isFinite(t) || t <= 0) return "";
+  const age = Math.max(0, nowMs - t);
+  const minuteMs = 60 * 1000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+  const weekMs = 7 * dayMs;
+  const monthMs = 30 * dayMs;
+
+  if (age < minuteMs) return "just now";
+  if (age < hourMs) return `${Math.floor(age / minuteMs)}m ago`;
+  if (age < dayMs) return `${Math.floor(age / hourMs)}h ago`;
+  if (age < weekMs) return `${Math.floor(age / dayMs)}d ago`;
+  if (age < monthMs) return `${Math.floor(age / weekMs)}w ago`;
+  return `${Math.floor(age / monthMs)}mo ago`;
+}
+
+function jobLastActivityMs(job) {
+  if (!job || typeof job !== "object") return NaN;
+  const updatedAt = typeof job.updatedAt === "string" ? job.updatedAt.trim() : "";
+  const finishedAt = typeof job.finishedAt === "string" ? job.finishedAt.trim() : "";
+  const startedAt = typeof job.startedAt === "string" ? job.startedAt.trim() : "";
+  const createdAt = typeof job.createdAt === "string" ? job.createdAt.trim() : "";
+  const raw = updatedAt || finishedAt || startedAt || createdAt;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+function jobLastActivityLabel(job, nowMs = Date.now()) {
+  const ms = jobLastActivityMs(job);
+  return Number.isFinite(ms) ? fmtRelativeAgeShort(ms, nowMs) : "";
+}
+
+function jobLastActivityTitle(job, nowMs = Date.now()) {
+  const ms = jobLastActivityMs(job);
+  if (!Number.isFinite(ms)) return "";
+  const d = new Date(ms);
+  const age = fmtRelativeAgeShort(ms, nowMs);
+  try {
+    const stamp = d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return age ? `Last action ${stamp} (${age})` : `Last action ${stamp}`;
+  } catch {
+    const stamp = d.toISOString();
+    return age ? `Last action ${stamp} (${age})` : `Last action ${stamp}`;
+  }
+}
+
+function jobCardSubline(job, nowMs = Date.now()) {
+  const sub = `${projectLabelById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
+  const subTitle = `${projectNameById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
+  return {
+    sub,
+    subTitle,
+    ageText: jobLastActivityLabel(job, nowMs),
+    ageTitle: jobLastActivityTitle(job, nowMs)
+  };
+}
+
+function syncCardSubline(existing, job, nowMs = Date.now()) {
+  if (!existing) return;
+  const { sub, subTitle, ageText, ageTitle } = jobCardSubline(job, nowMs);
+  const subTextEl = existing.querySelector(".card__subtext") || existing.querySelector(".card__sub");
+  if (subTextEl) {
+    subTextEl.textContent = sub;
+    if (subTextEl.classList && subTextEl.classList.contains("card__subtext")) {
+      subTextEl.title = oneLine(subTitle);
+    }
+  }
+
+  const subWrap = existing.querySelector(".card__sub");
+  let ageEl = existing.querySelector("[data-job-age]");
+  if (!ageText) {
+    if (ageEl) ageEl.remove();
+    return;
+  }
+
+  if (!ageEl && subWrap) {
+    ageEl = document.createElement("span");
+    ageEl.className = "card__subage";
+    ageEl.setAttribute("data-job-age", "");
+    const integratedEl = subWrap.querySelector("[data-job-integrated]");
+    subWrap.insertBefore(ageEl, integratedEl || null);
+  }
+  if (!ageEl) return;
+  ageEl.textContent = ageText;
+  ageEl.title = ageTitle;
+}
+
 function closeCheckoutsDialog() {
   state.checkoutsProjectId = "";
   state.checkoutsEntries = [];
@@ -6665,8 +6755,7 @@ function integratedBadgeForJob(job) {
 function renderCard(job) {
   // Kept for reference; we use DOM nodes + textContent updates now.
   const prev = cardPreview(job);
-  const sub = `${projectLabelById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
-  const subTitle = `${projectNameById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
+  const subline = jobCardSubline(job);
   const integrated = integratedBadgeForJob(job);
   const integratedHiddenAttr = integrated ? "" : " hidden";
   const integratedText = integrated ? integrated.text : "Merged";
@@ -6691,7 +6780,8 @@ function renderCard(job) {
         <div class="card__head">
           <div class="card__sub">
             <span class="projdot" aria-hidden="true"></span>
-            <span class="card__subtext" title="${escapeHtml(oneLine(subTitle))}">${escapeHtml(sub)}</span>
+            <span class="card__subtext" title="${escapeHtml(oneLine(subline.subTitle))}">${escapeHtml(subline.sub)}</span>
+            ${subline.ageText ? `<span class="card__subage" data-job-age title="${escapeHtml(subline.ageTitle)}">${escapeHtml(subline.ageText)}</span>` : ""}
             <span class="card__flag card__flag--merged" data-job-integrated title="${escapeHtml(integratedTitle)}"${integratedHiddenAttr}>${escapeHtml(
               integratedText
             )}</span>
@@ -6937,15 +7027,7 @@ function updateCardEl(job) {
     titleEl.removeAttribute("title");
   }
 
-  const subTextEl = existing.querySelector(".card__subtext") || existing.querySelector(".card__sub");
-  if (subTextEl) {
-    const sub = `${projectLabelById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
-    const subTitle = `${projectNameById(job.projectId)}${job.model ? `  ·  ${job.model}` : ""}`;
-    subTextEl.textContent = sub;
-    if (subTextEl.classList && subTextEl.classList.contains("card__subtext")) {
-      subTextEl.title = oneLine(subTitle);
-    }
-  }
+  syncCardSubline(existing, job);
 
   const integrated = integratedBadgeForJob(job);
   let integratedEl = existing.querySelector("[data-job-integrated]");
@@ -7075,6 +7157,7 @@ function updateCardEl(job) {
 
 function tickRunningDurations() {
   const nowMs = Date.now();
+  tickCardActivityAges(nowMs);
   for (const job of state.jobs.values()) {
     if (!job || job.status !== "running") continue;
     const el = state.cardEls.get(job.id);
@@ -7153,6 +7236,24 @@ function hasRunningJobs() {
   return false;
 }
 
+function tickCardActivityAges(nowMs = Date.now()) {
+  for (const job of state.jobs.values()) {
+    if (!job) continue;
+    const el = state.cardEls.get(job.id);
+    if (!el) continue;
+    const ageEl = el.querySelector("[data-job-age]");
+    if (!ageEl) continue;
+    const nextText = jobLastActivityLabel(job, nowMs);
+    if (!nextText) {
+      ageEl.remove();
+      continue;
+    }
+    if (ageEl.textContent !== nextText) ageEl.textContent = nextText;
+    const nextTitle = jobLastActivityTitle(job, nowMs);
+    if (ageEl.title !== nextTitle) ageEl.title = nextTitle;
+  }
+}
+
 function stopDurationTicker() {
   if (!state.durationTimer) return;
   window.clearInterval(state.durationTimer);
@@ -7171,9 +7272,29 @@ function ensureDurationTicker() {
   tickRunningDurations();
 }
 
+function stopActivityAgeTicker() {
+  if (!state.activityAgeTimer) return;
+  window.clearInterval(state.activityAgeTimer);
+  state.activityAgeTimer = null;
+}
+
+function ensureActivityAgeTicker() {
+  if (state.activityAgeTimer) return;
+  state.activityAgeTimer = window.setInterval(() => {
+    if (!state.jobs || state.jobs.size === 0) {
+      stopActivityAgeTicker();
+      return;
+    }
+    tickCardActivityAges();
+  }, 30_000);
+  tickCardActivityAges();
+}
+
 function syncDurationTicker() {
   if (hasRunningJobs()) ensureDurationTicker();
   else stopDurationTicker();
+  if (state.jobs && state.jobs.size > 0) ensureActivityAgeTicker();
+  else stopActivityAgeTicker();
 }
 
 function setHint(msg, kind = "info") {
