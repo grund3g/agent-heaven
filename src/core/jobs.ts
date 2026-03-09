@@ -5,13 +5,8 @@ export type JobBox = "board" | "archive" | "trash";
 export type JobStatus = "running" | "done" | "failed" | "cancelled" | "needs_attention" | "unknown";
 export type JobRunMode = "single" | "war_room";
 
-<<<<<<< HEAD
 export type JobPrompt = { id?: string; ts: string; text: string; images?: string[]; preparedText?: string };
-export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string; promptId?: string };
-=======
-export type JobPrompt = { ts: string; text: string; images?: string[]; preparedText?: string };
-export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string; agent?: string };
->>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
+export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string; agent?: string; promptId?: string };
 export type JobLogEntry =
   | { ts: string; stream: "stdout" | "stderr"; kind: "log"; text: string }
   | { ts: string; stream: "stdout" | "stderr"; kind: "codex"; data: any }
@@ -99,7 +94,6 @@ function safeIso(s: unknown): string {
   return t && t.length >= 10 ? t : "";
 }
 
-<<<<<<< HEAD
 function normalizePrompt(value: unknown): JobPrompt {
   const raw = value && typeof value === "object" ? { ...(value as any) } : {};
   const id = typeof raw.id === "string" ? raw.id.trim() : "";
@@ -110,17 +104,20 @@ function normalizePrompt(value: unknown): JobPrompt {
 
 function normalizeMessage(value: unknown): JobMessage {
   const raw = value && typeof value === "object" ? { ...(value as any) } : {};
+  const agent = typeof raw.agent === "string" ? raw.agent.trim() : "";
+  if (agent) raw.agent = agent;
+  else delete raw.agent;
   const promptId = typeof raw.promptId === "string" ? raw.promptId.trim() : "";
   if (promptId) raw.promptId = promptId;
   else delete raw.promptId;
   return raw as JobMessage;
-=======
+}
+
 function isoMs(value: unknown): number {
   const raw = safeIso(value);
   if (!raw) return NaN;
   const ms = Date.parse(raw);
   return Number.isFinite(ms) ? ms : NaN;
->>>>>>> d0881bf (chore: update renderer UI files, core jobs logic, and tests)
 }
 
 export function sanitizeJobModel(value: unknown): string {
