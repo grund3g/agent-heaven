@@ -1187,6 +1187,11 @@ body::before {
   white-space: nowrap;
 }
 
+.card__subage {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
 .card__flag {
   display: inline-flex;
   align-items: center;

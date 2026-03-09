@@ -45,6 +45,7 @@ export type Job = {
   createdAt: string;
   startedAt: string;
   finishedAt: string;
+  updatedAt?: string;
   projectId: string;
   projectPath: string;
   checkoutModePreference?: string;
@@ -75,6 +76,13 @@ function normalizeJobRunMode(value: unknown): JobRunMode {
 function safeIso(s: unknown): string {
   const t = typeof s === "string" ? s : "";
   return t && t.length >= 10 ? t : "";
+}
+
+function isoMs(value: unknown): number {
+  const raw = safeIso(value);
+  if (!raw) return NaN;
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : NaN;
 }
 
 export function sanitizeJobModel(value: unknown): string {
@@ -162,6 +170,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   if (out.queuedPrompts.length > 50) out.queuedPrompts.splice(0, out.queuedPrompts.length - 50);
   if (out.processBindings.length > 200) out.processBindings.splice(0, out.processBindings.length - 200);
   if (out.processEvents.length > 500) out.processEvents.splice(0, out.processEvents.length - 500);
+  out.updatedAt = safeIso(out.updatedAt) || jobUpdatedAt(out);
 
   return out as Job;
 }
@@ -216,6 +225,7 @@ export function snapshotJob(job: Job): Job {
     createdAt,
     startedAt,
     finishedAt,
+    updatedAt: jobUpdatedAt(job),
     projectId,
     projectPath,
     checkoutModePreference,
@@ -279,6 +289,59 @@ function jobPromptPreview(job: Job): string {
   return "";
 }
 
+function latestTsFromEntries(entries: unknown): string {
+  const arr = Array.isArray(entries) ? entries : [];
+  let bestTs = "";
+  let bestMs = NaN;
+
+  for (let i = 0; i < arr.length; i += 1) {
+    const item: any = arr[i];
+    const ts = item && typeof item.ts === "string" ? safeIso(item.ts) : "";
+    if (!ts) continue;
+    const ms = isoMs(ts);
+    if (!Number.isFinite(ms)) continue;
+    if (!Number.isFinite(bestMs) || ms > bestMs) {
+      bestMs = ms;
+      bestTs = ts;
+    }
+  }
+
+  return bestTs;
+}
+
+export function jobUpdatedAt(job: Job): string {
+  if (!job || typeof job !== "object") return "";
+
+  const candidates = [
+    safeIso((job as any).updatedAt),
+    safeIso(job.createdAt),
+    safeIso(job.startedAt),
+    safeIso(job.finishedAt),
+    safeIso(job.archivedAt),
+    safeIso(job.trashedAt),
+    safeIso(job.integratedToDefaultAt),
+    latestTsFromEntries(job.prompts),
+    latestTsFromEntries(job.queuedPrompts),
+    latestTsFromEntries(job.messages),
+    latestTsFromEntries(job.logs),
+    latestTsFromEntries(job.processEvents)
+  ];
+
+  let bestTs = "";
+  let bestMs = NaN;
+  for (const value of candidates) {
+    if (!value) continue;
+    const ms = isoMs(value);
+    if (!Number.isFinite(ms)) continue;
+    if (!Number.isFinite(bestMs) || ms > bestMs) {
+      bestMs = ms;
+      bestTs = value;
+    }
+  }
+
+  return bestTs;
+}
+
 export function snapshotJobMeta(job: Job): any {
   const {
     id,
@@ -318,6 +381,7 @@ export function snapshotJobMeta(job: Job): any {
     createdAt,
     startedAt,
     finishedAt,
+    updatedAt: jobUpdatedAt(job),
     projectId,
     projectPath,
     mode,

@@ -43,8 +43,8 @@ describe("core/jobs", () => {
       threadId: "t1",
       prompts: [{ ts: "t0", text: "Fix store migration bug", images: [] }],
       queuedPrompts: [],
-      messages: [{ ts: "t1", role: "assistant", text: "All set." }],
-      logs: [{ ts: "t1", stream: "stdout", kind: "log", text: "hello" }],
+      messages: [{ ts: "2020-01-01T00:00:03.000Z", role: "assistant", text: "All set." }],
+      logs: [{ ts: "2020-01-01T00:00:01.500Z", stream: "stdout", kind: "log", text: "hello" }],
       usage: null,
       usageTotal: { input_tokens: 0, output_tokens: 0, turns: 0 },
       exitCode: 0
@@ -56,5 +56,6 @@ describe("core/jobs", () => {
     expect(meta.previewText).toBe("All set.");
     expect(meta.integratedToDefaultAt).toBe("2020-01-01T00:00:02.000Z");
     expect(meta.integratedToDefaultBranch).toBe("main");
+    expect(meta.updatedAt).toBe("2020-01-01T00:00:03.000Z");
   });
 });
