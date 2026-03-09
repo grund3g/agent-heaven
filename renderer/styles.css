@@ -4879,9 +4879,9 @@ body::before {
   max-width: min(260px, calc(100vw - 16px));
   padding: 6px 10px;
   border-radius: 8px;
-  border: 1px solid var(--stroke-soft);
-  background: var(--surface2);
-  color: var(--ink);
+  border: 1px solid rgba(15, 18, 22, 0.12);
+  background: rgba(255, 255, 255, 1);
+  color: rgba(15, 18, 22, 0.94);
   font-size: 11px;
   line-height: 1.35;
   pointer-events: none;
@@ -4889,7 +4889,7 @@ body::before {
   transform: translateY(4px);
   transition: opacity 120ms ease, transform 120ms ease;
   z-index: 12060;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
 }
 
 .tltip[data-open="true"] {
@@ -4901,7 +4901,7 @@ body::before {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted2);
+  color: rgba(15, 18, 22, 0.56);
   margin-bottom: 2px;
 }
 
@@ -4911,13 +4911,13 @@ body::before {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  color: var(--ink);
+  color: rgba(15, 18, 22, 0.94);
   word-break: break-word;
 }
 
 .tltip__time {
   font-size: 10px;
-  color: var(--muted);
+  color: rgba(15, 18, 22, 0.68);
   margin-top: 3px;
   font-variant-numeric: tabular-nums;
 }
