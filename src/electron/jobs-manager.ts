@@ -38,6 +38,17 @@ type RunGeminiExec = (opts: any) => ChildProcess;
 type RunGeminiResume = (opts: any) => ChildProcess;
 type SummarizeClaudeImages = (opts: any) => Promise<{ text: string; model: string; usage: any }>;
 type NeedsAttentionHeuristic = (text: unknown) => boolean;
+type ActiveRunSpec = {
+  agent: "codex" | "claude" | "gemini";
+  phase: "exec" | "resume";
+  projectPath: string;
+  settings: any;
+  model: string;
+  prompt: string;
+  images: string[];
+  sessionId?: string;
+  threadId?: string;
+};
 
 const WRITE_INTENT_PATTERNS = [
   /\bfix\b/,
@@ -96,6 +107,9 @@ const READ_ONLY_INTENT_PATTERNS = [
   /\bvergleich/
 ];
 
+const MAX_TRANSIENT_AGENT_RETRIES = 1;
+const TRANSIENT_AGENT_RETRY_DELAY_MS = 1_200;
+
 export class JobsManager {
   private store: any;
   private history: any;
@@ -130,6 +144,9 @@ export class JobsManager {
   private integratingToDefaultJobIds = new Set<string>();
   // Dedupe integration completion hooks per finished run.
   private finishedRunKeyByJobId = new Map<string, string>();
+  private activeRunSpecByJobId = new Map<string, ActiveRunSpec>();
+  private transientRetryCountByJobId = new Map<string, number>();
+  private transientRetryTimerByJobId = new Map<string, NodeJS.Timeout>();
 
   // Persist jobs (incl. threadId) so sessions can be viewed/resumed across restarts.
   private dirtyJobIds = new Set<string>();
@@ -229,6 +246,284 @@ export class JobsManager {
     } catch {
       // ignore
     }
+  }
+
+  private clearTransientRetryTimer(jobId: string) {
+    const timer = this.transientRetryTimerByJobId.get(jobId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.transientRetryTimerByJobId.delete(jobId);
+  }
+
+  private clearActiveRunTracking(jobId: string) {
+    this.clearTransientRetryTimer(jobId);
+    this.activeRunSpecByJobId.delete(jobId);
+    this.transientRetryCountByJobId.delete(jobId);
+  }
+
+  private isTransientAgentConnectionFailure(text: unknown): boolean {
+    const low = String(text || "")
+      .trim()
+      .toLowerCase();
+    if (!low) return false;
+    return (
+      low.includes("unable to connect to api") ||
+      low.includes("api connection error") ||
+      low.includes("epipe") ||
+      low.includes("econnreset") ||
+      low.includes("connection reset") ||
+      low.includes("socket hang up") ||
+      low.includes("network error")
+    );
+  }
+
+  private extractStructuredLogText(entry: any): string {
+    if (!entry || typeof entry !== "object") return "";
+    if (entry.kind === "log") return typeof entry.text === "string" ? entry.text : "";
+
+    if (entry.kind === "claude") {
+      const data = entry.data || {};
+      if (data.type === "assistant" && data.message) return this.claudeMessageToText(data.message);
+      if (data.type === "result" && typeof data.result === "string") return data.result;
+      return "";
+    }
+
+    if (entry.kind === "gemini") {
+      const data = entry.data || {};
+      return this.geminiDataToTextChunks(data).join("\n");
+    }
+
+    if (entry.kind === "codex") {
+      const data = entry.data || {};
+      if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+        return typeof data.item.text === "string" ? data.item.text : "";
+      }
+      if (typeof data.result === "string") return data.result;
+      if (typeof data.message === "string") return data.message;
+      return "";
+    }
+
+    return "";
+  }
+
+  private currentRunLogEntries(job: Job): any[] {
+    const startedAt = typeof job.startedAt === "string" ? job.startedAt : "";
+    const logs = Array.isArray(job.logs) ? job.logs : [];
+    if (!startedAt) return logs;
+    return logs.filter((entry: any) => String(entry && entry.ts ? entry.ts : "") >= startedAt);
+  }
+
+  private currentRunMessages(job: Job): any[] {
+    const startedAt = typeof job.startedAt === "string" ? job.startedAt : "";
+    const messages = Array.isArray(job.messages) ? job.messages : [];
+    if (!startedAt) return messages;
+    return messages.filter((entry: any) => String(entry && entry.ts ? entry.ts : "") >= startedAt);
+  }
+
+  private currentRunHasMeaningfulActivity(job: Job): boolean {
+    for (const message of this.currentRunMessages(job)) {
+      const text = message && typeof (message as any).text === "string" ? (message as any).text : "";
+      if (text && !this.isTransientAgentConnectionFailure(text)) return true;
+    }
+
+    for (const entry of this.currentRunLogEntries(job)) {
+      if (!entry || typeof entry !== "object") continue;
+      if (entry.kind === "log") continue;
+
+      if (entry.kind === "claude") {
+        const data = entry.data || {};
+        if (data.type === "system" && data.subtype === "init") continue;
+        if (data.type === "result") continue;
+        if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+          const content = Array.isArray((data.message as any).content) ? (data.message as any).content : [];
+          if (content.some((block: any) => block && typeof block === "object" && block.type !== "text")) return true;
+          const text = this.claudeMessageToText(data.message);
+          if (!text || this.isTransientAgentConnectionFailure(text)) continue;
+        }
+        return true;
+      }
+
+      if (entry.kind === "gemini") {
+        const data = entry.data || {};
+        const type = this.geminiEventType(data);
+        if (type === "init") continue;
+        const text = this.geminiDataToTextChunks(data).join("\n");
+        if (
+          (type === "content" || type === "message" || type === "chatcomplete" || type === "result") &&
+          (!text || this.isTransientAgentConnectionFailure(text))
+        ) {
+          continue;
+        }
+        if (!text && !type) continue;
+        return true;
+      }
+
+      if (entry.kind === "codex") {
+        const data = entry.data || {};
+        if (data.type === "thread.started" || data.type === "token.usage.updated" || data.type === "turn.completed") continue;
+        if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
+          const text = typeof data.item.text === "string" ? data.item.text : "";
+          if (!text || this.isTransientAgentConnectionFailure(text)) continue;
+        }
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private currentRunFailureText(job: Job): string {
+    const parts: string[] = [];
+
+    for (const message of this.currentRunMessages(job)) {
+      const text = message && typeof (message as any).text === "string" ? (message as any).text : "";
+      if (text) parts.push(text);
+    }
+
+    for (const entry of this.currentRunLogEntries(job)) {
+      const text = this.extractStructuredLogText(entry);
+      if (text) parts.push(text);
+    }
+
+    return parts.slice(-8).join("\n");
+  }
+
+  private startChildFromRunSpec(jobId: string, spec: ActiveRunSpec): ChildProcess {
+    if (spec.agent === "claude") {
+      if (spec.phase === "resume") {
+        if (!this.runClaudeResume) throw new Error("Claude runner not configured");
+        return this.runClaudeResume({
+          claudePath: this.getClaudePath(),
+          settings: spec.settings,
+          cwd: spec.projectPath,
+          sessionId: spec.sessionId,
+          model: spec.model,
+          prompt: spec.prompt,
+          onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
+        });
+      }
+      if (!this.runClaudeExec) throw new Error("Claude runner not configured");
+      return this.runClaudeExec({
+        claudePath: this.getClaudePath(),
+        settings: spec.settings,
+        projectPath: spec.projectPath,
+        model: spec.model,
+        sessionId: spec.sessionId,
+        prompt: spec.prompt,
+        onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
+      });
+    }
+
+    if (spec.agent === "gemini") {
+      if (spec.phase === "resume") {
+        if (!this.runGeminiResume) throw new Error("Gemini runner not configured");
+        return this.runGeminiResume({
+          geminiPath: this.getGeminiPath(),
+          settings: spec.settings,
+          cwd: spec.projectPath,
+          sessionId: spec.sessionId,
+          model: spec.model,
+          prompt: spec.prompt,
+          onEvent: (ev: any) => this.onGeminiEvent(jobId, ev)
+        });
+      }
+      if (!this.runGeminiExec) throw new Error("Gemini runner not configured");
+      return this.runGeminiExec({
+        geminiPath: this.getGeminiPath(),
+        settings: spec.settings,
+        projectPath: spec.projectPath,
+        model: spec.model,
+        prompt: spec.prompt,
+        onEvent: (ev: any) => this.onGeminiEvent(jobId, ev)
+      });
+    }
+
+    if (spec.phase === "resume") {
+      return this.runCodexResume({
+        codexPath: this.getCodexPath(),
+        settings: spec.settings,
+        cwd: spec.projectPath,
+        threadId: spec.threadId,
+        model: spec.model,
+        prompt: spec.prompt,
+        images: spec.images,
+        onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
+      });
+    }
+    return this.runCodexExec({
+      codexPath: this.getCodexPath(),
+      settings: spec.settings,
+      projectPath: spec.projectPath,
+      model: spec.model,
+      prompt: spec.prompt,
+      images: spec.images,
+      onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
+    });
+  }
+
+  private attachChildToJob(jobId: string, child: ChildProcess, spec: ActiveRunSpec, resetRetry = true) {
+    this.clearTransientRetryTimer(jobId);
+    this.activeRunSpecByJobId.set(jobId, spec);
+    if (resetRetry) this.transientRetryCountByJobId.set(jobId, 0);
+    this.procs.set(jobId, child);
+    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, err));
+    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, code, signal));
+  }
+
+  private scheduleTransientRetry(jobId: string): boolean {
+    const job = this.jobs.get(jobId);
+    const spec = this.activeRunSpecByJobId.get(jobId);
+    if (!job || !spec) return false;
+    if (this.currentRunHasMeaningfulActivity(job)) return false;
+    if (!this.isTransientAgentConnectionFailure(this.currentRunFailureText(job))) return false;
+
+    const retries = this.transientRetryCountByJobId.get(jobId) || 0;
+    if (retries >= MAX_TRANSIENT_AGENT_RETRIES) return false;
+    this.transientRetryCountByJobId.set(jobId, retries + 1);
+    this.clearTransientRetryTimer(jobId);
+
+    this.appendLog(job, {
+      ts: new Date().toISOString(),
+      stream: "stderr",
+      kind: "log",
+      text: "WARN: Transient agent API connection failure detected. Retrying once..."
+    });
+    this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+    this.setJobStatus(jobId, "running", { finishedAt: "", exitCode: null });
+
+    const timer = setTimeout(() => {
+      this.transientRetryTimerByJobId.delete(jobId);
+      const live = this.jobs.get(jobId);
+      const liveSpec = this.activeRunSpecByJobId.get(jobId);
+      if (!live || !liveSpec || this.procs.has(jobId)) return;
+
+      const startedAt = new Date().toISOString();
+      this.setJobStatus(jobId, "running", { startedAt, finishedAt: "", exitCode: null });
+
+      let child: ChildProcess;
+      try {
+        child = this.startChildFromRunSpec(jobId, liveSpec);
+      } catch (err: any) {
+        const failedAt = new Date().toISOString();
+        this.appendLog(live, {
+          ts: failedAt,
+          stream: "stderr",
+          kind: "log",
+          text: String(err && err.message ? err.message : err)
+        });
+        this.sendJobEvent({ jobId, kind: "log", entry: live.logs[live.logs.length - 1] });
+        this.clearActiveRunTracking(jobId);
+        this.setJobStatus(jobId, "failed", { finishedAt: failedAt, exitCode: -1 });
+        this.finalizeIntegrationRun(jobId, "failed", failedAt, -1);
+        return;
+      }
+
+      this.attachChildToJob(jobId, child, liveSpec, false);
+    }, TRANSIENT_AGENT_RETRY_DELAY_MS);
+
+    if (typeof (timer as any).unref === "function") (timer as any).unref();
+    this.transientRetryTimerByJobId.set(jobId, timer);
+    return true;
   }
 
   private codexSettingsWithInlineMcp(settings: any): any {
@@ -351,6 +646,7 @@ export class JobsManager {
 
   shutdown() {
     this.flushPersist();
+    for (const jobId of this.transientRetryTimerByJobId.keys()) this.clearTransientRetryTimer(jobId);
     for (const child of this.procs.values()) {
       try {
         child.kill("SIGTERM");
@@ -388,6 +684,8 @@ export class JobsManager {
     this.attentionLlmProcs.clear();
     this.integratingToDefaultJobIds.clear();
     this.geminiStreamingTextByJobId.clear();
+    this.activeRunSpecByJobId.clear();
+    this.transientRetryCountByJobId.clear();
   }
 
   private markJobDirty(jobId: string) {
@@ -2091,6 +2389,8 @@ export class JobsManager {
 
       if (data.type === "thread.started" && data.thread_id) {
         job.threadId = data.thread_id;
+        const activeSpec = this.activeRunSpecByJobId.get(jobId);
+        if (activeSpec && activeSpec.agent === "codex") activeSpec.threadId = job.threadId;
         this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
         this.markJobDirty(jobId);
         try {
@@ -2351,6 +2651,8 @@ export class JobsManager {
       const modelFromEvent = this.extractClaudeModelFromData(data);
       if (modelFromEvent && job.model !== modelFromEvent) {
         job.model = modelFromEvent;
+        const activeSpec = this.activeRunSpecByJobId.get(jobId);
+        if (activeSpec && activeSpec.agent === "claude") activeSpec.model = job.model;
         this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
         this.markJobDirty(jobId);
       }
@@ -2358,6 +2660,8 @@ export class JobsManager {
       if (data.type === "system" && data.subtype === "init" && typeof data.session_id === "string" && data.session_id) {
         if (job.threadId !== data.session_id) {
           job.threadId = data.session_id;
+          const activeSpec = this.activeRunSpecByJobId.get(jobId);
+          if (activeSpec && activeSpec.agent === "claude") activeSpec.sessionId = job.threadId;
           this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
           this.markJobDirty(jobId);
           try {
@@ -2407,6 +2711,8 @@ export class JobsManager {
       const modelFromEvent = this.extractGeminiModelFromData(data);
       if (modelFromEvent && job.model !== modelFromEvent) {
         job.model = modelFromEvent;
+        const activeSpec = this.activeRunSpecByJobId.get(jobId);
+        if (activeSpec && activeSpec.agent === "gemini") activeSpec.model = job.model;
         this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
         this.markJobDirty(jobId);
       }
@@ -2417,6 +2723,8 @@ export class JobsManager {
         const sessionId = this.extractGeminiSessionIdFromData(data);
         if (sessionId && job.threadId !== sessionId) {
           job.threadId = sessionId;
+          const activeSpec = this.activeRunSpecByJobId.get(jobId);
+          if (activeSpec && activeSpec.agent === "gemini") activeSpec.sessionId = job.threadId;
           this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
           this.markJobDirty(jobId);
           try {
@@ -3024,42 +3332,45 @@ export class JobsManager {
     this.setJobStatus(jobId, "running", { startedAt: ts, finishedAt: "", exitCode: null });
 
     let child: ChildProcess;
+    let runSpec: ActiveRunSpec;
     try {
       if (agent === "claude") {
-        const claudePath = this.getClaudePath();
-        child = this.runClaudeResume!({
-          claudePath,
+        runSpec = {
+          agent: "claude",
+          phase: "resume",
+          projectPath: runProjectPath,
           settings: claudeSettings,
-          cwd: runProjectPath,
-          sessionId: job.threadId,
           model,
           prompt: runPrompt,
-          onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
-        });
+          images: [],
+          sessionId: job.threadId
+        };
+        child = this.startChildFromRunSpec(jobId, runSpec);
       } else if (agent === "gemini") {
-        const geminiPath = this.getGeminiPath();
-        child = this.runGeminiResume!({
-          geminiPath,
+        runSpec = {
+          agent: "gemini",
+          phase: "resume",
+          projectPath: runProjectPath,
           settings: geminiSettings,
-          cwd: runProjectPath,
-          sessionId: job.threadId,
           model,
           prompt: runPrompt,
-          onEvent: (ev: any) => this.onGeminiEvent(jobId, ev)
-        });
+          images: [],
+          sessionId: job.threadId
+        };
+        child = this.startChildFromRunSpec(jobId, runSpec);
       } else {
-        const codexPath = this.getCodexPath();
         const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
-        child = this.runCodexResume({
-          codexPath,
+        runSpec = {
+          agent: "codex",
+          phase: "resume",
+          projectPath: runProjectPath,
           settings: runCodexSettings,
-          cwd: runProjectPath,
-          threadId: job.threadId,
           model,
           prompt: runPrompt,
           images: next.images || [],
-          onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
-        });
+          threadId: job.threadId
+        };
+        child = this.startChildFromRunSpec(jobId, runSpec);
       }
     } catch (err: any) {
       const finishedAt = new Date().toISOString();
@@ -3075,9 +3386,7 @@ export class JobsManager {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
 
-    this.procs.set(jobId, child);
-    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, err));
-    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, code, signal));
+    this.attachChildToJob(jobId, child, runSpec);
 
     // Now that the child process is successfully running, dequeue and record the prompt in history.
     job.queuedPrompts.shift();
@@ -3123,6 +3432,7 @@ export class JobsManager {
     });
     this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
 
+    this.clearActiveRunTracking(jobId);
     this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
     this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
   }
@@ -3147,6 +3457,7 @@ export class JobsManager {
     const hasQueued = Array.isArray(job.queuedPrompts) && job.queuedPrompts.length > 0;
     const canAutoContinue = !signal && code === 0 && hasQueued && !!job.threadId;
     if (canAutoContinue) {
+      this.clearActiveRunTracking(jobId);
       const started = this.startNextQueuedPrompt(jobId);
       if (started.ok) return;
       const errMsg = "error" in started ? started.error : "Unknown error";
@@ -3158,22 +3469,28 @@ export class JobsManager {
         text: `ERROR: Could not continue queued follow-ups: ${errMsg}`
       });
       this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+      this.clearActiveRunTracking(jobId);
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
       this.finalizeIntegrationRun(jobId, "failed", finishedAt, -1);
       return;
     }
+
+    if (!signal && code !== 0 && this.scheduleTransientRetry(jobId)) return;
 
     const hinted = this.attentionHintByJobId.get(jobId) || null;
     const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
     const exitCode = typeof code === "number" ? code : null;
 
     if (signal) {
+      this.clearActiveRunTracking(jobId);
       this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: code });
       this.finalizeIntegrationRun(jobId, "cancelled", finishedAt, exitCode);
     } else if (code !== 0) {
+      this.clearActiveRunTracking(jobId);
       this.setJobStatus(jobId, "failed", { finishedAt, exitCode: code });
       this.finalizeIntegrationRun(jobId, "failed", finishedAt, exitCode);
     } else {
+      this.clearActiveRunTracking(jobId);
       this.setJobStatus(jobId, provisionalStatus, { finishedAt, exitCode: code });
       this.kickoffAttentionClassification(jobId, finishedAt, exitCode, hinted, (finalStatus) => {
         this.finalizeIntegrationRun(jobId, finalStatus, finishedAt, exitCode);
@@ -3387,42 +3704,44 @@ export class JobsManager {
     }
 
     let child: ChildProcess;
+    let runSpec: ActiveRunSpec;
     try {
       if (agent === "claude") {
-        if (!this.runClaudeExec) throw new Error("Claude runner not configured");
-        const claudePath = this.getClaudePath();
-        child = this.runClaudeExec({
-          claudePath,
+        runSpec = {
+          agent: "claude",
+          phase: "exec",
+          projectPath: run.projectPath || project.path,
           settings: claudeSettings,
-          projectPath: run.projectPath || project.path,
           model,
-          sessionId: threadId,
           prompt: runPrompt,
-          onEvent: (ev: any) => this.onClaudeEvent(jobId, ev)
-        });
+          images: [],
+          sessionId: threadId
+        };
+        child = this.startChildFromRunSpec(jobId, runSpec);
       } else if (agent === "gemini") {
-        if (!this.runGeminiExec) throw new Error("Gemini runner not configured");
-        const geminiPath = this.getGeminiPath();
-        child = this.runGeminiExec({
-          geminiPath,
-          settings: geminiSettings,
+        runSpec = {
+          agent: "gemini",
+          phase: "exec",
           projectPath: run.projectPath || project.path,
+          settings: geminiSettings,
           model,
           prompt: runPrompt,
-          onEvent: (ev: any) => this.onGeminiEvent(jobId, ev)
-        });
+          images: []
+        };
+        child = this.startChildFromRunSpec(jobId, runSpec);
       } else {
-        const codexPath = this.getCodexPath();
         const runCodexSettings = this.codexSettingsWithInlineMcp(codexSettings);
-        child = this.runCodexExec({
-          codexPath,
-          settings: runCodexSettings,
+        runSpec = {
+          agent: "codex",
+          phase: "exec",
           projectPath: run.projectPath || project.path,
+          settings: runCodexSettings,
           model,
           prompt: runPrompt,
           images,
-          onEvent: (ev: any) => this.onCodexEvent(jobId, ev)
-        });
+          threadId: ""
+        };
+        child = this.startChildFromRunSpec(jobId, runSpec);
       }
     } catch (err: any) {
       const failedAt = new Date().toISOString();
@@ -3438,10 +3757,7 @@ export class JobsManager {
       return { ok: true, jobId };
     }
 
-    this.procs.set(jobId, child);
-
-    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, err));
-    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, code, signal));
+    this.attachChildToJob(jobId, child, runSpec);
 
     return { ok: true, jobId };
   }
@@ -3699,6 +4015,7 @@ export class JobsManager {
     this.geminiStreamingTextByJobId.delete(id);
     this.integratingToDefaultJobIds.delete(id);
     this.dirtyJobIds.delete(id);
+    this.clearActiveRunTracking(id);
     try {
       this.history.remove(id);
     } catch {
@@ -3710,6 +4027,15 @@ export class JobsManager {
 
   cancel(jobId: unknown) {
     const id = String(jobId || "");
+    const job = this.jobs.get(id);
+    if (!job) return false;
+    if (this.transientRetryTimerByJobId.has(id) && !this.procs.has(id)) {
+      this.clearActiveRunTracking(id);
+      const finishedAt = new Date().toISOString();
+      this.setJobStatus(id, "cancelled", { finishedAt, exitCode: null });
+      this.finalizeIntegrationRun(id, "cancelled", finishedAt, null);
+      return true;
+    }
     const child = this.procs.get(id);
     if (!child) return false;
     try {
