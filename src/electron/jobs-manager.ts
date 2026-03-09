@@ -7,7 +7,7 @@ import { promptSummary } from "../core/prompt";
 import { oneLine, truncateText } from "../core/text";
 import { addUsageTotals, toIntOrZero } from "../core/usage";
 import { newId } from "../core/id";
-import { normalizeLoadedJob, snapshotJob, snapshotJobMeta, type Job, type JobRunMode } from "../core/jobs";
+import { normalizeLoadedJob, sanitizeJobModel, snapshotJob, snapshotJobMeta, type Job, type JobRunMode } from "../core/jobs";
 import { searchJobs, type JobSearchOpts } from "../core/job-search";
 import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as normalizeGitCheckoutMode } from "../core/git-normalize";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
@@ -650,10 +650,9 @@ export class JobsManager {
     const fallbackModel = readCodexDefaultModelFromConfigToml();
     const settings = this.store.getSettings();
     const claudeSettings = this.getClaudeSettingsFrom(settings);
-    const claudeConfiguredModel = typeof (claudeSettings as any).model === "string" ? String((claudeSettings as any).model || "").trim() : "";
+    const claudeConfiguredModel = sanitizeJobModel((claudeSettings as any).model);
     const geminiSettings = this.getGeminiSettingsFrom(settings);
-    const geminiConfiguredModel =
-      typeof (geminiSettings as any).model === "string" ? String((geminiSettings as any).model || "").trim() : "";
+    const geminiConfiguredModel = sanitizeJobModel((geminiSettings as any).model);
     const loaded = this.history.loadAll();
     for (const raw of loaded) {
       const j = normalizeLoadedJob(raw, now);
@@ -670,8 +669,9 @@ export class JobsManager {
         else if (geminiConfiguredModel) j.model = geminiConfiguredModel;
       }
       this.jobs.set(j.id, j);
-      // If we normalized a running job -> cancelled, persist the change.
-      if (raw && typeof raw === "object" && (raw as any).status === "running") {
+      const rawModel = raw && typeof raw === "object" && typeof (raw as any).model === "string" ? String((raw as any).model).trim() : "";
+      // Persist repaired state from disk, including cleared sentinel models.
+      if (raw && typeof raw === "object" && ((raw as any).status === "running" || rawModel !== j.model)) {
         try {
           this.history.save(snapshotJob(j));
         } catch {
@@ -914,9 +914,9 @@ export class JobsManager {
   }): string {
     const { agent, preferredAgent, modelOverride, codexSettings, claudeSettings, geminiSettings } = opts;
     if (modelOverride && agent === preferredAgent) return modelOverride;
-    if (agent === "claude") return String((claudeSettings as any).model || "").trim();
-    if (agent === "gemini") return String((geminiSettings as any).model || "").trim();
-    const model = String((codexSettings as any).model || "").trim();
+    if (agent === "claude") return sanitizeJobModel((claudeSettings as any).model);
+    if (agent === "gemini") return sanitizeJobModel((geminiSettings as any).model);
+    const model = sanitizeJobModel((codexSettings as any).model);
     return model || readCodexDefaultModelFromConfigToml();
   }
 
@@ -1784,7 +1784,7 @@ export class JobsManager {
 
     const { rev, userPrompt, settings, codexSettings, claudeSettings, geminiSettings } = queued;
     const fallbackAgent = this.normalizeAgentKey(job.agent);
-    const fallbackModel = String(job.model || "").trim();
+    const fallbackModel = sanitizeJobModel(job.model);
     const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
     const prompt = this.buildTitleSummarizerPrompt({
       userPrompt,
@@ -2156,6 +2156,10 @@ export class JobsManager {
     return t.length > 160 ? t.slice(0, 160) : t;
   }
 
+  private normalizeJobModelValue(value: unknown): string {
+    return sanitizeJobModel(this.normalizeModelLabel(value));
+  }
+
   private extractClaudeModelFromData(data: any): string {
     const d = data && typeof data === "object" ? data : {};
     const msg = d.message && typeof d.message === "object" ? d.message : {};
@@ -2182,7 +2186,7 @@ export class JobsManager {
       session.model
     ];
     for (const c of candidates) {
-      const normalized = this.normalizeModelLabel(c);
+      const normalized = this.normalizeJobModelValue(c);
       if (normalized) return normalized;
     }
     return "";
@@ -2291,7 +2295,7 @@ export class JobsManager {
       (session as any).sessionId
     ];
     for (const c of candidates) {
-      const normalized = this.normalizeModelLabel(c);
+      const normalized = this.normalizeJobModelValue(c);
       if (normalized) return normalized;
     }
     return "";
@@ -2840,7 +2844,7 @@ export class JobsManager {
     const geminiSettings = this.getGeminiSettingsFrom(settings);
 
     const fallbackAgent = this.normalizeAgentKey(job.agent);
-    const fallbackModel = String(job.model || "").trim();
+    const fallbackModel = sanitizeJobModel(job.model);
     const picked = this.pickTitleSummarizer(settings, { agent: fallbackAgent, model: fallbackModel });
 
     try {
@@ -2998,12 +3002,12 @@ export class JobsManager {
     const agent = this.normalizeAgentKey(job.agent);
 
     let model =
-      (job.model ||
+      (sanitizeJobModel(job.model) ||
         (agent === "claude"
-          ? String((claudeSettings as any).model || "")
+          ? sanitizeJobModel((claudeSettings as any).model)
           : agent === "gemini"
-            ? String((geminiSettings as any).model || "")
-            : String(codexSettings.model || settings.agentModel || "")) ||
+            ? sanitizeJobModel((geminiSettings as any).model)
+            : sanitizeJobModel(codexSettings.model || settings.agentModel || "")) ||
         "").trim();
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
     const runProjectPath = this.ensureRunnableProjectPath(job);
@@ -3277,19 +3281,19 @@ export class JobsManager {
       }
     }
 
-    const modelOverride = (params && params.model ? String(params.model) : "").trim();
+    const modelOverride = sanitizeJobModel(params && params.model ? String(params.model) : "");
     let model = modelOverride;
     if (!model) {
-      if (agent === "claude") model = String((claudeSettings as any).model || "").trim();
-      else if (agent === "gemini") model = String((geminiSettings as any).model || "").trim();
-      else model = String(codexSettings.model || settings.agentModel || "").trim();
+      if (agent === "claude") model = sanitizeJobModel((claudeSettings as any).model);
+      else if (agent === "gemini") model = sanitizeJobModel((geminiSettings as any).model);
+      else model = sanitizeJobModel(codexSettings.model || settings.agentModel || "");
     }
     if (agent === "codex" && !model) model = readCodexDefaultModelFromConfigToml();
 
     let preparedPrompt = enrichedPrompt;
     const needsClaudeImageContext = images.length > 0 && (agent === "claude" || (mode === "war_room" && warRoomParticipants.includes("claude")));
     if (needsClaudeImageContext) {
-      const claudeImageModel = String((claudeSettings as any).model || "").trim() || model;
+      const claudeImageModel = sanitizeJobModel((claudeSettings as any).model) || model;
       try {
         const prepared = await this.prepareClaudePromptWithImages({
           settings: claudeSettings,
@@ -3514,8 +3518,8 @@ export class JobsManager {
     if (agent === "claude" && images.length > 0) {
       const settings = this.store.getSettings();
       const claudeSettings = this.getClaudeSettingsFrom(settings);
-      let model = String(job.model || "").trim();
-      if (!model) model = String((claudeSettings as any).model || "").trim();
+      let model = sanitizeJobModel(job.model);
+      if (!model) model = sanitizeJobModel((claudeSettings as any).model);
       try {
         const prepared = await this.prepareClaudePromptWithImages({
           settings: claudeSettings,
@@ -3572,7 +3576,7 @@ export class JobsManager {
     const applied: Record<string, any> = {};
 
     if (typeof p.model === "string") {
-      job.model = p.model;
+      job.model = sanitizeJobModel(p.model);
       applied.model = job.model;
     }
 

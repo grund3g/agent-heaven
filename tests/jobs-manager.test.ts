@@ -395,6 +395,152 @@ describe("electron/jobs-manager", () => {
     expect(resumeOpts.sessionId).toBe("s123");
   });
 
+  it("repairs persisted synthetic Claude models before resume", async () => {
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = {
+      loadAll: () => [
+        {
+          id: "job1",
+          title: "Recover session",
+          status: "failed",
+          box: "board",
+          archivedAt: "",
+          archiveReason: "",
+          trashedAt: "",
+          integratedToDefaultAt: "",
+          integratedToDefaultBranch: "",
+          createdAt: "2020-01-01T00:00:00.000Z",
+          startedAt: "2020-01-01T00:00:00.000Z",
+          finishedAt: "2020-01-01T00:00:01.000Z",
+          projectId: "p1",
+          projectPath: "/tmp/proj",
+          agent: "claude",
+          model: "<synthetic>",
+          threadId: "s123",
+          prompts: [{ ts: "2020-01-01T00:00:00.000Z", text: "Do the thing", images: [] }],
+          queuedPrompts: [],
+          messages: [],
+          logs: [],
+          usage: null,
+          usageTotal: { input_tokens: 0, output_tokens: 0, turns: 0 },
+          exitCode: 1
+        }
+      ],
+      save: () => true,
+      remove: () => true
+    };
+
+    let resumeOpts: any = null;
+    const resumeChild = new FakeChild();
+    const runClaudeResume = (opts: any) => {
+      resumeOpts = opts;
+      return resumeChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec: () => new FakeChild() as any,
+      runClaudeResume,
+      needsAttentionHeuristic: () => false
+    });
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.model).toBe("sonnet");
+
+    expect(await jm.send({ jobId: "job1", prompt: "follow up", images: [] })).toEqual({ ok: true });
+    expect(resumeOpts.sessionId).toBe("s123");
+    expect(resumeOpts.model).toBe("sonnet");
+
+    resumeChild.emit("close", 0, null);
+  });
+
+  it("does not overwrite a Claude job model with synthetic error metadata", async () => {
+    const store = {
+      getSettings: () => ({
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runClaudeExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOpts: any = null;
+    const resumeChild = new FakeChild();
+    const runClaudeResume = (opts: any) => {
+      resumeOpts = opts;
+      return resumeChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec,
+      runClaudeResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
+    });
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:01.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: {
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: {
+          model: "<synthetic>",
+          content: [{ type: "text", text: "API Error: Unable to connect to API (EPIPE)" }]
+        }
+      }
+    });
+
+    execChild.emit("close", 1, null);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.model).toBe("claude-sonnet-4-5");
+
+    expect(await jm.send({ jobId: "job1", prompt: "retry", images: [] })).toEqual({ ok: true });
+    expect(resumeOpts.model).toBe("claude-sonnet-4-5");
+
+    resumeChild.emit("close", 0, null);
+  });
+
   it("prepares Claude image attachments via Messages API on job start", async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "jobs-manager-claude-img-start-"));
     const imagePath = path.join(tmpDir, "screen.png");

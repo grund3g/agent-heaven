@@ -15,6 +15,12 @@ describe("core/jobs", () => {
     expect(j?.integratedToDefaultBranch).toBe("");
   });
 
+  it("drops internal sentinel model names from loaded jobs", () => {
+    const j = normalizeLoadedJob({ id: "j2", status: "failed", model: "<synthetic>" }, "2020-01-01T00:00:00.000Z");
+    expect(j).not.toBeNull();
+    expect(j?.model).toBe("");
+  });
+
   it("computes snapshot meta (title/promptPreview/previewText)", () => {
     const job: Job = {
       id: "j1",

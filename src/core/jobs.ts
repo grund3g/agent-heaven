@@ -77,6 +77,14 @@ function safeIso(s: unknown): string {
   return t && t.length >= 10 ? t : "";
 }
 
+export function sanitizeJobModel(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const t = value.replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  if (t === "synthetic" || /^<[^>\r\n]+>$/.test(t)) return "";
+  return t.length > 160 ? t.slice(0, 160) : t;
+}
+
 export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   if (!job || typeof job !== "object") return null;
   const id = typeof (job as any).id === "string" ? (job as any).id : "";
@@ -110,7 +118,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   out.checkoutModeEffective = typeof out.checkoutModeEffective === "string" ? out.checkoutModeEffective : "";
   // Migration/default: historical jobs were Codex-only.
   out.agent = typeof out.agent === "string" ? out.agent : "codex";
-  out.model = typeof out.model === "string" ? out.model : "";
+  out.model = sanitizeJobModel(out.model);
   out.threadId = typeof out.threadId === "string" ? out.threadId : "";
 
   out.prompts = Array.isArray(out.prompts) ? out.prompts : [];
@@ -213,7 +221,7 @@ export function snapshotJob(job: Job): Job {
     checkoutModePreference,
     checkoutModeEffective,
     agent,
-    model,
+    model: sanitizeJobModel(model),
     threadId,
     prompts,
     queuedPrompts,
