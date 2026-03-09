@@ -470,6 +470,7 @@ describe("electron/jobs-manager", () => {
   it("does not overwrite a Claude job model with synthetic error metadata", async () => {
     const store = {
       getSettings: () => ({
+        uiModel: "gpt-5-codex",
         agents: {
           codex: { path: "", model: "" },
           claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
@@ -516,6 +517,19 @@ describe("electron/jobs-manager", () => {
     });
 
     execOnEvent!({
+      ts: "2020-01-01T00:00:00.500Z",
+      stream: "stdout",
+      kind: "claude",
+      data: {
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: {
+          content: [{ type: "tool_use", id: "toolu_1", name: "bash", input: { command: "pwd" } }]
+        }
+      }
+    });
+
+    execOnEvent!({
       ts: "2020-01-01T00:00:01.000Z",
       stream: "stdout",
       kind: "claude",
@@ -539,6 +553,166 @@ describe("electron/jobs-manager", () => {
     expect(resumeOpts.model).toBe("claude-sonnet-4-5");
 
     resumeChild.emit("close", 0, null);
+  });
+
+  it("retries an early transient Claude API connection failure once", async () => {
+    const store = {
+      getSettings: () => ({
+        uiModel: "gpt-5-codex",
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    const firstExecChild = new FakeChild();
+    const secondExecChild = new FakeChild();
+    const execChildren = [firstExecChild, secondExecChild];
+    const execCalls: any[] = [];
+    const runClaudeExec = (opts: any) => {
+      execCalls.push(opts);
+      const child = execChildren.shift();
+      if (!child) throw new Error("unexpected extra Claude exec");
+      return child as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec,
+      runClaudeResume: () => new FakeChild() as any,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execCalls).toHaveLength(1);
+
+    execCalls[0].onEvent({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
+    });
+
+    execCalls[0].onEvent({
+      ts: "2020-01-01T00:00:01.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: {
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: { model: "<synthetic>", content: [{ type: "text", text: "API Error: Unable to connect to API (EPIPE)" }] }
+      }
+    });
+
+    firstExecChild.emit("close", 1, null);
+
+    expect(execCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_199);
+    expect(execCalls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(execCalls).toHaveLength(2);
+    expect(execCalls[1].sessionId).toBe("s123");
+    expect(execCalls[1].model).toBe("claude-sonnet-4-5");
+
+    secondExecChild.emit("close", 0, null);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(["done", "needs_attention"]).toContain(snap.job.status);
+  });
+
+  it("retries a transient Claude resume without duplicating prompt history", async () => {
+    const store = {
+      getSettings: () => ({
+        uiModel: "gpt-5-codex",
+        agents: {
+          codex: { path: "", model: "" },
+          claude: { path: "", model: "sonnet", permissionMode: "acceptEdits", dangerouslySkipPermissions: false }
+        }
+      }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runClaudeExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    const firstResumeChild = new FakeChild();
+    const secondResumeChild = new FakeChild();
+    const resumeChildren = [firstResumeChild, secondResumeChild];
+    const resumeCalls: any[] = [];
+    const runClaudeResume = (opts: any) => {
+      resumeCalls.push(opts);
+      const child = resumeChildren.shift();
+      if (!child) throw new Error("unexpected extra Claude resume");
+      return child as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec: () => new FakeChild() as any,
+      runCodexResume: () => new FakeChild() as any,
+      runClaudeExec,
+      runClaudeResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", agent: "claude", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    expect(execOnEvent).not.toBeNull();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: { type: "system", subtype: "init", session_id: "s123", model: "claude-sonnet-4-5" }
+    });
+    execChild.emit("close", 0, null);
+
+    expect(await jm.send({ jobId: "job1", prompt: "retry this", images: [] })).toEqual({ ok: true });
+    expect(resumeCalls).toHaveLength(1);
+    expect((jm.getJob("job1") as any).job.prompts.length).toBe(2);
+
+    resumeCalls[0].onEvent({
+      ts: "2020-01-01T00:00:01.000Z",
+      stream: "stdout",
+      kind: "claude",
+      data: {
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: { model: "<synthetic>", content: [{ type: "text", text: "API Error: Unable to connect to API (EPIPE)" }] }
+      }
+    });
+    firstResumeChild.emit("close", 1, null);
+
+    await vi.advanceTimersByTimeAsync(1_200);
+    expect(resumeCalls).toHaveLength(2);
+    expect(resumeCalls[1].sessionId).toBe("s123");
+    expect(resumeCalls[1].model).toBe("claude-sonnet-4-5");
+
+    const snapDuringRetry = jm.getJob("job1") as any;
+    expect(snapDuringRetry.job.prompts.length).toBe(2);
+
+    secondResumeChild.emit("close", 0, null);
+
+    const snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.prompts.length).toBe(2);
+    expect(["done", "needs_attention"]).toContain(snap.job.status);
   });
 
   it("prepares Claude image attachments via Messages API on job start", async () => {
