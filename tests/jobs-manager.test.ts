@@ -310,6 +310,82 @@ describe("electron/jobs-manager", () => {
     expect(snapDone.job.status).toBe("done");
   });
 
+  it("associates assistant messages with the prompt they belong to across queued follow-ups", async () => {
+    const store = {
+      getSettings: () => ({ agents: { codex: { path: "", model: "" } } }),
+      listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
+    };
+    const history = { loadAll: () => [], save: () => true, remove: () => true };
+
+    let execOnEvent: ((ev: any) => void) | null = null;
+    const execChild = new FakeChild();
+    const runCodexExec = (opts: any) => {
+      execOnEvent = opts.onEvent;
+      return execChild as any;
+    };
+
+    let resumeOnEvent: ((ev: any) => void) | null = null;
+    const resumeChild = new FakeChild();
+    const runCodexResume = (opts: any) => {
+      resumeOnEvent = opts.onEvent;
+      return resumeChild as any;
+    };
+
+    const jm = new JobsManager({
+      store,
+      history,
+      sendJobEvent: () => {},
+      runCodexExec,
+      runCodexResume,
+      needsAttentionHeuristic: () => false,
+      createId: () => "job1"
+    });
+
+    expect(await jm.start({ prompt: "Do the thing", projectId: "p1", images: [] })).toEqual({ ok: true, jobId: "job1" });
+    const initialPromptId = (jm.getJob("job1") as any).job.prompts[0].id;
+    expect(typeof initialPromptId).toBe("string");
+    expect(initialPromptId).toBeTruthy();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:00.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "thread.started", thread_id: "t123" }
+    });
+
+    expect(await jm.send({ jobId: "job1", prompt: "queued follow up", images: [] })).toEqual({ ok: true });
+    const queuedPromptId = (jm.getJob("job1") as any).job.queuedPrompts[0].id;
+    expect(typeof queuedPromptId).toBe("string");
+    expect(queuedPromptId).toBeTruthy();
+
+    execOnEvent!({
+      ts: "2020-01-01T00:00:01.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "item.completed", item: { type: "agent_message", text: "still answering the first prompt" } }
+    });
+
+    let snap = jm.getJob("job1") as any;
+    expect(snap.job.messages).toHaveLength(1);
+    expect(snap.job.messages[0].promptId).toBe(initialPromptId);
+
+    execChild.emit("close", 0, null);
+
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.prompts[1].id).toBe(queuedPromptId);
+
+    resumeOnEvent!({
+      ts: "2020-01-01T00:00:02.000Z",
+      stream: "stdout",
+      kind: "codex",
+      data: { type: "item.completed", item: { type: "agent_message", text: "now answering the queued follow-up" } }
+    });
+
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.messages).toHaveLength(2);
+    expect(snap.job.messages[1].promptId).toBe(queuedPromptId);
+  });
+
   it("starts claude jobs, handles system init, and can resume", async () => {
     const events: any[] = [];
 
