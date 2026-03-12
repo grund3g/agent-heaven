@@ -45,6 +45,7 @@ type ActiveRunSpec = {
   settings: any;
   model: string;
   prompt: string;
+  promptId?: string;
   images: string[];
   sessionId?: string;
   threadId?: string;
@@ -1679,8 +1680,9 @@ export class JobsManager {
             "- A synthesis pass could not be completed in this run."
           ].join("\n");
           const ts = new Date().toISOString();
-          this.appendMessage(job, { ts, role: "assistant", text: fallback });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts, role: "assistant", text: fallback } });
+          const msg = this.assistantMessage(jobId, job, ts, fallback);
+          this.appendMessage(job, msg);
+          this.sendJobEvent({ jobId, kind: "message", message: msg });
         }
       }
 
@@ -2198,6 +2200,29 @@ export class JobsManager {
     this.markJobDirty(job.id);
   }
 
+  private lastPromptId(job: Job): string {
+    const prompts = Array.isArray(job.prompts) ? job.prompts : [];
+    for (let i = prompts.length - 1; i >= 0; i -= 1) {
+      const id =
+        prompts[i] && typeof (prompts[i] as any).id === "string" ? String((prompts[i] as any).id).trim() : "";
+      if (id) return id;
+    }
+    return "";
+  }
+
+  private activePromptId(jobId: string, job: Job): string {
+    const spec = this.activeRunSpecByJobId.get(jobId);
+    const promptId = spec && typeof spec.promptId === "string" ? spec.promptId.trim() : "";
+    return promptId || this.lastPromptId(job);
+  }
+
+  private assistantMessage(jobId: string, job: Job, ts: string, text: string) {
+    const msg: any = { ts, role: "assistant", text };
+    const promptId = this.activePromptId(jobId, job);
+    if (promptId) msg.promptId = promptId;
+    return msg;
+  }
+
   private appendMessage(job: Job, msg: any) {
     job.messages.push(msg);
     const MAX = 200;
@@ -2407,8 +2432,9 @@ export class JobsManager {
         if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (String(text || "").trim()) {
-          this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
+          const msg = this.assistantMessage(jobId, job, ev.ts, text);
+          this.appendMessage(job, msg);
+          this.sendJobEvent({ jobId, kind: "message", message: msg });
         }
       }
 
@@ -2679,8 +2705,9 @@ export class JobsManager {
         if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (text) {
-          this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
+          const msg = this.assistantMessage(jobId, job, ev.ts, text);
+          this.appendMessage(job, msg);
+          this.sendJobEvent({ jobId, kind: "message", message: msg });
         }
       }
 
@@ -2752,8 +2779,9 @@ export class JobsManager {
         if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
         if (text) {
-          this.appendMessage(job, { ts: ev.ts, role: "assistant", text });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text } });
+          const msg = this.assistantMessage(jobId, job, ev.ts, text);
+          this.appendMessage(job, msg);
+          this.sendJobEvent({ jobId, kind: "message", message: msg });
         }
       }
 
@@ -3297,6 +3325,7 @@ export class JobsManager {
 
     const next = job.queuedPrompts[0];
     if (!next) return { ok: false, error: "No queued prompts" };
+    const nextPromptId = typeof (next as any).id === "string" && String((next as any).id).trim() ? String((next as any).id).trim() : newId();
     const queuedPrompt =
       typeof (next as any).preparedText === "string" && String((next as any).preparedText || "").trim()
         ? String((next as any).preparedText || "")
@@ -3342,6 +3371,7 @@ export class JobsManager {
           settings: claudeSettings,
           model,
           prompt: runPrompt,
+          promptId: nextPromptId,
           images: [],
           sessionId: job.threadId
         };
@@ -3354,6 +3384,7 @@ export class JobsManager {
           settings: geminiSettings,
           model,
           prompt: runPrompt,
+          promptId: nextPromptId,
           images: [],
           sessionId: job.threadId
         };
@@ -3367,6 +3398,7 @@ export class JobsManager {
           settings: runCodexSettings,
           model,
           prompt: runPrompt,
+          promptId: nextPromptId,
           images: next.images || [],
           threadId: job.threadId
         };
@@ -3392,7 +3424,7 @@ export class JobsManager {
     job.queuedPrompts.shift();
     this.updateQueuedMeta(job);
 
-    job.prompts.push({ ts, text: next.text, images: next.images || [] });
+    job.prompts.push({ id: nextPromptId, ts, text: next.text, images: next.images || [] });
     const meta = snapshotJobMeta(job);
     this.sendJobEvent({ jobId, kind: "meta", patch: { prompts: job.prompts, promptPreview: meta.promptPreview } });
     this.markJobDirty(jobId);
@@ -3631,6 +3663,7 @@ export class JobsManager {
     const threadId = mode === "single" && agent === "claude" ? randomUUID() : "";
 
     const createdAt = new Date().toISOString();
+    const initialPromptId = newId();
     const fallbackTitle = truncateText(promptSummary(prompt), 120);
 
     const job: Job = {
@@ -3655,7 +3688,7 @@ export class JobsManager {
       agent,
       model,
       threadId,
-      prompts: [{ ts: createdAt, text: prompt, images }],
+      prompts: [{ id: initialPromptId, ts: createdAt, text: prompt, images }],
       queuedPrompts: [],
       messages: [],
       logs: [],
@@ -3714,6 +3747,7 @@ export class JobsManager {
           settings: claudeSettings,
           model,
           prompt: runPrompt,
+          promptId: initialPromptId,
           images: [],
           sessionId: threadId
         };
@@ -3726,6 +3760,7 @@ export class JobsManager {
           settings: geminiSettings,
           model,
           prompt: runPrompt,
+          promptId: initialPromptId,
           images: []
         };
         child = this.startChildFromRunSpec(jobId, runSpec);
@@ -3738,6 +3773,7 @@ export class JobsManager {
           settings: runCodexSettings,
           model,
           prompt: runPrompt,
+          promptId: initialPromptId,
           images,
           threadId: ""
         };
@@ -3863,8 +3899,9 @@ export class JobsManager {
     this.kickoffTitleSummary(jobId, text, null);
 
     const queuedAt = new Date().toISOString();
+    const queuedPromptId = newId();
     job.queuedPrompts = Array.isArray(job.queuedPrompts) ? job.queuedPrompts : [];
-    job.queuedPrompts.push({ ts: queuedAt, text, images, preparedText });
+    job.queuedPrompts.push({ id: queuedPromptId, ts: queuedAt, text, images, preparedText });
     const MAX_QUEUED = 50;
     if (job.queuedPrompts.length > MAX_QUEUED) {
       job.queuedPrompts.splice(0, job.queuedPrompts.length - MAX_QUEUED);

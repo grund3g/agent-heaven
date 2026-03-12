@@ -5,8 +5,8 @@ export type JobBox = "board" | "archive" | "trash";
 export type JobStatus = "running" | "done" | "failed" | "cancelled" | "needs_attention" | "unknown";
 export type JobRunMode = "single" | "war_room";
 
-export type JobPrompt = { ts: string; text: string; images?: string[]; preparedText?: string };
-export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string };
+export type JobPrompt = { id?: string; ts: string; text: string; images?: string[]; preparedText?: string };
+export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string; promptId?: string };
 export type JobLogEntry =
   | { ts: string; stream: "stdout" | "stderr"; kind: "log"; text: string }
   | { ts: string; stream: "stdout" | "stderr"; kind: "codex"; data: any }
@@ -77,6 +77,22 @@ function safeIso(s: unknown): string {
   return t && t.length >= 10 ? t : "";
 }
 
+function normalizePrompt(value: unknown): JobPrompt {
+  const raw = value && typeof value === "object" ? { ...(value as any) } : {};
+  const id = typeof raw.id === "string" ? raw.id.trim() : "";
+  if (id) raw.id = id;
+  else delete raw.id;
+  return raw as JobPrompt;
+}
+
+function normalizeMessage(value: unknown): JobMessage {
+  const raw = value && typeof value === "object" ? { ...(value as any) } : {};
+  const promptId = typeof raw.promptId === "string" ? raw.promptId.trim() : "";
+  if (promptId) raw.promptId = promptId;
+  else delete raw.promptId;
+  return raw as JobMessage;
+}
+
 export function sanitizeJobModel(value: unknown): string {
   if (typeof value !== "string") return "";
   const t = value.replace(/\s+/g, " ").trim();
@@ -121,9 +137,9 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   out.model = sanitizeJobModel(out.model);
   out.threadId = typeof out.threadId === "string" ? out.threadId : "";
 
-  out.prompts = Array.isArray(out.prompts) ? out.prompts : [];
-  out.queuedPrompts = Array.isArray(out.queuedPrompts) ? out.queuedPrompts : [];
-  out.messages = Array.isArray(out.messages) ? out.messages : [];
+  out.prompts = Array.isArray(out.prompts) ? out.prompts.map(normalizePrompt) : [];
+  out.queuedPrompts = Array.isArray(out.queuedPrompts) ? out.queuedPrompts.map(normalizePrompt) : [];
+  out.messages = Array.isArray(out.messages) ? out.messages.map(normalizeMessage) : [];
   out.logs = Array.isArray(out.logs) ? out.logs : [];
   out.processBindings = Array.isArray(out.processBindings) ? out.processBindings : [];
   out.processEvents = Array.isArray(out.processEvents) ? out.processEvents : [];

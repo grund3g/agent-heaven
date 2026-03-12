@@ -10337,23 +10337,45 @@ function renderJobDialogPanels(job) {
       })()
     : "";
 
-  // chat (merge user prompts + assistant messages by timestamp)
-  const timeline = [];
-  for (let i = 0; i < (job.prompts || []).length; i += 1) {
-    const p = job.prompts[i];
-    timeline.push({ ts: p.ts || "", role: "user", text: p.text || "", images: p.images || [], _i: i });
+  // chat (group assistant messages by the prompt/run they belong to, then use timestamps inside each group)
+  const prompts = Array.isArray(job && job.prompts) ? job.prompts : [];
+  const messages = Array.isArray(job && job.messages) ? job.messages : [];
+  const promptIndexById = new Map();
+  for (let i = 0; i < prompts.length; i += 1) {
+    const promptId = prompts[i] && typeof prompts[i].id === "string" ? prompts[i].id.trim() : "";
+    if (promptId && !promptIndexById.has(promptId)) promptIndexById.set(promptId, i);
   }
-  for (let i = 0; i < (job.messages || []).length; i += 1) {
-    const m = job.messages[i];
+  const inferPromptGroupIndex = (ts) => {
+    let idx = -1;
+    for (let i = 0; i < prompts.length; i += 1) {
+      const promptTs = prompts[i] && typeof prompts[i].ts === "string" ? prompts[i].ts : "";
+      if (!promptTs || promptTs <= ts) idx = i;
+      else break;
+    }
+    return idx;
+  };
+  const timeline = [];
+  for (let i = 0; i < prompts.length; i += 1) {
+    const p = prompts[i];
+    timeline.push({ ts: p.ts || "", role: "user", text: p.text || "", images: p.images || [], _i: i, _group: i, _slot: 0 });
+  }
+  for (let i = 0; i < messages.length; i += 1) {
+    const m = messages[i];
+    const promptId = m && typeof m.promptId === "string" ? m.promptId.trim() : "";
+    const group = promptId && promptIndexById.has(promptId) ? promptIndexById.get(promptId) : inferPromptGroupIndex(m.ts || "");
     timeline.push({
       ts: m.ts || "",
       role: m.role || "assistant",
       text: m.text || "",
       images: m.images || [],
-      _i: i + 100000
+      _i: i + 100000,
+      _group: typeof group === "number" ? group : Number.MAX_SAFE_INTEGER,
+      _slot: 1
     });
   }
   timeline.sort((a, b) => {
+    if (a._group !== b._group) return a._group - b._group;
+    if (a._slot !== b._slot) return a._slot - b._slot;
     if (a.ts < b.ts) return -1;
     if (a.ts > b.ts) return 1;
     return a._i - b._i;
