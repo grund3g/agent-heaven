@@ -7,7 +7,15 @@ import { promptSummary } from "../core/prompt";
 import { oneLine, truncateText } from "../core/text";
 import { addUsageTotals, toIntOrZero } from "../core/usage";
 import { newId } from "../core/id";
-import { normalizeLoadedJob, sanitizeJobModel, snapshotJob, snapshotJobMeta, type Job, type JobRunMode } from "../core/jobs";
+import {
+  normalizeLoadedJob,
+  sanitizeJobModel,
+  snapshotJob,
+  snapshotJobMeta,
+  type Job,
+  type JobAgentInspector,
+  type JobRunMode
+} from "../core/jobs";
 import { searchJobs, type JobSearchOpts } from "../core/job-search";
 import { normalizeBranchName as normalizeGitBranchName, normalizeCheckoutMode as normalizeGitCheckoutMode } from "../core/git-normalize";
 import { promptNeedsAttentionHeuristic } from "../needs-attention";
@@ -130,7 +138,7 @@ export class JobsManager {
   private mcpConfigFilesByJob = new Map<string, string[]>();
 
   private jobs = new Map<string, Job>(); // jobId -> job
-  private procs = new Map<string, ChildProcess>(); // jobId -> child process
+  private procs = new Map<string, Set<ChildProcess>>(); // jobId -> running child processes
   private titleLlmProcs = new Map<string, ChildProcess>(); // jobId -> title summarization process
   private pendingTitleSummaryByJobId = new Map<
     string,
@@ -247,6 +255,33 @@ export class JobsManager {
     } catch {
       // ignore
     }
+  }
+
+  private hasRunningProc(jobId: string): boolean {
+    const set = this.procs.get(jobId);
+    return !!(set && set.size > 0);
+  }
+
+  private registerProc(jobId: string, child: ChildProcess | null) {
+    if (!child) return;
+    let set = this.procs.get(jobId);
+    if (!set) {
+      set = new Set<ChildProcess>();
+      this.procs.set(jobId, set);
+    }
+    set.add(child);
+  }
+
+  private unregisterProc(jobId: string, child: ChildProcess | null) {
+    if (!child) return;
+    const set = this.procs.get(jobId);
+    if (!set) return;
+    set.delete(child);
+    if (set.size === 0) this.procs.delete(jobId);
+  }
+
+  private runningChildren(jobId: string): ChildProcess[] {
+    return Array.from(this.procs.get(jobId) || []);
   }
 
   private clearTransientRetryTimer(jobId: string) {
@@ -466,9 +501,24 @@ export class JobsManager {
     this.clearTransientRetryTimer(jobId);
     this.activeRunSpecByJobId.set(jobId, spec);
     if (resetRetry) this.transientRetryCountByJobId.set(jobId, 0);
-    this.procs.set(jobId, child);
-    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, err));
-    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, code, signal));
+    this.registerProc(jobId, child);
+    const job = this.jobs.get(jobId) || null;
+    if (job) {
+      const existing = this.snapshotAgentInspectors(job).find((item) => item.agent === spec.agent) || null;
+      const ts = new Date().toISOString();
+      this.updateAgentInspector(job, spec.agent, {
+        phase: spec.phase,
+        status: "running",
+        model: spec.model,
+        startedAt: existing && existing.startedAt ? existing.startedAt : ts,
+        updatedAt: ts,
+        finishedAt: "",
+        exitCode: null,
+        lastEvent: spec.phase === "resume" ? "Follow-up started" : "Run started"
+      });
+    }
+    child.on("error", (err: NodeJS.ErrnoException) => this.handleChildError(jobId, child, err));
+    child.on("close", (code: any, signal: any) => this.handleChildClose(jobId, child, code, signal));
   }
 
   private scheduleTransientRetry(jobId: string): boolean {
@@ -496,7 +546,7 @@ export class JobsManager {
       this.transientRetryTimerByJobId.delete(jobId);
       const live = this.jobs.get(jobId);
       const liveSpec = this.activeRunSpecByJobId.get(jobId);
-      if (!live || !liveSpec || this.procs.has(jobId)) return;
+      if (!live || !liveSpec || this.hasRunningProc(jobId)) return;
 
       const startedAt = new Date().toISOString();
       this.setJobStatus(jobId, "running", { startedAt, finishedAt: "", exitCode: null });
@@ -648,20 +698,22 @@ export class JobsManager {
   shutdown() {
     this.flushPersist();
     for (const jobId of this.transientRetryTimerByJobId.keys()) this.clearTransientRetryTimer(jobId);
-    for (const child of this.procs.values()) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-      const t = setTimeout(() => {
+    for (const set of this.procs.values()) {
+      for (const child of set) {
         try {
-          if (!child.killed) child.kill("SIGKILL");
+          child.kill("SIGTERM");
         } catch {
           // ignore
         }
-      }, 2_000);
-      if (typeof (t as any).unref === "function") (t as any).unref();
+        const t = setTimeout(() => {
+          try {
+            if (!child.killed) child.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
+        }, 2_000);
+        if (typeof (t as any).unref === "function") (t as any).unref();
+      }
     }
     this.procs.clear();
     // Best-effort cleanup; title summaries are non-critical.
@@ -1187,6 +1239,193 @@ export class JobsManager {
     return "Codex";
   }
 
+  private normalizeAgentInspectorState(value: unknown): string {
+    const raw = String(value || "")
+      .trim()
+      .toLowerCase();
+    if (!raw) return "queued";
+    if (raw === "running" || raw === "done" || raw === "failed" || raw === "cancelled" || raw === "waiting") return raw;
+    return "queued";
+  }
+
+  private normalizeAgentInspectorPhase(value: unknown): string {
+    const raw = oneLine(value).trim().toLowerCase();
+    if (!raw) return "queued";
+    return raw.length > 40 ? raw.slice(0, 40) : raw;
+  }
+
+  private trimInspectorText(value: unknown, maxChars: number): string {
+    const text = oneLine(value).trim();
+    if (!text) return "";
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars).trimEnd()}...`;
+  }
+
+  private normalizeAgentInspectorValue(value: any): JobAgentInspector | null {
+    if (!value || typeof value !== "object") return null;
+    const agent = this.normalizeAgentKey((value as any).agent);
+    const id = this.trimInspectorText((value as any).id || agent, 80) || agent;
+    const role = this.trimInspectorText((value as any).role, 80);
+    const phase = this.normalizeAgentInspectorPhase((value as any).phase);
+    const status = this.normalizeAgentInspectorState((value as any).status);
+    const model = sanitizeJobModel((value as any).model);
+    const threadId = this.trimInspectorText((value as any).threadId, 200);
+    const startedAt = typeof (value as any).startedAt === "string" ? (value as any).startedAt : "";
+    const updatedAt = typeof (value as any).updatedAt === "string" ? (value as any).updatedAt : "";
+    const finishedAt = typeof (value as any).finishedAt === "string" ? (value as any).finishedAt : "";
+    const lastEvent = this.trimInspectorText((value as any).lastEvent, 160);
+    const lastText = this.trimInspectorText((value as any).lastText, 240);
+    const exitCode = typeof (value as any).exitCode === "number" || (value as any).exitCode === null ? (value as any).exitCode : null;
+    return {
+      id,
+      agent,
+      role,
+      phase,
+      status,
+      model,
+      threadId,
+      startedAt,
+      updatedAt,
+      finishedAt,
+      lastEvent,
+      lastText,
+      exitCode
+    };
+  }
+
+  private snapshotAgentInspectors(job: Job): JobAgentInspector[] {
+    const arr = Array.isArray(job.agentInspectors) ? job.agentInspectors : [];
+    const out: JobAgentInspector[] = [];
+    for (const item of arr) {
+      const normalized = this.normalizeAgentInspectorValue(item);
+      if (!normalized) continue;
+      out.push(normalized);
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+
+  private emitAgentInspectors(job: Job) {
+    this.sendJobEvent({ jobId: job.id, kind: "meta", patch: { agentInspectors: this.snapshotAgentInspectors(job) } });
+  }
+
+  private setAgentInspectors(job: Job, items: any[], emit = true) {
+    const next: JobAgentInspector[] = [];
+    const seen = new Set<string>();
+    const arr = Array.isArray(items) ? items : [];
+    for (const item of arr) {
+      const normalized = this.normalizeAgentInspectorValue(item);
+      if (!normalized) continue;
+      if (seen.has(normalized.id)) continue;
+      seen.add(normalized.id);
+      next.push(normalized);
+      if (next.length >= 12) break;
+    }
+    const prevJson = JSON.stringify(Array.isArray(job.agentInspectors) ? job.agentInspectors : []);
+    const nextJson = JSON.stringify(next);
+    if (prevJson === nextJson) return false;
+    job.agentInspectors = next;
+    this.markJobDirty(job.id);
+    if (emit) this.emitAgentInspectors(job);
+    return true;
+  }
+
+  private updateAgentInspector(
+    job: Job,
+    agentValue: unknown,
+    patch: Record<string, any>,
+    opts?: { create?: boolean; emit?: boolean; role?: string }
+  ) {
+    const agent = this.normalizeAgentKey(agentValue);
+    const current = this.snapshotAgentInspectors(job);
+    let idx = current.findIndex((item) => item.agent === agent);
+    if (idx === -1) {
+      if (opts && opts.create === false) return false;
+      current.push({
+        id: agent,
+        agent,
+        role: this.trimInspectorText(opts && opts.role ? opts.role : "", 80),
+        phase: "queued",
+        status: "queued",
+        model: "",
+        threadId: "",
+        startedAt: "",
+        updatedAt: "",
+        finishedAt: "",
+        lastEvent: "",
+        lastText: "",
+        exitCode: null
+      });
+      idx = current.length - 1;
+    }
+    const prevJson = JSON.stringify(current[idx]);
+    const next = {
+      ...current[idx],
+      ...patch
+    };
+    if (opts && opts.role && !String(next.role || "").trim()) next.role = opts.role;
+    const normalized = this.normalizeAgentInspectorValue(next);
+    if (!normalized) return false;
+    current[idx] = normalized;
+    if (JSON.stringify(normalized) === prevJson) return false;
+    return this.setAgentInspectors(job, current, opts && typeof opts.emit === "boolean" ? opts.emit : true);
+  }
+
+  private buildInitialAgentInspectors(opts: {
+    mode: JobRunMode;
+    preferredAgent: "codex" | "claude" | "gemini";
+    model: string;
+    createdAt: string;
+    participants?: Array<"codex" | "claude" | "gemini">;
+    codexSettings?: any;
+    claudeSettings?: any;
+    geminiSettings?: any;
+  }): JobAgentInspector[] {
+    if (opts.mode === "war_room") {
+      const participants = Array.isArray(opts.participants) ? opts.participants : [];
+      return participants.map((agent) => ({
+        id: agent,
+        agent,
+        role: agent === opts.preferredAgent ? "preferred / judge" : "participant",
+        phase: "queued",
+        status: "queued",
+        model: this.modelForWarRoomAgent({
+          agent,
+          preferredAgent: opts.preferredAgent,
+          modelOverride: opts.model,
+          codexSettings: opts.codexSettings || {},
+          claudeSettings: opts.claudeSettings || {},
+          geminiSettings: opts.geminiSettings || {}
+        }),
+        threadId: "",
+        startedAt: "",
+        updatedAt: opts.createdAt,
+        finishedAt: "",
+        lastEvent: "Waiting for War Room start",
+        lastText: "",
+        exitCode: null
+      }));
+    }
+
+    return [
+      {
+        id: opts.preferredAgent,
+        agent: opts.preferredAgent,
+        role: "primary",
+        phase: "exec",
+        status: "running",
+        model: sanitizeJobModel(opts.model),
+        threadId: "",
+        startedAt: opts.createdAt,
+        updatedAt: opts.createdAt,
+        finishedAt: "",
+        lastEvent: "Starting",
+        lastText: "",
+        exitCode: null
+      }
+    ];
+  }
+
   private warRoomParticipants(preferred: "codex" | "claude" | "gemini"): Array<"codex" | "claude" | "gemini"> {
     const out: Array<"codex" | "claude" | "gemini"> = [];
     const add = (agent: "codex" | "claude" | "gemini") => {
@@ -1329,6 +1568,7 @@ export class JobsManager {
   private runWarRoomTurn(opts: {
     jobId: string;
     agent: "codex" | "claude" | "gemini";
+    phase: string;
     projectPath: string;
     prompt: string;
     model: string;
@@ -1337,21 +1577,52 @@ export class JobsManager {
     geminiSettings: any;
     images?: string[];
   }): Promise<{ ok: boolean; cancelled: boolean; code: number | null; text: string; error: string }> {
-    const { jobId, agent, projectPath, prompt, model, codexSettings, claudeSettings, geminiSettings } = opts;
+    const { jobId, agent, phase, projectPath, prompt, model, codexSettings, claudeSettings, geminiSettings } = opts;
     const images = Array.isArray(opts.images) ? opts.images : [];
     return new Promise((resolve) => {
       let child: ChildProcess | null = null;
       let settled = false;
       let out = "";
       let geminiPartial = "";
+      const job = this.jobs.get(jobId) || null;
+      const phaseLabel = phase.replaceAll("_", " ");
+      const startedAt = new Date().toISOString();
+      const existingInspector = job ? this.snapshotAgentInspectors(job).find((item) => item.agent === agent) || null : null;
+      if (job) {
+        this.updateAgentInspector(job, agent, {
+          phase,
+          status: "running",
+          model,
+          startedAt: existingInspector && existingInspector.startedAt ? existingInspector.startedAt : startedAt,
+          updatedAt: startedAt,
+          finishedAt: "",
+          exitCode: null,
+          lastEvent: `${phaseLabel} started`
+        });
+      }
 
       const finish = (result: { ok: boolean; cancelled: boolean; code: number | null; text: string; error: string }) => {
         if (settled) return;
         settled = true;
-        const live = this.procs.get(jobId);
-        if (live && child && live === child) this.procs.delete(jobId);
+        this.unregisterProc(jobId, child);
         if (geminiPartial.trim()) out += (out ? "\n" : "") + geminiPartial.trim();
-        resolve({ ...result, text: result.text || out.trim() });
+        const text = result.text || out.trim();
+        const liveJob = this.jobs.get(jobId) || null;
+        if (liveJob) {
+          const finishedAt = new Date().toISOString();
+          const nextStatus = result.cancelled ? "cancelled" : result.ok ? "done" : "failed";
+          this.updateAgentInspector(liveJob, agent, {
+            phase,
+            status: nextStatus,
+            model,
+            updatedAt: finishedAt,
+            finishedAt,
+            exitCode: result.code,
+            lastEvent: result.cancelled ? `${phaseLabel} cancelled` : result.ok ? `${phaseLabel} complete` : `${phaseLabel} failed`,
+            lastText: result.ok ? text : result.error || text
+          });
+        }
+        resolve({ ...result, text });
       };
 
       try {
@@ -1456,7 +1727,7 @@ export class JobsManager {
         finish({ ok: false, cancelled: false, code: null, text: out.trim(), error: "Failed to start process" });
         return;
       }
-      this.procs.set(jobId, child);
+      this.registerProc(jobId, child);
 
       child.once("error", (err: any) => {
         finish({
@@ -1534,33 +1805,39 @@ export class JobsManager {
       const critiques: Record<string, string> = {};
       let successfulOpenings = 0;
 
-      for (const participant of participants) {
-        const model = this.modelForWarRoomAgent({
-          agent: participant,
-          preferredAgent,
-          modelOverride,
-          codexSettings,
-          claudeSettings,
-          geminiSettings
-        });
-        this.appendSystemLog(
-          job,
-          "stdout",
-          `WAR ROOM round 1: ${this.agentLabel(participant)}${model ? ` (${model})` : ""}`
-        );
-        const prompt = this.buildWarRoomOpeningPrompt({ agent: participant, participants, task });
-        const run = await this.runWarRoomTurn({
-          jobId,
-          agent: participant,
-          projectPath: runProjectPath,
-          prompt,
-          model,
-          codexSettings,
-          claudeSettings,
-          geminiSettings,
-          images: participant === "codex" ? images : []
-        });
+      const openingResults = await Promise.all(
+        participants.map(async (participant) => {
+          const model = this.modelForWarRoomAgent({
+            agent: participant,
+            preferredAgent,
+            modelOverride,
+            codexSettings,
+            claudeSettings,
+            geminiSettings
+          });
+          this.appendSystemLog(
+            job,
+            "stdout",
+            `WAR ROOM round 1: ${this.agentLabel(participant)}${model ? ` (${model})` : ""}`
+          );
+          const prompt = this.buildWarRoomOpeningPrompt({ agent: participant, participants, task });
+          const run = await this.runWarRoomTurn({
+            jobId,
+            agent: participant,
+            phase: "round_1",
+            projectPath: runProjectPath,
+            prompt,
+            model,
+            codexSettings,
+            claudeSettings,
+            geminiSettings,
+            images: participant === "codex" ? images : []
+          });
+          return { participant, run };
+        })
+      );
 
+      for (const { participant, run } of openingResults) {
         if (run.cancelled) {
           const finishedAt = new Date().toISOString();
           this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: run.code });
@@ -1581,33 +1858,39 @@ export class JobsManager {
         this.appendSystemLog(job, "stdout", `WAR ROOM round 1 complete (${this.agentLabel(participant)}).`);
       }
 
-      for (const participant of participants) {
-        const model = this.modelForWarRoomAgent({
-          agent: participant,
-          preferredAgent,
-          modelOverride,
-          codexSettings,
-          claudeSettings,
-          geminiSettings
-        });
-        this.appendSystemLog(
-          job,
-          "stdout",
-          `WAR ROOM round 2: ${this.agentLabel(participant)}${model ? ` (${model})` : ""}`
-        );
-        const prompt = this.buildWarRoomCritiquePrompt({ agent: participant, participants, task, openings });
-        const run = await this.runWarRoomTurn({
-          jobId,
-          agent: participant,
-          projectPath: runProjectPath,
-          prompt,
-          model,
-          codexSettings,
-          claudeSettings,
-          geminiSettings,
-          images: []
-        });
+      const critiqueResults = await Promise.all(
+        participants.map(async (participant) => {
+          const model = this.modelForWarRoomAgent({
+            agent: participant,
+            preferredAgent,
+            modelOverride,
+            codexSettings,
+            claudeSettings,
+            geminiSettings
+          });
+          this.appendSystemLog(
+            job,
+            "stdout",
+            `WAR ROOM round 2: ${this.agentLabel(participant)}${model ? ` (${model})` : ""}`
+          );
+          const prompt = this.buildWarRoomCritiquePrompt({ agent: participant, participants, task, openings });
+          const run = await this.runWarRoomTurn({
+            jobId,
+            agent: participant,
+            phase: "round_2",
+            projectPath: runProjectPath,
+            prompt,
+            model,
+            codexSettings,
+            claudeSettings,
+            geminiSettings,
+            images: []
+          });
+          return { participant, run };
+        })
+      );
 
+      for (const { participant, run } of critiqueResults) {
         if (run.cancelled) {
           const finishedAt = new Date().toISOString();
           this.setJobStatus(jobId, "cancelled", { finishedAt, exitCode: run.code });
@@ -1646,6 +1929,7 @@ export class JobsManager {
       const synthesis = await this.runWarRoomTurn({
         jobId,
         agent: judge,
+        phase: "synthesis",
         projectPath: runProjectPath,
         prompt: synthesisPrompt,
         model: judgeModel,
@@ -1680,9 +1964,14 @@ export class JobsManager {
             "- A synthesis pass could not be completed in this run."
           ].join("\n");
           const ts = new Date().toISOString();
+<<<<<<< HEAD
           const msg = this.assistantMessage(jobId, job, ts, fallback);
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
+=======
+          this.appendMessage(job, { ts, role: "assistant", text: fallback, agent: judge });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts, role: "assistant", text: fallback, agent: judge } });
+>>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
@@ -2400,6 +2689,7 @@ export class JobsManager {
   private onCodexEvent(jobId: string, ev: any) {
     const job = this.jobs.get(jobId);
     if (!job) return;
+    const isWarRoom = this.normalizeJobRunMode((job as any).mode) === "war_room";
 
     if (ev.kind === "log") {
       this.appendLog(job, ev);
@@ -2413,17 +2703,32 @@ export class JobsManager {
       this.sendJobEvent({ jobId, kind: "codex", entry: ev });
 
       if (data.type === "thread.started" && data.thread_id) {
-        job.threadId = data.thread_id;
-        const activeSpec = this.activeRunSpecByJobId.get(jobId);
-        if (activeSpec && activeSpec.agent === "codex") activeSpec.threadId = job.threadId;
-        this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
-        this.markJobDirty(jobId);
-        try {
-          this.history.save(snapshotJob(job));
-          this.dirtyJobIds.delete(jobId);
-        } catch {
-          // ignore
+        this.updateAgentInspector(job, "codex", {
+          threadId: data.thread_id,
+          updatedAt: ev.ts,
+          lastEvent: "Thread started"
+        });
+        if (!isWarRoom || this.normalizeAgentKey(job.agent) === "codex") {
+          job.threadId = data.thread_id;
+          const activeSpec = this.activeRunSpecByJobId.get(jobId);
+          if (activeSpec && activeSpec.agent === "codex") activeSpec.threadId = job.threadId;
+          this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
+          this.markJobDirty(jobId);
+          try {
+            this.history.save(snapshotJob(job));
+            this.dirtyJobIds.delete(jobId);
+          } catch {
+            // ignore
+          }
         }
+      }
+
+      if (data.type === "item.started" && data.item && data.item.type === "command_execution") {
+        const cmd = typeof data.item.command === "string" ? oneLine(data.item.command).trim() : "";
+        this.updateAgentInspector(job, "codex", {
+          updatedAt: ev.ts,
+          lastEvent: cmd ? `Running command: ${this.trimInspectorText(cmd, 120)}` : "Running command"
+        });
       }
 
       if (data.type === "item.completed" && data.item && data.item.type === "agent_message") {
@@ -2431,10 +2736,20 @@ export class JobsManager {
         const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
         if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
+        this.updateAgentInspector(job, "codex", {
+          updatedAt: ev.ts,
+          lastEvent: "Assistant message",
+          lastText: text
+        });
         if (String(text || "").trim()) {
+<<<<<<< HEAD
           const msg = this.assistantMessage(jobId, job, ev.ts, text);
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
+=======
+          this.appendMessage(job, { ts: ev.ts, role: "assistant", text, agent: "codex" });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text, agent: "codex" } });
+>>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
@@ -2452,6 +2767,10 @@ export class JobsManager {
         job.usageTotal = addUsageTotals(job.usageTotal, data.usage);
         const mcw = toIntOrZero((data as any).model_context_window);
         if (mcw > 0) job.modelContextWindow = mcw;
+        this.updateAgentInspector(job, "codex", {
+          updatedAt: ev.ts,
+          lastEvent: "Turn completed"
+        });
         this.sendJobEvent({
           jobId,
           kind: "meta",
@@ -2662,6 +2981,7 @@ export class JobsManager {
   private onClaudeEvent(jobId: string, ev: any) {
     const job = this.jobs.get(jobId);
     if (!job) return;
+    const isWarRoom = this.normalizeJobRunMode((job as any).mode) === "war_room";
 
     if (ev.kind === "log") {
       this.appendLog(job, ev);
@@ -2675,45 +2995,84 @@ export class JobsManager {
       this.sendJobEvent({ jobId, kind: "claude", entry: ev });
 
       const modelFromEvent = this.extractClaudeModelFromData(data);
-      if (modelFromEvent && job.model !== modelFromEvent) {
-        job.model = modelFromEvent;
-        const activeSpec = this.activeRunSpecByJobId.get(jobId);
-        if (activeSpec && activeSpec.agent === "claude") activeSpec.model = job.model;
-        this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
-        this.markJobDirty(jobId);
+      if (modelFromEvent) {
+        this.updateAgentInspector(job, "claude", {
+          model: modelFromEvent,
+          updatedAt: ev.ts
+        });
+        if ((!isWarRoom || this.normalizeAgentKey(job.agent) === "claude") && job.model !== modelFromEvent) {
+          job.model = modelFromEvent;
+          const activeSpec = this.activeRunSpecByJobId.get(jobId);
+          if (activeSpec && activeSpec.agent === "claude") activeSpec.model = job.model;
+          this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
+          this.markJobDirty(jobId);
+        }
       }
 
       if (data.type === "system" && data.subtype === "init" && typeof data.session_id === "string" && data.session_id) {
-        if (job.threadId !== data.session_id) {
-          job.threadId = data.session_id;
-          const activeSpec = this.activeRunSpecByJobId.get(jobId);
-          if (activeSpec && activeSpec.agent === "claude") activeSpec.sessionId = job.threadId;
-          this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
-          this.markJobDirty(jobId);
-          try {
-            this.history.save(snapshotJob(job));
-            this.dirtyJobIds.delete(jobId);
-          } catch {
-            // ignore
+        this.updateAgentInspector(job, "claude", {
+          threadId: data.session_id,
+          updatedAt: ev.ts,
+          lastEvent: "Session initialized"
+        });
+        if (!isWarRoom || this.normalizeAgentKey(job.agent) === "claude") {
+          if (job.threadId !== data.session_id) {
+            job.threadId = data.session_id;
+            const activeSpec = this.activeRunSpecByJobId.get(jobId);
+            if (activeSpec && activeSpec.agent === "claude") activeSpec.sessionId = job.threadId;
+            this.sendJobEvent({ jobId, kind: "meta", patch: { threadId: job.threadId } });
+            this.markJobDirty(jobId);
+            try {
+              this.history.save(snapshotJob(job));
+              this.dirtyJobIds.delete(jobId);
+            } catch {
+              // ignore
+            }
           }
         }
       }
 
       if (data.type === "assistant" && !data.parent_tool_use_id && data.message) {
+        const blocks = Array.isArray((data.message as any).content) ? (data.message as any).content : [];
+        for (const block of blocks) {
+          if (!block || typeof block !== "object") continue;
+          if ((block as any).type !== "tool_use" || typeof (block as any).name !== "string") continue;
+          const name = String((block as any).name || "").trim();
+          const input = (block as any).input && typeof (block as any).input === "object" ? (block as any).input : {};
+          const cmd = typeof (input as any).command === "string" ? oneLine((input as any).command).trim() : "";
+          this.updateAgentInspector(job, "claude", {
+            updatedAt: ev.ts,
+            lastEvent: cmd ? `${name}: ${this.trimInspectorText(cmd, 120)}` : this.trimInspectorText(name || "Tool use", 120)
+          });
+        }
         const extracted = this.extractStatusHint(this.claudeMessageToText(data.message));
         const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
         if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
+        this.updateAgentInspector(job, "claude", {
+          updatedAt: ev.ts,
+          lastEvent: text ? "Assistant message" : "Assistant update",
+          lastText: text
+        });
         if (text) {
+<<<<<<< HEAD
           const msg = this.assistantMessage(jobId, job, ev.ts, text);
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
+=======
+          this.appendMessage(job, { ts: ev.ts, role: "assistant", text, agent: "claude" });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text, agent: "claude" } });
+>>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
       if (data.type === "result" && data.usage) {
         job.usage = data.usage;
         job.usageTotal = addUsageTotals(job.usageTotal, data.usage);
+        this.updateAgentInspector(job, "claude", {
+          updatedAt: ev.ts,
+          lastEvent: "Turn completed"
+        });
         this.sendJobEvent({ jobId, kind: "meta", patch: { usage: job.usage, usageTotal: job.usageTotal } });
         this.markJobDirty(jobId);
       }
@@ -2723,6 +3082,7 @@ export class JobsManager {
   private onGeminiEvent(jobId: string, ev: any) {
     const job = this.jobs.get(jobId);
     if (!job) return;
+    const isWarRoom = this.normalizeJobRunMode((job as any).mode) === "war_room";
 
     if (ev.kind === "log") {
       this.appendLog(job, ev);
@@ -2736,19 +3096,32 @@ export class JobsManager {
       this.sendJobEvent({ jobId, kind: "gemini", entry: ev });
 
       const modelFromEvent = this.extractGeminiModelFromData(data);
-      if (modelFromEvent && job.model !== modelFromEvent) {
-        job.model = modelFromEvent;
-        const activeSpec = this.activeRunSpecByJobId.get(jobId);
-        if (activeSpec && activeSpec.agent === "gemini") activeSpec.model = job.model;
-        this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
-        this.markJobDirty(jobId);
+      if (modelFromEvent) {
+        this.updateAgentInspector(job, "gemini", {
+          model: modelFromEvent,
+          updatedAt: ev.ts
+        });
+        if ((!isWarRoom || this.normalizeAgentKey(job.agent) === "gemini") && job.model !== modelFromEvent) {
+          job.model = modelFromEvent;
+          const activeSpec = this.activeRunSpecByJobId.get(jobId);
+          if (activeSpec && activeSpec.agent === "gemini") activeSpec.model = job.model;
+          this.sendJobEvent({ jobId, kind: "meta", patch: { model: job.model } });
+          this.markJobDirty(jobId);
+        }
       }
 
       const type = this.geminiEventType(data);
 
       if (type === "init") {
         const sessionId = this.extractGeminiSessionIdFromData(data);
-        if (sessionId && job.threadId !== sessionId) {
+        if (sessionId) {
+          this.updateAgentInspector(job, "gemini", {
+            threadId: sessionId,
+            updatedAt: ev.ts,
+            lastEvent: "Session initialized"
+          });
+        }
+        if ((!isWarRoom || this.normalizeAgentKey(job.agent) === "gemini") && sessionId && job.threadId !== sessionId) {
           job.threadId = sessionId;
           const activeSpec = this.activeRunSpecByJobId.get(jobId);
           if (activeSpec && activeSpec.agent === "gemini") activeSpec.sessionId = job.threadId;
@@ -2768,6 +3141,11 @@ export class JobsManager {
         if (chunks.length > 0) {
           const cur = this.geminiStreamingTextByJobId.get(jobId) || "";
           this.geminiStreamingTextByJobId.set(jobId, cur + chunks.join(""));
+          this.updateAgentInspector(job, "gemini", {
+            updatedAt: ev.ts,
+            lastEvent: "Streaming response",
+            lastText: `${cur}${chunks.join("")}`
+          });
         }
       } else if (type === "chatcomplete" || type === "result") {
         const partial = this.geminiStreamingTextByJobId.get(jobId) || "";
@@ -2778,16 +3156,30 @@ export class JobsManager {
         const hint = this.normalizeStatusHint(extracted.hint, extracted.cleanText);
         if (hint) this.attentionHintByJobId.set(jobId, hint);
         const text = extracted.cleanText;
+        this.updateAgentInspector(job, "gemini", {
+          updatedAt: ev.ts,
+          lastEvent: "Assistant message",
+          lastText: text
+        });
         if (text) {
+<<<<<<< HEAD
           const msg = this.assistantMessage(jobId, job, ev.ts, text);
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
+=======
+          this.appendMessage(job, { ts: ev.ts, role: "assistant", text, agent: "gemini" });
+          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text, agent: "gemini" } });
+>>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
       if ((data as any).usage && typeof (data as any).usage === "object") {
         job.usage = (data as any).usage;
         job.usageTotal = addUsageTotals(job.usageTotal, (data as any).usage);
+        this.updateAgentInspector(job, "gemini", {
+          updatedAt: ev.ts,
+          lastEvent: "Turn completed"
+        });
         this.sendJobEvent({ jobId, kind: "meta", patch: { usage: job.usage, usageTotal: job.usageTotal } });
         this.markJobDirty(jobId);
       }
@@ -3301,7 +3693,7 @@ export class JobsManager {
 
   private canStartNextQueuedPrompt(job: Job): { ok: true } | { ok: false; error: string } {
     if (!job) return { ok: false, error: "Unknown job" };
-    if (this.procs.has(job.id)) return { ok: false, error: "Job is running" };
+    if (this.hasRunningProc(job.id)) return { ok: false, error: "Job is running" };
     if (!Array.isArray(job.queuedPrompts) || job.queuedPrompts.length === 0) return { ok: false, error: "No queued prompts" };
     if (!job.threadId) return { ok: false, error: "No thread id for this job yet" };
     const agent = this.normalizeAgentKey(job.agent);
@@ -3433,8 +3825,8 @@ export class JobsManager {
     return { ok: true };
   }
 
-  private handleChildError(jobId: string, err: NodeJS.ErrnoException) {
-    this.procs.delete(jobId);
+  private handleChildError(jobId: string, child: ChildProcess, err: NodeJS.ErrnoException) {
+    this.unregisterProc(jobId, child);
     const job = this.jobs.get(jobId);
     if (!job) return;
 
@@ -3463,6 +3855,14 @@ export class JobsManager {
       text: `ERROR: ${hint} ${String(err && err.message ? err.message : err)}`
     });
     this.sendJobEvent({ jobId, kind: "log", entry: job.logs[job.logs.length - 1] });
+    this.updateAgentInspector(job, agent, {
+      status: "failed",
+      updatedAt: finishedAt,
+      finishedAt,
+      exitCode: -1,
+      lastEvent: "Failed to start",
+      lastText: String(err && err.message ? err.message : err)
+    });
 
     this.clearActiveRunTracking(jobId);
     this.setJobStatus(jobId, "failed", { finishedAt, exitCode: -1 });
@@ -3477,8 +3877,8 @@ export class JobsManager {
     }
   }
 
-  private handleChildClose(jobId: string, code: any, signal: any) {
-    this.procs.delete(jobId);
+  private handleChildClose(jobId: string, child: ChildProcess, code: any, signal: any) {
+    this.unregisterProc(jobId, child);
     const finishedAt = new Date().toISOString();
 
     const job = this.jobs.get(jobId);
@@ -3512,6 +3912,15 @@ export class JobsManager {
     const hinted = this.attentionHintByJobId.get(jobId) || null;
     const provisionalStatus = hinted === "needs_attention" ? "needs_attention" : "done";
     const exitCode = typeof code === "number" ? code : null;
+    const agent = this.normalizeAgentKey(job.agent);
+    const finalInspectorStatus = signal ? "cancelled" : code !== 0 ? "failed" : "done";
+    this.updateAgentInspector(job, agent, {
+      status: finalInspectorStatus,
+      updatedAt: finishedAt,
+      finishedAt,
+      exitCode,
+      lastEvent: signal ? "Run cancelled" : code !== 0 ? "Run failed" : "Run completed"
+    });
 
     if (signal) {
       this.clearActiveRunTracking(jobId);
@@ -3692,6 +4101,16 @@ export class JobsManager {
       queuedPrompts: [],
       messages: [],
       logs: [],
+      agentInspectors: this.buildInitialAgentInspectors({
+        mode,
+        preferredAgent: agent,
+        model,
+        createdAt,
+        participants: warRoomParticipants,
+        codexSettings,
+        claudeSettings,
+        geminiSettings
+      }),
       processBindings,
       processEvents: [],
       usage: null,
@@ -3808,7 +4227,7 @@ export class JobsManager {
         error: "War Room sessions do not support follow-up prompts yet. Start a new War Room run from the composer."
       };
     }
-    const isRunning = this.procs.has(jobId) || job.status === "running";
+    const isRunning = this.hasRunningProc(jobId) || job.status === "running";
     const missingCheckoutAction = this.normalizeMissingCheckoutAction(params && (params as any).missingCheckoutAction);
 
     // Resuming a job should bring it back onto the board so it's visible while running.
@@ -3910,7 +4329,7 @@ export class JobsManager {
     this.tryPersistJobNow(job);
 
     // If a process is already running, the prompt stays queued until the current run finishes.
-    if (this.procs.has(jobId)) return { ok: true };
+    if (this.hasRunningProc(jobId)) return { ok: true };
 
     await this.ensureMcpServerStarted("job-send");
 
@@ -4066,24 +4485,33 @@ export class JobsManager {
     const id = String(jobId || "");
     const job = this.jobs.get(id);
     if (!job) return false;
-    if (this.transientRetryTimerByJobId.has(id) && !this.procs.has(id)) {
+    if (this.transientRetryTimerByJobId.has(id) && !this.hasRunningProc(id)) {
       this.clearActiveRunTracking(id);
       const finishedAt = new Date().toISOString();
+      this.updateAgentInspector(job, this.normalizeAgentKey(job.agent), {
+        status: "cancelled",
+        updatedAt: finishedAt,
+        finishedAt,
+        exitCode: null,
+        lastEvent: "Run cancelled"
+      });
       this.setJobStatus(id, "cancelled", { finishedAt, exitCode: null });
       this.finalizeIntegrationRun(id, "cancelled", finishedAt, null);
       return true;
     }
-    const child = this.procs.get(id);
-    if (!child) return false;
+    const children = this.runningChildren(id);
+    if (children.length === 0) return false;
     try {
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        try {
-          if (!child.killed) child.kill("SIGKILL");
-        } catch {
-          // ignore
-        }
-      }, 2500);
+      for (const child of children) {
+        child.kill("SIGTERM");
+        setTimeout(() => {
+          try {
+            if (!child.killed) child.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
+        }, 2500);
+      }
       return true;
     } catch {
       return false;

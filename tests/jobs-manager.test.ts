@@ -179,6 +179,15 @@ describe("electron/jobs-manager", () => {
     const createdEvent = events.find((e) => e.kind === "created" && e.jobId === "job1");
     expect(createdEvent && createdEvent.job && createdEvent.job.title).toBe("Do the thing");
     expect(saved.length).toBeGreaterThan(0);
+    let snap = jm.getJob("job1") as any;
+    expect(snap.job.agentInspectors).toEqual([
+      expect.objectContaining({
+        agent: "codex",
+        role: "primary",
+        phase: "exec",
+        status: "running"
+      })
+    ]);
 
     expect(execOnEvent).not.toBeNull();
     execOnEvent!({
@@ -188,6 +197,22 @@ describe("electron/jobs-manager", () => {
       data: { type: "thread.started", thread_id: "t123" }
     });
     expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.threadId === "t123")).toBe(true);
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.agentInspectors).toEqual([
+      expect.objectContaining({
+        agent: "codex",
+        threadId: "t123",
+        status: "running"
+      })
+    ]);
+    expect(
+      events.some(
+        (e) =>
+          e.kind === "meta" &&
+          Array.isArray(e.patch && e.patch.agentInspectors) &&
+          e.patch.agentInspectors.some((item: any) => item && item.agent === "codex" && item.threadId === "t123")
+      )
+    ).toBe(true);
 
     execOnEvent!({
       ts: "2020-01-01T00:00:00.100Z",
@@ -198,11 +223,20 @@ describe("electron/jobs-manager", () => {
     expect(events.some((e) => e.kind === "meta" && e.patch && e.patch.modelContextWindow === 128000)).toBe(true);
 
     execChild.emit("close", 0, null);
-    const snap = jm.getJob("job1");
+    snap = jm.getJob("job1");
     expect(snap.ok).toBe(true);
     expect((snap as any).job.threadId).toBe("t123");
     expect((snap as any).job.title).toBe("Do the thing");
     expect((snap as any).job.status).toBe("done");
+    expect((snap as any).job.agentInspectors).toEqual([
+      expect.objectContaining({
+        agent: "codex",
+        phase: "exec",
+        status: "done",
+        threadId: "t123",
+        exitCode: 0
+      })
+    ]);
 
     const sendRes = await jm.send({ jobId: "job1", prompt: "follow up", images: [] });
     expect(sendRes).toEqual({ ok: true });
@@ -212,6 +246,26 @@ describe("electron/jobs-manager", () => {
     expect(snap2.job.status).toBe("running");
     expect(Array.isArray(snap2.job.prompts)).toBe(true);
     expect(snap2.job.prompts.length).toBe(2);
+    expect(snap2.job.agentInspectors).toEqual([
+      expect.objectContaining({
+        agent: "codex",
+        phase: "resume",
+        status: "running",
+        threadId: "t123"
+      })
+    ]);
+
+    resumeChild.emit("close", 0, null);
+    const snap3 = jm.getJob("job1") as any;
+    expect(snap3.job.agentInspectors).toEqual([
+      expect.objectContaining({
+        agent: "codex",
+        phase: "resume",
+        status: "done",
+        threadId: "t123",
+        exitCode: 0
+      })
+    ]);
   });
 
   it("injects explicit Agent Heaven Linear MCP tool hints for ticket IDs", async () => {
@@ -1047,7 +1101,7 @@ describe("electron/jobs-manager", () => {
     resumeChild.emit("close", 0, null);
   });
 
-  it("runs war room mode across multiple agents and rejects follow-ups", async () => {
+  it("runs war room rounds in parallel, tracks inspectors, and rejects follow-ups", async () => {
     const store = {
       getSettings: () => ({
         agents: {
@@ -1059,47 +1113,77 @@ describe("electron/jobs-manager", () => {
       listProjects: () => [{ id: "p1", name: "Proj", path: "/tmp/proj" }]
     };
     const history = { loadAll: () => [], save: () => true, remove: () => true };
+    const TITLE_SUMMARY_PROMPT = "Create a concise job card title summarizing the user's request.";
+    type WarRun = { child: FakeChild; onEvent: (ev: any) => void; prompt: string };
+    const warRuns: Record<"codex" | "claude" | "gemini", WarRun[]> = {
+      codex: [],
+      claude: [],
+      gemini: []
+    };
+
+    const spawnTitleSummary = () => {
+      const child = new FakeChild();
+      setTimeout(() => child.emit("close", 0, null), 0);
+      return child as any;
+    };
 
     const spawnCodex = (opts: any) => {
+      const prompt = String(opts && opts.prompt ? opts.prompt : "");
+      if (prompt.includes(TITLE_SUMMARY_PROMPT)) return spawnTitleSummary();
       const child = new FakeChild();
-      setTimeout(() => {
-        opts.onEvent({
-          ts: "2020-01-01T00:00:00.000Z",
-          stream: "stdout",
-          kind: "codex",
-          data: { type: "item.completed", item: { type: "agent_message", text: "codex war room output" } }
-        });
-        child.emit("close", 0, null);
-      }, 0);
+      warRuns.codex.push({ child, onEvent: opts.onEvent, prompt });
       return child as any;
     };
 
     const spawnClaude = (opts: any) => {
+      const prompt = String(opts && opts.prompt ? opts.prompt : "");
+      if (prompt.includes(TITLE_SUMMARY_PROMPT)) return spawnTitleSummary();
       const child = new FakeChild();
-      setTimeout(() => {
-        opts.onEvent({
-          ts: "2020-01-01T00:00:00.000Z",
-          stream: "stdout",
-          kind: "claude",
-          data: { type: "assistant", parent_tool_use_id: null, message: { content: [{ type: "text", text: "claude war room output" }] } }
-        });
-        child.emit("close", 0, null);
-      }, 0);
+      warRuns.claude.push({ child, onEvent: opts.onEvent, prompt });
       return child as any;
     };
 
     const spawnGemini = (opts: any) => {
+      const prompt = String(opts && opts.prompt ? opts.prompt : "");
+      if (prompt.includes(TITLE_SUMMARY_PROMPT)) return spawnTitleSummary();
       const child = new FakeChild();
-      setTimeout(() => {
-        opts.onEvent({
-          ts: "2020-01-01T00:00:00.000Z",
-          stream: "stdout",
-          kind: "gemini",
-          data: { type: "result", text: "gemini war room output" }
-        });
-        child.emit("close", 0, null);
-      }, 0);
+      warRuns.gemini.push({ child, onEvent: opts.onEvent, prompt });
       return child as any;
+    };
+
+    const flushWarRoom = async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+
+    const finishCodex = (run: WarRun, ts: string, text: string) => {
+      run.onEvent({
+        ts,
+        stream: "stdout",
+        kind: "codex",
+        data: { type: "item.completed", item: { type: "agent_message", text } }
+      });
+      run.child.emit("close", 0, null);
+    };
+
+    const finishClaude = (run: WarRun, ts: string, text: string) => {
+      run.onEvent({
+        ts,
+        stream: "stdout",
+        kind: "claude",
+        data: { type: "assistant", parent_tool_use_id: null, message: { content: [{ type: "text", text }] } }
+      });
+      run.child.emit("close", 0, null);
+    };
+
+    const finishGemini = (run: WarRun, ts: string, text: string) => {
+      run.onEvent({
+        ts,
+        stream: "stdout",
+        kind: "gemini",
+        data: { type: "result", text }
+      });
+      run.child.emit("close", 0, null);
     };
 
     const jm = new JobsManager({
@@ -1121,10 +1205,67 @@ describe("electron/jobs-manager", () => {
       jobId: "job1"
     });
 
+    await flushWarRoom();
+
+    expect(warRuns.codex.length).toBe(1);
+    expect(warRuns.claude.length).toBe(1);
+    expect(warRuns.gemini.length).toBe(1);
+
+    let snap = jm.getJob("job1") as any;
+    expect(snap.ok).toBe(true);
+    expect(snap.job.agentInspectors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ agent: "codex", phase: "round_1", status: "running" }),
+        expect.objectContaining({ agent: "claude", phase: "round_1", status: "running" }),
+        expect.objectContaining({ agent: "gemini", phase: "round_1", status: "running" })
+      ])
+    );
+
+    finishCodex(warRuns.codex[0], "2020-01-01T00:00:00.000Z", "codex war room output");
+    finishClaude(warRuns.claude[0], "2020-01-01T00:00:00.100Z", "claude war room output");
+    finishGemini(warRuns.gemini[0], "2020-01-01T00:00:00.200Z", "gemini war room output");
+
+    await flushWarRoom();
+
+    expect(warRuns.codex.length).toBe(2);
+    expect(warRuns.claude.length).toBe(2);
+    expect(warRuns.gemini.length).toBe(2);
+
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.agentInspectors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ agent: "codex", phase: "round_2", status: "running" }),
+        expect.objectContaining({ agent: "claude", phase: "round_2", status: "running" }),
+        expect.objectContaining({ agent: "gemini", phase: "round_2", status: "running" })
+      ])
+    );
+
+    finishCodex(warRuns.codex[1], "2020-01-01T00:00:01.000Z", "codex critique");
+    finishClaude(warRuns.claude[1], "2020-01-01T00:00:01.100Z", "claude critique");
+    finishGemini(warRuns.gemini[1], "2020-01-01T00:00:01.200Z", "gemini critique");
+
+    await flushWarRoom();
+
+    expect(warRuns.codex.length).toBe(3);
+    expect(warRuns.claude.length).toBe(2);
+    expect(warRuns.gemini.length).toBe(2);
+
+    snap = jm.getJob("job1") as any;
+    expect(snap.job.agentInspectors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ agent: "codex", phase: "synthesis", status: "running" }),
+        expect.objectContaining({ agent: "claude", phase: "round_2", status: "done" }),
+        expect.objectContaining({ agent: "gemini", phase: "round_2", status: "done" })
+      ])
+    );
+
+    finishCodex(warRuns.codex[2], "2020-01-01T00:00:02.000Z", "final synthesis");
+
+    await flushWarRoom();
     await vi.runAllTimersAsync();
     await Promise.resolve();
 
-    const snap = jm.getJob("job1") as any;
+    snap = jm.getJob("job1") as any;
     expect(snap.ok).toBe(true);
     expect(snap.job.mode).toBe("war_room");
     expect(["done", "needs_attention"]).toContain(snap.job.status);
@@ -1132,6 +1273,16 @@ describe("electron/jobs-manager", () => {
     expect(snap.job.logs.some((x: any) => x && x.kind === "codex")).toBe(true);
     expect(snap.job.logs.some((x: any) => x && x.kind === "claude")).toBe(true);
     expect(snap.job.logs.some((x: any) => x && x.kind === "gemini")).toBe(true);
+    expect(snap.job.messages.some((x: any) => x && x.agent === "codex")).toBe(true);
+    expect(snap.job.messages.some((x: any) => x && x.agent === "claude")).toBe(true);
+    expect(snap.job.messages.some((x: any) => x && x.agent === "gemini")).toBe(true);
+    expect(snap.job.agentInspectors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ agent: "codex", phase: "synthesis", status: "done" }),
+        expect.objectContaining({ agent: "claude", phase: "round_2", status: "done" }),
+        expect.objectContaining({ agent: "gemini", phase: "round_2", status: "done" })
+      ])
+    );
 
     expect(await jm.send({ jobId: "job1", prompt: "follow up" })).toEqual({
       ok: false,
