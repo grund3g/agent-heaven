@@ -1964,14 +1964,9 @@ export class JobsManager {
             "- A synthesis pass could not be completed in this run."
           ].join("\n");
           const ts = new Date().toISOString();
-<<<<<<< HEAD
-          const msg = this.assistantMessage(jobId, job, ts, fallback);
+          const msg = this.assistantMessage(jobId, job, ts, fallback, judge);
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
-=======
-          this.appendMessage(job, { ts, role: "assistant", text: fallback, agent: judge });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts, role: "assistant", text: fallback, agent: judge } });
->>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
@@ -2505,8 +2500,9 @@ export class JobsManager {
     return promptId || this.lastPromptId(job);
   }
 
-  private assistantMessage(jobId: string, job: Job, ts: string, text: string) {
+  private assistantMessage(jobId: string, job: Job, ts: string, text: string, agent?: string) {
     const msg: any = { ts, role: "assistant", text };
+    if (agent) msg.agent = agent;
     const promptId = this.activePromptId(jobId, job);
     if (promptId) msg.promptId = promptId;
     return msg;
@@ -2742,14 +2738,9 @@ export class JobsManager {
           lastText: text
         });
         if (String(text || "").trim()) {
-<<<<<<< HEAD
-          const msg = this.assistantMessage(jobId, job, ev.ts, text);
+          const msg = this.assistantMessage(jobId, job, ev.ts, text, "codex");
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
-=======
-          this.appendMessage(job, { ts: ev.ts, role: "assistant", text, agent: "codex" });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text, agent: "codex" } });
->>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
@@ -3055,14 +3046,9 @@ export class JobsManager {
           lastText: text
         });
         if (text) {
-<<<<<<< HEAD
-          const msg = this.assistantMessage(jobId, job, ev.ts, text);
+          const msg = this.assistantMessage(jobId, job, ev.ts, text, "claude");
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
-=======
-          this.appendMessage(job, { ts: ev.ts, role: "assistant", text, agent: "claude" });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text, agent: "claude" } });
->>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
@@ -3162,14 +3148,9 @@ export class JobsManager {
           lastText: text
         });
         if (text) {
-<<<<<<< HEAD
-          const msg = this.assistantMessage(jobId, job, ev.ts, text);
+          const msg = this.assistantMessage(jobId, job, ev.ts, text, "gemini");
           this.appendMessage(job, msg);
           this.sendJobEvent({ jobId, kind: "message", message: msg });
-=======
-          this.appendMessage(job, { ts: ev.ts, role: "assistant", text, agent: "gemini" });
-          this.sendJobEvent({ jobId, kind: "message", message: { ts: ev.ts, role: "assistant", text, agent: "gemini" } });
->>>>>>> 9bce34b (fix(jobs): align renderer UI with jobs manager updates)
         }
       }
 
