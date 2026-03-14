@@ -6,12 +6,27 @@ export type JobStatus = "running" | "done" | "failed" | "cancelled" | "needs_att
 export type JobRunMode = "single" | "war_room";
 
 export type JobPrompt = { ts: string; text: string; images?: string[]; preparedText?: string };
-export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string };
+export type JobMessage = { ts: string; role: "assistant" | "user" | string; text: string; agent?: string };
 export type JobLogEntry =
   | { ts: string; stream: "stdout" | "stderr"; kind: "log"; text: string }
   | { ts: string; stream: "stdout" | "stderr"; kind: "codex"; data: any }
   | { ts: string; stream: "stdout" | "stderr"; kind: "claude"; data: any }
   | { ts: string; stream: "stdout" | "stderr"; kind: "gemini"; data: any };
+export type JobAgentInspector = {
+  id: string;
+  agent: string;
+  role: string;
+  phase: string;
+  status: string;
+  model: string;
+  threadId: string;
+  startedAt: string;
+  updatedAt: string;
+  finishedAt: string;
+  lastEvent: string;
+  lastText: string;
+  exitCode: number | null;
+};
 export type JobProcessBinding = {
   connectorId: string;
   capability: string;
@@ -56,6 +71,7 @@ export type Job = {
   queuedPrompts: JobPrompt[];
   messages: JobMessage[];
   logs: JobLogEntry[];
+  agentInspectors?: JobAgentInspector[];
   processBindings?: JobProcessBinding[];
   processEvents?: JobProcessEvent[];
   usage: any;
@@ -125,6 +141,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
   out.queuedPrompts = Array.isArray(out.queuedPrompts) ? out.queuedPrompts : [];
   out.messages = Array.isArray(out.messages) ? out.messages : [];
   out.logs = Array.isArray(out.logs) ? out.logs : [];
+  out.agentInspectors = Array.isArray(out.agentInspectors) ? out.agentInspectors : [];
   out.processBindings = Array.isArray(out.processBindings) ? out.processBindings : [];
   out.processEvents = Array.isArray(out.processEvents) ? out.processEvents : [];
   if (!out.title) out.title = jobTitleFromPrompts(out.prompts);
@@ -158,6 +175,7 @@ export function normalizeLoadedJob(job: unknown, nowIso: string): Job | null {
 
   // Keep caps consistent with in-memory logic.
   if (out.logs.length > 2000) out.logs.splice(0, out.logs.length - 2000);
+  if (out.agentInspectors.length > 12) out.agentInspectors.splice(0, out.agentInspectors.length - 12);
   if (out.messages.length > 200) out.messages.splice(0, out.messages.length - 200);
   if (out.queuedPrompts.length > 50) out.queuedPrompts.splice(0, out.queuedPrompts.length - 50);
   if (out.processBindings.length > 200) out.processBindings.splice(0, out.processBindings.length - 200);
@@ -194,6 +212,7 @@ export function snapshotJob(job: Job): Job {
     queuedPrompts,
     messages,
     logs,
+    agentInspectors,
     processBindings,
     processEvents,
     usage,
@@ -227,6 +246,7 @@ export function snapshotJob(job: Job): Job {
     queuedPrompts,
     messages,
     logs,
+    agentInspectors,
     processBindings,
     processEvents,
     usage,
@@ -324,6 +344,7 @@ export function snapshotJobMeta(job: Job): any {
     agent,
     model,
     threadId,
+    agentInspectors: Array.isArray(job.agentInspectors) ? job.agentInspectors : [],
     processBindingCount: Array.isArray(job.processBindings) ? job.processBindings.length : 0,
     queuedCount: Array.isArray(job.queuedPrompts) ? job.queuedPrompts.length : 0,
     usage,

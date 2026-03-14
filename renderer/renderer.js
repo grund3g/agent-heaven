@@ -44,6 +44,7 @@ const api = window.agentHeaven;
   jobDialog: document.getElementById("jobDialog"),
   jobDialogTitle: document.getElementById("jobDialogTitle"),
   jobDialogMeta: document.getElementById("jobDialogMeta"),
+  jobDialogInspector: document.getElementById("jobDialogInspector"),
   jobDialogClose: document.getElementById("jobDialogClose"),
   jobDialogPopout: document.getElementById("jobDialogPopout"),
   jobDialogMove: document.getElementById("jobDialogMove"),
@@ -8693,7 +8694,8 @@ function messageKey(m) {
   const ts = typeof m.ts === "string" ? m.ts : "";
   const role = typeof m.role === "string" ? m.role : "";
   const text = typeof m.text === "string" ? m.text : "";
-  return `m|${ts}|${role}|${text}`;
+  const agent = typeof m.agent === "string" ? m.agent : "";
+  return `m|${ts}|${role}|${agent}|${text}`;
 }
 
 function logKey(l) {
@@ -9112,6 +9114,7 @@ async function openJobDialog(jobId) {
     els.jobDialogTitle.title = oneLine(title);
   }
   renderJobDialogMeta(job);
+  renderJobDialogInspector(job);
   if (jobDetailsLoaded(job)) {
     renderJobDialogPanels(job);
   } else {
@@ -9152,6 +9155,7 @@ async function openJobDialog(jobId) {
         els.jobDialogTitle.textContent = title || "Job";
         els.jobDialogTitle.title = oneLine(title);
         renderJobDialogMeta(job);
+        renderJobDialogInspector(job);
         renderJobDialogPanels(job);
         updateJobDialogActions(job);
       }
@@ -9343,6 +9347,116 @@ function renderJobDialogMeta(job) {
       input.addEventListener("blur", commit);
     });
   });
+}
+
+function messageAgentLabel(agent, fallbackLabel) {
+  const a = normalizeAgentKey(agent || "");
+  if (a) return agentDisplayName(a);
+  return fallbackLabel || "Assistant";
+}
+
+function normalizeInspectorStateForUi(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "running" || raw === "done" || raw === "failed" || raw === "cancelled" || raw === "waiting") return raw;
+  return "queued";
+}
+
+function jobAgentInspectorsForUi(job) {
+  const arr = Array.isArray(job && job.agentInspectors) ? job.agentInspectors : [];
+  const out = arr
+    .map((item) => (item && typeof item === "object" ? { ...item } : null))
+    .filter(Boolean)
+    .map((item) => ({
+      id: String(item.id || item.agent || ""),
+      agent: normalizeAgentKey(item.agent || ""),
+      role: String(item.role || "").trim(),
+      phase: String(item.phase || "").trim(),
+      status: normalizeInspectorStateForUi(item.status),
+      model: String(item.model || "").trim(),
+      threadId: String(item.threadId || "").trim(),
+      startedAt: String(item.startedAt || "").trim(),
+      updatedAt: String(item.updatedAt || "").trim(),
+      finishedAt: String(item.finishedAt || "").trim(),
+      lastEvent: String(item.lastEvent || "").trim(),
+      lastText: String(item.lastText || "").trim(),
+      exitCode: typeof item.exitCode === "number" || item.exitCode === null ? item.exitCode : null
+    }))
+    .filter((item) => item.agent);
+  if (out.length > 0) return out;
+
+  if (!job || typeof job !== "object") return [];
+  const fallbackAgent = normalizeAgentKey(job.agent || "");
+  if (!fallbackAgent) return [];
+  return [
+    {
+      id: fallbackAgent,
+      agent: fallbackAgent,
+      role: "primary",
+      phase: job.status === "running" ? "exec" : "",
+      status: normalizeInspectorStateForUi(job.status),
+      model: String(job.model || "").trim(),
+      threadId: String(job.threadId || "").trim(),
+      startedAt: String(job.startedAt || "").trim(),
+      updatedAt: String(job.finishedAt || job.startedAt || "").trim(),
+      finishedAt: String(job.finishedAt || "").trim(),
+      lastEvent: "",
+      lastText: "",
+      exitCode: typeof job.exitCode === "number" || job.exitCode === null ? job.exitCode : null
+    }
+  ];
+}
+
+function renderJobDialogInspector(job) {
+  if (!els.jobDialogInspector) return;
+  const entries = jobAgentInspectorsForUi(job);
+  if (entries.length === 0) {
+    els.jobDialogInspector.hidden = true;
+    els.jobDialogInspector.innerHTML = "";
+    return;
+  }
+
+  const cards = entries
+    .map((entry) => {
+      const status = normalizeInspectorStateForUi(entry.status);
+      const statusLabel = status.replaceAll("_", " ");
+      const phaseLabel = String(entry.phase || "").trim().replaceAll("_", " ");
+      const name = agentDisplayName(entry.agent);
+      const bits = [];
+      if (entry.role) bits.push(entry.role);
+      if (phaseLabel) bits.push(`phase ${phaseLabel}`);
+      if (entry.model) bits.push(entry.model);
+      if (entry.threadId) bits.push(`thread ${middleEllipsis(entry.threadId, { head: 8, tail: 6 })}`);
+      if (entry.exitCode != null) bits.push(`exit ${entry.exitCode}`);
+      const meta = bits.join(" · ");
+      const updatedMs = isoMs(entry.updatedAt || entry.finishedAt || entry.startedAt);
+      const updatedText = Number.isFinite(updatedMs) ? fmtClock(updatedMs) : "";
+      const eventText = entry.lastEvent || (status === "running" ? "Running" : "");
+      const bodyText = entry.lastText || "";
+      return `
+        <article class="jobinspector__card jobinspector__card--${escapeHtml(status)}">
+          <div class="jobinspector__top">
+            <div class="jobinspector__titleRow">
+              <div class="jobinspector__name">${escapeHtml(name)}</div>
+              <div class="jobinspector__status">${escapeHtml(statusLabel)}</div>
+            </div>
+            ${updatedText ? `<div class="jobinspector__time" title="${escapeHtml(entry.updatedAt || entry.finishedAt || entry.startedAt)}">${escapeHtml(updatedText)}</div>` : ""}
+          </div>
+          ${meta ? `<div class="jobinspector__meta">${escapeHtml(meta)}</div>` : ""}
+          ${eventText ? `<div class="jobinspector__event">${escapeHtml(eventText)}</div>` : ""}
+          ${bodyText ? `<div class="jobinspector__text">${escapeHtml(truncateText(oneLine(bodyText), 220))}</div>` : ""}
+        </article>
+      `;
+    })
+    .join("");
+
+  els.jobDialogInspector.innerHTML = `
+    <div class="jobinspector__header">
+      <div class="jobinspector__title">Agent Inspector</div>
+      <div class="jobinspector__count">${entries.length} active view${entries.length === 1 ? "" : "s"}</div>
+    </div>
+    <div class="jobinspector__grid">${cards}</div>
+  `;
+  els.jobDialogInspector.hidden = false;
 }
 
 function setActiveTab(tab) {
@@ -10278,7 +10392,7 @@ function renderTimelineSidebar(enriched, job, agentName) {
     const isLast = i === enriched.length - 1;
     const isFinal = !isUser && isLast && isFinalDone;
 
-    const roleLabel = isUser ? "You" : escapeHtml(agentName);
+    const roleLabel = isUser ? "You" : escapeHtml(messageAgentLabel(t.agent, agentName));
     const clock = fmtClock(t._ms);
     const preview = escapeHtml(
       (t.text || "").replace(/\s+/g, " ").trim().slice(0, 120)
@@ -10348,6 +10462,7 @@ function renderJobDialogPanels(job) {
     timeline.push({
       ts: m.ts || "",
       role: m.role || "assistant",
+      agent: m.agent || "",
       text: m.text || "",
       images: m.images || [],
       _i: i + 100000
@@ -10377,9 +10492,10 @@ function renderJobDialogPanels(job) {
     const showRel = rel && rel !== "0:00";
     const meta = clock && showRel ? `${clock} (+${rel})` : clock || "";
     const timeHtml = meta ? ` <span class="msg__time" title="${escapeHtml(t.ts)}">${escapeHtml(meta)}</span>` : "";
+    const roleLabel = isUser ? "You" : messageAgentLabel(t.agent, agentName);
 	      return `
 	      <div class="msg ${isUser ? "msg--user" : "msg--assistant"}" data-msg-index="${idx}">
-		        <div class="msg__role">${isUser ? "You" : escapeHtml(agentName)}${timeHtml}</div>
+		        <div class="msg__role">${escapeHtml(roleLabel)}${timeHtml}</div>
 	        <div class="msg__text">${renderMarkdownSafeHtml(t.text)}</div>
 	        ${attachmentChipsHtml(t.images)}
 		      </div>
@@ -10444,6 +10560,7 @@ function upsertJob(job) {
     els.jobDialogTitle.textContent = title || "Job";
     els.jobDialogTitle.title = oneLine(title);
     renderJobDialogMeta(job);
+    renderJobDialogInspector(job);
     renderJobDialogPanels(job);
     updateJobDialogActions(job);
   }

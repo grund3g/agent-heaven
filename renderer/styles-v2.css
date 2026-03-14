@@ -2184,6 +2184,123 @@ body::before {
   border-bottom: 1px solid var(--stroke-faint);
 }
 
+.jobinspector {
+  padding: 12px 16px 0;
+  display: grid;
+  gap: 10px;
+}
+
+.jobinspector__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jobinspector__title {
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted2);
+}
+
+.jobinspector__count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jobinspector__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.jobinspector__card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--surface2);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.10);
+}
+
+.jobinspector__card--running {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.10) inset;
+}
+
+.jobinspector__card--done {
+  border-color: rgba(var(--accent2-rgb), 0.32);
+  box-shadow: 0 0 0 1px rgba(var(--accent2-rgb), 0.10) inset;
+}
+
+.jobinspector__card--failed,
+.jobinspector__card--cancelled {
+  border-color: rgba(var(--danger-rgb), 0.38);
+  box-shadow: 0 0 0 1px rgba(var(--danger-rgb), 0.12) inset;
+}
+
+.jobinspector__top,
+.jobinspector__titleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.jobinspector__name {
+  min-width: 0;
+  font-family: var(--ui);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.jobinspector__status,
+.jobinspector__time,
+.jobinspector__meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.jobinspector__status {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.jobinspector__time {
+  white-space: nowrap;
+}
+
+.jobinspector__meta,
+.jobinspector__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.jobinspector__event {
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.jobinspector__text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted2);
+}
+
 .dialog__body {
   flex: 1 1 auto;
   min-height: 0;
