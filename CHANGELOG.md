@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.3](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.12.2...agent-heaven-v0.12.3) (2026-03-15)
+
+
+### Bug Fixes
+
+* **electron:** only apply --design override for valid v1/v2 flags ([5d0ac6f](https://github.com/grund3g/agent-heaven/commit/5d0ac6ff6dd5f85b98e210cb2876d3164c0c5190))
+* **electron:** only apply --design when set to v1 or v2 ([de511f4](https://github.com/grund3g/agent-heaven/commit/de511f4701ff8c21010211630d0bd09ea5b01313))
+* **jobs-manager:** improve workflow and renderer job UI ([ad17c8c](https://github.com/grund3g/agent-heaven/commit/ad17c8cd901dfc50bf78d2dbccd45cbd6b0cc940))
+* **jobs:** align renderer UI with jobs manager updates ([428fd6e](https://github.com/grund3g/agent-heaven/commit/428fd6eb18ab5e3ca4f3bfa46f91bb0dbc7b4093))
+* **jobs:** align renderer UI with jobs manager updates ([9bce34b](https://github.com/grund3g/agent-heaven/commit/9bce34b6526827c6f84e7f5b798e94741c32f99b))
+* **jobs:** sync renderer styling with job handling and tests ([bacb273](https://github.com/grund3g/agent-heaven/commit/bacb273689ad311ee183f81f57a3326eb7a9cd70))
+* **renderer:** debounce job log upserts to reduce board rerenders ([8123bc9](https://github.com/grund3g/agent-heaven/commit/8123bc94b79840a683159074ddb79c1b481f882b))
+* **ui:** lock design to v1 and debounce job log upserts ([bf99b4e](https://github.com/grund3g/agent-heaven/commit/bf99b4e3c154372cafc40d0020ed0ee18d79a0e6))
+
 ## [0.12.2](https://github.com/grund3g/agent-heaven/compare/agent-heaven-v0.12.1...agent-heaven-v0.12.2) (2026-02-25)
 
 
