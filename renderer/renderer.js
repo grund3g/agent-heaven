@@ -12952,12 +12952,21 @@ function wireUi() {
     }
   }
 
+  function resetComposerModelOverride() {
+    if (!els.modelInput) return;
+    if (!String(els.modelInput.value || "").trim()) return;
+    els.modelInput.value = "";
+    const cmb = codexModelComboboxComposer;
+    if (cmb && typeof cmb.refresh === "function") cmb.refresh();
+  }
+
   if (els.agentSelect) {
     const stored = normalizeAgentKey(getStoredAgent());
     els.agentSelect.value = stored;
     els.agentSelect.addEventListener("change", () => {
       const next = normalizeAgentKey(els.agentSelect.value);
       els.agentSelect.value = next;
+      resetComposerModelOverride();
       storeAgent(next);
       syncComposerAgentUi();
     });
